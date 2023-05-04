@@ -26,6 +26,7 @@ using Unity.Jobs;
 using System.Text.RegularExpressions;
 using System.Diagnostics;
 using System.IO;
+using UnityEditor;
 
 #if UNITY_2018_4_OR_NEWER
 using UnityEngine.Networking;
