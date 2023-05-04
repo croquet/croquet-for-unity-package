@@ -1,0 +1,15 @@
+{
+    "name":"com.croquet.multiplayer",
+    "version":"0.5.1",
+    "displayName":"Croquet Multiplayer",
+    "description": "An simple multiplayer framework built using Croquet Synchronized Computation Architecture",
+    "unity":"2021.3",
+    "dependencies": {
+    },
+    "keywords": ["multiplayer", "croquet", "networking"],
+    "author":{
+        "name":"Croquet Corporation",
+        "email":"support@croquet.io",
+        "url":"https://croquet.io"
+    }
+}
