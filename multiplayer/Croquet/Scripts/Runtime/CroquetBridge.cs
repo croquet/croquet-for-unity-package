@@ -54,9 +54,14 @@ public class CroquetBridge : MonoBehaviour
     Dictionary<string, Quaternion> desiredRot = new Dictionary<string, Quaternion>();
     Dictionary<string, Vector3> desiredPos = new Dictionary<string, Vector3>();
 
+    LoadingProgressDisplay loadingProgressDisplay;
+    bool loadingInProgress = true;
+
     static CroquetBridge bridge = null;
     private CroquetRunner croquetRunner;
 
+    private CroquetBridgeExtension[] bridgeExtensions = new CroquetBridgeExtension[0];
+    
     private const string CAMERA_ID = "1"; // @@ needs to match up with Croquet side
 
     public static void SendCroquet(params string[] strings)
@@ -65,6 +70,12 @@ public class CroquetBridge : MonoBehaviour
         bridge.SendToCroquet(strings);    
     }
     
+    public static void SendCroquetSync(params string[] strings)
+    {
+        if (bridge == null) return;
+        bridge.SendToCroquetSync(strings);   
+    }
+
     // settings for logging and measuring (on JS-side performance log).  absence of an entry for a
     // category is taken as false.
     Dictionary<string, bool> logOptions = new Dictionary<string, bool>();
@@ -88,8 +99,19 @@ public class CroquetBridge : MonoBehaviour
     {
         bridge = this;
         croquetRunner = this.gameObject.GetComponent<CroquetRunner>();
+        LoadingProgressDisplay loadingObj = GameObject.FindObjectOfType<LoadingProgressDisplay>();
+        if (loadingObj != null)
+        {
+            loadingProgressDisplay = loadingObj.GetComponent<LoadingProgressDisplay>();
+        }
+        bridgeExtensions = this.gameObject.GetComponents<CroquetBridgeExtension>();
+
+        SetLoadingStage(0, "Starting...");
+        
+        croquetObjects[CAMERA_ID] = GameObject.FindWithTag("MainCamera"); // @@ hack
+
         SetLogOptions("info,session");
-        // SetMeasureOptions("bundle,geom"); $$$ typically useful for development
+        SetMeasureOptions("bundle,geom"); // @@ typically useful for development
         stopWatch.Start();
         
         addressableAssets = new Dictionary<string, GameObject>();
@@ -126,7 +148,7 @@ public class CroquetBridge : MonoBehaviour
                 foreach (var go in objects.Result)
                 {
                     Debug.Log($"Addressable Loaded: {go.name}");
-                    addressableAssets.Add(go.name, go);
+                    addressableAssets.Add(go.name.ToLower(), go); // @@ remove case-sensitivity
                 }
 
                 addressablesReady = true;
@@ -145,8 +167,6 @@ public class CroquetBridge : MonoBehaviour
         Application.targetFrameRate = 60;
 
         lastMessageDiagnostics = Time.realtimeSinceStartup;
-
-        croquetObjects[CAMERA_ID] = GameObject.FindWithTag("MainCamera"); // @@ hack
         
         // StartWS will be called to set up the websocket, and hence the session,
         // from Update() once we're sure the addressables are loaded.
@@ -183,6 +203,8 @@ public class CroquetBridge : MonoBehaviour
 
             string msg = String.Join('\x01', command);
             clientSock.Send(msg);
+            
+            bridge.SetLoadingStage(0.50f, "bridge connected");
         }
 
         protected override void OnMessage(MessageEventArgs e)
@@ -254,6 +276,7 @@ public class CroquetBridge : MonoBehaviour
         string pathToNode = "";
 #endif
 
+        SetLoadingStage(0.25f, "Ready to connect bridge");
         StartCoroutine(croquetRunner.StartCroquetConnection(port, appName, useNodeJS, pathToNode));
     }
 
@@ -366,12 +389,12 @@ public class CroquetBridge : MonoBehaviour
     public void SendToCroquet(params string[] strings)
     {
         deferredMessages.Add(PackCroquetMessage(strings));
-        //if (deferredMessages.Count >= 50) SendDeferredMessages();
     }
 
-    public string CroquetMessage(params string[] strings)
+    public void SendToCroquetSync(params string[] strings)
     {
-        return PackCroquetMessage(strings);
+        SendToCroquet(strings);
+        SendDeferredMessages();
     }
 
     public string PackCroquetMessage(string[] strings)
@@ -517,6 +540,12 @@ public class CroquetBridge : MonoBehaviour
         string command = strings[0]; // or a single piece of text, for logging
         string[] args = strings[1..];
         Log("verbose", command + ": " + String.Join(", ", args));
+
+        foreach (CroquetBridgeExtension cbe in bridgeExtensions)
+        {
+            if (cbe.ProcessCommand(command, args)) return;
+        }
+        
         if (command == "updateGeometry") UpdateGeometry(args);
         else if (command == "makeObject") MakeObject(args);
         else if (command == "registerAsAvatar") RegisterAsAvatar(args[0]);
@@ -529,7 +558,7 @@ public class CroquetBridge : MonoBehaviour
         else if (command == "croquetPing") HandleCroquetPing(args[0]);
         else if (command == "setLogOptions") SetLogOptions(args[0]);
         else if (command == "setMeasureOptions") SetMeasureOptions(args[0]);
-        else if (command == "joinProgress") {} // ignore
+        else if (command == "joinProgress") HandleJoinProgress(args[0]);
         else if (command == "croquetSessionReady")
         {
             Log("session", "Croquet session ready");
@@ -571,7 +600,7 @@ public class CroquetBridge : MonoBehaviour
         GameObject obj = null;
         if (!spec.type.StartsWith("primitive"))
         {
-            obj = Instantiate(addressableAssets[spec.type]);
+            obj = Instantiate(addressableAssets[spec.type.ToLower()]); // @@ remove case-sensitivity
         }
         if (obj == null)
         {
@@ -779,6 +808,13 @@ public class CroquetBridge : MonoBehaviour
 
     int BundledUpdateGeometry(byte[] rawData, int startPos)
     {
+        if (loadingInProgress)
+        {
+            Log("diagnostics", "first geometry update");
+            if (loadingProgressDisplay != null) loadingProgressDisplay.Hide();
+            loadingInProgress = false;
+        }
+
         const uint SCALE = 32;
         const uint SCALE_SNAP = 16;
         const uint ROT = 8;
@@ -860,6 +896,13 @@ public class CroquetBridge : MonoBehaviour
 
     void UpdateGeometry(string[] strings)
     {
+        if (loadingInProgress)
+        {
+            Log("diagnostics", "first geometry update");
+            if (loadingProgressDisplay != null) loadingProgressDisplay.Hide();
+            loadingInProgress = false;
+        }
+
         string id = strings[0];
         if (croquetObjects.ContainsKey(id))
         {
@@ -996,6 +1039,11 @@ public class CroquetBridge : MonoBehaviour
         SendToCroquet("unityPong", time);
     }
 
+    void HandleJoinProgress(string ratio)
+    {
+        SetLoadingProgress(float.Parse(ratio));
+    }
+
     void SetLogOptions(string options)
     {
         // arg is a comma-separated list of the log categories to show
@@ -1019,6 +1067,22 @@ public class CroquetBridge : MonoBehaviour
         }
     }
     
+    void SetLoadingStage(float ratio, string msg)
+    {
+        if (loadingProgressDisplay == null) return;
+        
+        loadingProgressDisplay.SetProgress(ratio, msg);
+    }
+
+    void SetLoadingProgress(float loadRatio)
+    {
+        if (loadingProgressDisplay == null) return;
+
+        // fast-forward progress 0=>1 is mapped onto bar 50=>100%
+        float barRatio = loadRatio * 0.5f + 0.5f;
+        loadingProgressDisplay.SetProgress(barRatio, $"Loading... ({loadRatio * 100:#0.0}%)");
+    }
+
     void Log(string category, string msg)
     {
         bool loggable;
