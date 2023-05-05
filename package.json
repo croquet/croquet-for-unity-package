@@ -5,6 +5,8 @@
     "description": "An simple multiplayer framework built using Croquet Synchronized Computation Architecture",
     "unity":"2021.3",
     "dependencies": {
+        "com.unity.addressables": "1.19.19",
+        "com.unity.inputsystem": "1.5.0"
     },
     "keywords": ["multiplayer", "croquet", "networking"],
     "author":{
