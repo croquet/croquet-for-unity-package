@@ -108,6 +108,12 @@ public class CroquetBuilder
         string builderPathOffset = details.builderPath;
         if (appName == "" || builderPathOffset == "") return; // don't know how to build
 
+        if (Application.platform == RuntimePlatform.OSXEditor && details.nodeExecutable == "")
+        {
+            Debug.LogError("Cannot build without a path to node in the Settings object");
+            return;
+        }
+
         string croquetRoot = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, $"../../../croquet/"));
         string builderPath = Path.Combine(croquetRoot, builderPathOffset);
     
@@ -176,7 +182,7 @@ public class CroquetBuilder
             newLines = errors.Split('\n');
             foreach (string line in newLines)
             {
-                if (!string.IsNullOrWhiteSpace(line)) Debug.Log("JS builder error: " + line);
+                if (!string.IsNullOrWhiteSpace(line)) Debug.LogError("JS builder error: " + line);
             }
         }
         else
@@ -267,7 +273,6 @@ public class CroquetBuilder
         string logFile = EditorPrefs.GetString(LOG_PROP, "");
         if (logFile == "" && BuildOnPlayEnabled)
         {
-            Debug.Log("rebuilding JS code");
             StartBuild(false); // false => no watcher
         }
     }
