@@ -106,8 +106,6 @@ public class CroquetBridge : MonoBehaviour
         }
         bridgeExtensions = this.gameObject.GetComponents<CroquetBridgeExtension>();
 
-        SetLoadingStage(0, "Starting...");
-        
         croquetObjects[CAMERA_ID] = GameObject.FindWithTag("MainCamera"); // @@ hack
 
         SetLogOptions("info,session");
@@ -166,6 +164,8 @@ public class CroquetBridge : MonoBehaviour
         // Frame cap
         Application.targetFrameRate = 60;
 
+        SetLoadingStage(0, "Starting...");
+        
         lastMessageDiagnostics = Time.realtimeSinceStartup;
         
         // StartWS will be called to set up the websocket, and hence the session,
