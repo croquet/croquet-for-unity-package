@@ -1,7 +1,7 @@
 using UnityEngine;
 
-[CreateAssetMenu(fileName = "Data", menuName = "ScriptableObjects/CroquetAppProperties", order = 1)]
-public class CroquetAppProperties : ScriptableObject
+[CreateAssetMenu(fileName = "Data", menuName = "ScriptableObjects/CroquetSettings", order = 1)]
+public class CroquetSettings : ScriptableObject
 {
     public string apiKey;
     public string appPrefix;

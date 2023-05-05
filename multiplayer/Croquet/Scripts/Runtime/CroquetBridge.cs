@@ -18,7 +18,7 @@ using WebSocketSharp.Net;
 
 public class CroquetBridge : MonoBehaviour
 {
-    public CroquetAppProperties appProperties;
+    public CroquetSettings appProperties;
     public string appName;
     public string builderPath;
     public bool useNodeJS;

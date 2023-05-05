@@ -9,10 +9,10 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 540c7dca5fc144cc69ed4119e2a7d831, type: 3}
+  m_Script: {fileID: 11500000, guid: d6e369286035f43f2a8109a346170456, type: 3}
   m_Name: CroquetSettings
   m_EditorClassIdentifier: 
-  apiKey: 
-  appPrefix: 
-  preferredPort: 5556
+  apiKey: 18ukP8jjEnN33Ckk35E09EGprkB95kik1otHmpkPh
+  appPrefix: io.croquet.worldcore
+  preferredPort: 5555
   pathToNode: /usr/local/bin/node
