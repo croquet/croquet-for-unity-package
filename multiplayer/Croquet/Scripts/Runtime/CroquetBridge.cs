@@ -20,7 +20,6 @@ public class CroquetBridge : MonoBehaviour
 {
     public CroquetSettings appProperties;
     public string appName;
-    public string builderPath;
     public bool useNodeJS;
     public bool croquetSessionReady = false;
 

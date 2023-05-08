@@ -23,7 +23,6 @@ public class CroquetBuilder
     private static string sceneName;
     private static CroquetBridge sceneBridgeComponent;
     private static string sceneAppName;
-    private static string sceneBuilderPath;
     
     private const string ID_PROP = "JS Builder Id";
     private const string APP_PROP = "JS Builder App";
@@ -56,16 +55,14 @@ public class CroquetBuilder
 
     public struct JSBuildDetails
     {
-        public JSBuildDetails(string name, string path, bool useNode, string pathToNode)
+        public JSBuildDetails(string name, bool useNode, string pathToNode)
         {
             appName = name;
-            builderPath = path;
             useNodeJS = useNode;
             nodeExecutable = pathToNode;
         }
 
         public string appName;
-        public string builderPath;
         public bool useNodeJS;
         public string nodeExecutable;
     }
@@ -76,7 +73,7 @@ public class CroquetBuilder
         if (activeScene.name != sceneName)
         {
             // look in the scene for an object with a CroquetBridge component,
-            // and if found return its appName and builderPath values
+            // and if found cache its build details
             CacheSceneBridgeComponent(activeScene);
         }
 
@@ -87,16 +84,15 @@ public class CroquetBuilder
 #else
             string pathToNode = "";
 #endif
-            return new JSBuildDetails(sceneBridgeComponent.appName, sceneBridgeComponent.builderPath,
-                sceneBridgeComponent.useNodeJS, pathToNode);
+            return new JSBuildDetails(sceneBridgeComponent.appName, sceneBridgeComponent.useNodeJS, pathToNode);
         }
-        else return new JSBuildDetails("", "", false, "");
+        else return new JSBuildDetails("", false, "");
     }
 
     public static bool KnowHowToBuildJS()
     {
         JSBuildDetails details = GetSceneBuildDetails();
-        return details.appName != "" && details.builderPath != "";
+        return details.appName != "";
     }
     
     public static void StartBuild(bool startWatcher)
@@ -105,8 +101,7 @@ public class CroquetBuilder
 
         JSBuildDetails details = GetSceneBuildDetails();
         string appName = details.appName;
-        string builderPathOffset = details.builderPath;
-        if (appName == "" || builderPathOffset == "") return; // don't know how to build
+        if (appName == "") return; // don't know how to build
 
         if (Application.platform == RuntimePlatform.OSXEditor && details.nodeExecutable == "")
         {
@@ -115,7 +110,7 @@ public class CroquetBuilder
         }
 
         string croquetRoot = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, $"../../../croquet/"));
-        string builderPath = Path.Combine(croquetRoot, builderPathOffset);
+        string builderPath = Path.Combine(croquetRoot, "build-tools");
     
         string nodeExecPath;
         string executable;
