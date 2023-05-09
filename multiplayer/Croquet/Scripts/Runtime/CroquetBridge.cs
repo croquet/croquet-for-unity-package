@@ -630,11 +630,20 @@ public class CroquetBridge : MonoBehaviour
             {
                 try
                 {
-                    obj.AddComponent(Type.GetType(compName));
+                    Type packageType = Type.GetType(compName);
+                    if (packageType != null) obj.AddComponent(packageType);
+                    else
+                    {
+                        string assemblyQualifiedName =
+                            System.Reflection.Assembly.CreateQualifiedName("Assembly-CSharp", compName);
+                        Type customType = Type.GetType(assemblyQualifiedName);
+                        if (customType != null) obj.AddComponent(customType);
+                        else Debug.LogError($"Unable to find component {compName} in package or main assembly");
+                    }
                 }
                 catch (Exception e)
                 {
-                    Debug.Log($"Error in adding component {compName}: {e}");
+                    Debug.LogError($"Error in adding component {compName}: {e}");
                 }
             }
         }
