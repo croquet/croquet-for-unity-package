@@ -125,7 +125,7 @@ public class CroquetBuilder
                 target = details.useNodeJS ? "node" : "web";
                 break;
             case RuntimePlatform.WindowsEditor:
-                nodeExecPath = Path.Combine(Application.streamingAssetsPath, "..", "Croquet", "NodeJS", "node.exe");
+                nodeExecPath = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..\\..\\Packages\\Croquet Multiplayer\\multiplayer\\Croquet\\NodeJS\\node.exe"));
                 executable = "powershell.exe";
                 target = "node"; // actually not used
                 arguments = $"-NoProfile -file \"runwebpack.ps1\" ";
