@@ -153,7 +153,7 @@ public class CroquetBridge : MonoBehaviour
         }
         else
         {
-            Debug.Log("No addressable assets found");
+            Debug.Log($"No addressable assets are tagged '{label}'");
             addressablesReady = true;
         }
     }
