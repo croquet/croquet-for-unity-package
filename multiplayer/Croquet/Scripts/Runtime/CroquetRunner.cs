@@ -74,8 +74,7 @@ public class CroquetRunner : MonoBehaviour
             nodeExecPath = Path.Combine(bridgeSourcePath, "node");
 #endif
 
-            // $$$ hack until we move old apps over to new build setup
-            string nodeEntry = appSourcePath.Contains("tutorial") ? "node-main.js" : "node-starter.js";
+            string nodeEntry = "node-main.js";
             
             croquetProcess.StartInfo.FileName = Path.Combine(nodeExecPath, nodeExecName); // on Mac, nodeExecName begins with / so will prevail
             croquetProcess.StartInfo.Arguments = $"{nodeEntry} {port}";
