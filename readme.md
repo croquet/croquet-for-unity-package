@@ -56,17 +56,45 @@ The overall structure of your repo should look like:
         - your_unity_project
 ```
 
-## Author your JS Model / View Files
+## Create your JS Model / View Files
 Place your model code inside of the `/croquet/yourappname/Models.js`
 Place your view code inside of the `/croquet/yourappname/Views-unity.js`
+
+
+## npm install 
+```
+npm i
+``` 
+in the `/Croquet` directory
+
+## Create an Default Addressable Assets Group
+Window>Asset Management>Group>"Create Asset Group"
+Create the default addressable group, this is how we associate particular assets across the bridge for spawning.
+It will create an AdressableAssetsData folder in your project.
+
+## Make your own CroquetSettings
+Copy the CroqutDefaultSettings into your project.
+Enter your API key.
+
+## Enable the Input Handler
+We provide a basic keypress and pointer forwarding template that uses Unity's new input system.
+See `Croquet/Runtime/UserInputActions` (lightning bolt icon).
+Select it and click "Make this the active input map"
+
+Skip this step if you want to use your own completely custom set of input events.
+
+
+
+
 
 ## Create a Unity Scene
 
 Create a new scene
 Add a CroquetBridge Prefab from the Packages Prefabs to your scene.
-add your App's name (corresponds to the /croquet/yourappname/ folder) to the Coruqte Bridge Object.
+add your App's name (corresponds to the /croquet/yourappname/ folder) to the Croquet Bridge Object.
 
-## Author your C# View
+Associate the CroquetSettings Object created in the last step with the CroquetBridge.
+
 
 
 
