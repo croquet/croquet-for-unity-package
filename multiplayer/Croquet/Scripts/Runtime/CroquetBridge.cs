@@ -122,7 +122,7 @@ public class CroquetBridge : MonoBehaviour
         // the following code to get a list of locations matching the key.
         // If the list is empty, don't run the LoadAssetsAsync.
         // Presumably there are more efficient ways to do this (in particular, when
-        // there *are* matches.  Maybe by using the list?
+        // there *are* matches).  Maybe by using the list?
 
         //Returns any IResourceLocations that are mapped to the supplied label
         AsyncOperationHandle<IList<IResourceLocation>> handle = Addressables.LoadResourceLocationsAsync(label);
@@ -226,6 +226,11 @@ public class CroquetBridge : MonoBehaviour
         // https://github.com/sta/websocket-sharp/issues/327
         //var listener = typeof(WebSocketServer).GetField("_listener", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(ws) as System.Net.Sockets.TcpListener;
         //listener.Server.NoDelay = true;
+
+        if (appProperties.apiKey == "" || appProperties.apiKey == "PUT_YOUR_API_KEY_HERE")
+        {
+            throw new Exception("Cannot run without a valid API key in the Settings object");
+        }
 
         // recover a specific session name from PlayerPrefs
         sessionNameValue = PlayerPrefs.GetInt("sessionNameValue", 1);
