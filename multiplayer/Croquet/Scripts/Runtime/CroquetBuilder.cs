@@ -167,18 +167,41 @@ public class CroquetBuilder
 
         if (!startWatcher)
         {
+            // the build process has finished, but that doesn't necessarily mean that it succeeded.
+            // webpack provides an exit code as described at https://github.com/webpack/webpack-cli#exit-codes-and-their-meanings.
+            // if webpack runs, our script generates a line "webpack-exit=<n>" with that exit code.
+            
+            // the expected completion states are therefore:
+            //   - failed to run webpack (e.g., because it isn't installed).
+            //     should see messages on stderr, and presumably no webpack-exit line.
+            //   - able to run webpack, with exit code:
+            //     2: "Configuration/options problem or an internal error" (e.g., can't find the config file)
+            //        should see messages on stderr.
+            //     1: "Errors from webpack" (e.g., syntax error in code, or can't find a module)
+            //        typically nothing on stderr.  error diagnosis on stdout.
+            //     0: "Success"
+            //        log of build on stdout, ending with a "compiled successfully" line.
+
             oneTimeBuildProcess = null;
 
+            int webpackExit = -1;
+            string exitPrefix = "webpack-exit=";
             string[] newLines = output.Split('\n');
             foreach (string line in newLines)
             {
-                if (!string.IsNullOrWhiteSpace(line)) Debug.Log("JS builder: " + line);
+                if (!string.IsNullOrWhiteSpace(line))
+                {
+                    if (line.StartsWith(exitPrefix)) webpackExit = int.Parse(line.Substring(exitPrefix.Length));
+                    else Debug.Log("JS builder: " + line);
+                }
             }
             newLines = errors.Split('\n');
             foreach (string line in newLines)
             {
                 if (!string.IsNullOrWhiteSpace(line)) Debug.LogError("JS builder error: " + line);
             }
+
+            if (webpackExit != 0) throw new Exception("JS build failed.");
         }
         else
         {
@@ -204,6 +227,9 @@ public class CroquetBuilder
         // to hold off from any action that needs the build until the console shows
         // that it has completed.  thereafter, rebuilds tend to happen so quickly
         // that there is effectively no chance for an incomplete build to be used.
+        
+        // may 2023: because StartBuild is synchronous, and already includes a
+        // WaitForExit, this method in fact never has anything to wait for.
         if (oneTimeBuildProcess != null)
         {
             Debug.Log("waiting for one-time build to complete");
@@ -215,13 +241,13 @@ public class CroquetBuilder
     {
         string appName = EditorPrefs.GetString(APP_PROP, "");
         long lastFileLength = initialLength;
-        Debug.Log($"watching build log for {appName} from position {lastFileLength}");
+        // Debug.Log($"watching build log for {appName} from position {lastFileLength}");
         
         while (true)
         {
             if (EditorPrefs.GetString(LOG_PROP, "") != filePath)
             {
-                Debug.Log($"stopping log watcher for {appName}");
+                // Debug.Log($"stopping log watcher for {appName}");
                 break;
             } 
             
@@ -242,7 +268,17 @@ public class CroquetBuilder
                             string[] newLines = temp.GetString(b).Split('\n');
                             foreach (string line in newLines)
                             {
-                                if (!string.IsNullOrWhiteSpace(line)) Debug.Log("JS watcher: " + line);
+                                if (!string.IsNullOrWhiteSpace(line))
+                                {
+                                    if (line.Contains("compiled") && line.Contains("error"))
+                                    {
+                                        Debug.LogError($"JS watcher ({appName}): " + line);
+                                    }
+                                    else
+                                    {
+                                        Debug.Log($"JS watcher ({appName}): " + line);
+                                    }
+                                }
                             }
                         }
                         fs.Close();
@@ -268,7 +304,15 @@ public class CroquetBuilder
         string logFile = EditorPrefs.GetString(LOG_PROP, "");
         if (logFile == "" && BuildOnPlayEnabled)
         {
-            StartBuild(false); // false => no watcher
+            try
+            {
+                StartBuild(false); // false => no watcher
+            }
+            catch (Exception e)
+            {
+                Debug.LogError(e);
+                EditorApplication.ExitPlaymode();
+            }
         }
     }
 
@@ -346,14 +390,5 @@ public class CroquetBuilder
         return builderProcess == null ? "" : EditorPrefs.GetString(APP_PROP);
     }
     
-    private static void OutputHandler(object sendingProcess,
-        DataReceivedEventArgs outLine)
-    {
-        if (!String.IsNullOrEmpty(outLine.Data))
-        {
-            Debug.Log("watcher: " + outLine.Data);
-        }
-    }
-
 #endif
 }

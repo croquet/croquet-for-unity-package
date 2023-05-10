@@ -1,4 +1,6 @@
 /*
+ * Copyright notice for use of WebViewObject:
+ * 
  * Copyright (C) 2012 GREE, Inc.
  *
  * This software is provided 'as-is', without any express or implied
@@ -20,13 +22,10 @@
 
 using System;
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using Unity.Jobs;
-using System.Text.RegularExpressions;
 using System.Diagnostics;
 using System.IO;
-using UnityEditor;
 
 #if UNITY_2018_4_OR_NEWER
 using UnityEngine.Networking;
@@ -48,8 +47,7 @@ public class CroquetRunner : MonoBehaviour
     {
         public int port;
 
-        private void OutputHandler(object sendingProcess,
-    DataReceivedEventArgs outLine)
+        private void OutputHandler(object sendingProcess, DataReceivedEventArgs outLine)
         {
             if (!String.IsNullOrEmpty(outLine.Data))
             {
@@ -105,7 +103,7 @@ public class CroquetRunner : MonoBehaviour
             }
             catch (Exception e)
             {
-                UnityEngine.Debug.LogError("Run error" + e.ToString()); // or throw new Exception
+                UnityEngine.Debug.LogError("Run error: " + e.ToString()); // or throw new Exception
             }
             finally
             {
@@ -117,11 +115,7 @@ public class CroquetRunner : MonoBehaviour
             }
         }
     }
-
-    private void Awake()
-    {
-    }
-
+    
     public IEnumerator StartCroquetConnection(int port, string appName, bool useNodeJS, string pathToNode)
     {
         bridgeSourcePath = Path.Combine(Application.streamingAssetsPath, "croquet-bridge");

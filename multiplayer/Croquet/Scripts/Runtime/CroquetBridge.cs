@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using System.Linq;
 using System.Text;
 using Unity.VisualScripting;
+using UnityEditor;
 using UnityEngine;
 using WebSocketSharp;
 using WebSocketSharp.Server;
@@ -229,7 +230,9 @@ public class CroquetBridge : MonoBehaviour
 
         if (appProperties.apiKey == "" || appProperties.apiKey == "PUT_YOUR_API_KEY_HERE")
         {
-            throw new Exception("Cannot run without a valid API key in the Settings object");
+            Debug.LogError("Cannot play without a valid API key in the Settings object");
+            EditorApplication.ExitPlaymode();
+            return;
         }
 
         // recover a specific session name from PlayerPrefs
