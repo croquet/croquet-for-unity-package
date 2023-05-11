@@ -46,7 +46,8 @@ public class CroquetBridge : MonoBehaviour
     List<string> deferredMessages = new List<string>();
     static float messageThrottle = 0.05f; // 50ms
     float lastMessageSend = 0; // realtimeSinceStartup
-    
+
+    private Dictionary<string, string> reservedIds = new Dictionary<string, string>();
     Dictionary<string, GameObject> croquetObjects = new Dictionary<string, GameObject>();
     public string localAvatarId = "";
     public string cameraOwnerId = "";
@@ -62,8 +63,6 @@ public class CroquetBridge : MonoBehaviour
 
     private CroquetBridgeExtension[] bridgeExtensions = new CroquetBridgeExtension[0];
     
-    private const string CAMERA_ID = "1"; // @@ needs to match up with Croquet side
-
     public static void SendCroquet(params string[] strings)
     {
         if (bridge == null) return;
@@ -105,9 +104,7 @@ public class CroquetBridge : MonoBehaviour
             loadingProgressDisplay = loadingObj.GetComponent<LoadingProgressDisplay>();
         }
         bridgeExtensions = this.gameObject.GetComponents<CroquetBridgeExtension>();
-
-        croquetObjects[CAMERA_ID] = GameObject.FindWithTag("MainCamera"); // @@ hack
-
+        
         SetLogOptions("info,session");
         SetMeasureOptions("bundle,geom"); // @@ typically useful for development
         stopWatch.Start();
@@ -561,16 +558,14 @@ public class CroquetBridge : MonoBehaviour
         else if (command == "releaseCamera") ReleaseCamera(args);
         else if (command == "setParent") SetParent(args);
         else if (command == "unparent") Unparent(args);
-        else if (command == "destroyObject") DestroyObject(args);
+        else if (command == "destroyObject") DestroyObject(args[0]);
         else if (command == "croquetPing") HandleCroquetPing(args[0]);
         else if (command == "setLogOptions") SetLogOptions(args[0]);
         else if (command == "setMeasureOptions") SetMeasureOptions(args[0]);
+        else if (command == "setReservedIds") SetReservedIds(args[0]);
         else if (command == "joinProgress") HandleJoinProgress(args[0]);
-        else if (command == "croquetSessionReady")
-        {
-            Log("session", "Croquet session ready");
-            croquetSessionReady = true;
-        }
+        else if (command == "croquetSessionReady") HandleSessionReady();
+        else if (command == "croquetSessionDisconnected") HandleSessionDisconnected();
         else if (command == "setColor") SetColor(args); // introduced for tutorial4
         else if (command == "makeClickable") MakeClickable(args); // introduced for tutorial5
         else
@@ -580,6 +575,21 @@ public class CroquetBridge : MonoBehaviour
         }
 
         inMessageCount++;
+    }
+
+    void SetReservedIds(string packedIds)
+    {
+        // argument is a comma-separated list of strings, in pairs defining alias and id
+        // e.g., "camera,1,otherThing,2"
+        string[] strings = packedIds.Split(',');
+        for (int i = 0; i < strings.Length; i += 2)
+        {
+            // Debug.Log($"id {strings[i+1]} reserved for {strings[i]}");
+            reservedIds[strings[i]] = strings[i + 1];
+        }
+
+        string cameraId = reservedIds["camera"];
+        croquetObjects[cameraId] = GameObject.FindWithTag("MainCamera");
     }
 
     [System.Serializable]
@@ -727,7 +737,7 @@ public class CroquetBridge : MonoBehaviour
         GameObject camera = GameObject.FindWithTag("MainCamera");
         camera.transform.SetParent(obj.transform, false); // false => ignore child's existing world position
         List<string> geomUpdate = new List<string>();
-        geomUpdate.Add(CAMERA_ID);
+        geomUpdate.Add(reservedIds["camera"]);
         geomUpdate.Add("rotationSnap");
         geomUpdate.AddRange(rot);
         geomUpdate.Add("translationSnap"); // the keyword we'd get from Croquet
@@ -764,9 +774,8 @@ public class CroquetBridge : MonoBehaviour
         }
     }
 
-    void DestroyObject(string[] args)
+    void DestroyObject(string id)
     {
-        string id = args[0];
         Log("debug", "destroying object " + id.ToString());
         if (cameraOwnerId == id)
         {
@@ -788,18 +797,6 @@ public class CroquetBridge : MonoBehaviour
             // asking to destroy a pawn for which there's no view can happen just because of
             // creation/destruction timing in worldcore.  not necessarily a problem.
             Log("debug", $"attempt to destroy absent object {id}");
-        }
-    }
-    
-    void ProcessKeyboard()
-    {
-        foreach (var key in Keyboard.current.allKeys)
-        {
-            if (key.wasPressedThisFrame)
-            {
-                // Debug.Log($"Key code: {key.keyCode}");
-                SendToCroquet("event", "keyDown", key.keyCode.ToString());
-            }
         }
     }
     
@@ -852,7 +849,6 @@ public class CroquetBridge : MonoBehaviour
             string id = (encodedId >> 6).ToString();
             if (croquetObjects.ContainsKey(id))
             {
-                bool do_log = id == CAMERA_ID; // $$$ hack
                 objectCount++;
                 
                 Transform trans = croquetObjects[id].transform;
@@ -922,8 +918,6 @@ public class CroquetBridge : MonoBehaviour
         string id = strings[0];
         if (croquetObjects.ContainsKey(id))
         {
-            bool do_log = id == CAMERA_ID; // $$$ hack
-
             Transform trans = croquetObjects[id].transform;
             for (int i = 1; i < strings.Length;)
             {
@@ -1058,6 +1052,30 @@ public class CroquetBridge : MonoBehaviour
     void HandleJoinProgress(string ratio)
     {
         SetLoadingProgress(float.Parse(ratio));
+    }
+
+    void HandleSessionReady()
+    {
+        Log("session", "Croquet session ready");
+        croquetSessionReady = true;
+    }
+
+    void HandleSessionDisconnected()
+    {
+        Log("session", "Croquet session disconnected");
+        croquetSessionReady = false;
+
+        string[] allIds = croquetObjects.Keys.ToArray();
+        foreach (string id in allIds)
+        {
+            // @@ for now, we assume that everything not listed in
+            // the reservedIds dictionary (e.g., the camera) can
+            // be destroyed
+            if (!reservedIds.ContainsValue(id)) DestroyObject(id);
+        }
+        
+        croquetObjects.Clear();
+        reservedIds.Clear();
     }
 
     void SetLogOptions(string options)
