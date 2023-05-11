@@ -2,6 +2,10 @@
 
 This repo contains all Croquet functionality as a unitypackage ready to be dropped into a new project. This is for starting your own project. For usage examples please see our tutorials or other demo repos. 
 
+NOTE: IF YOU HAVE NOT EXPLICITLY BEEN PERMITTED INTO THE CROQUET FOR UNITY BETA, THIS REPO IS STILL AVAILABLE FOR YOU TO HACK AROUND WITH. THERE IS NO GUARANTEE THAT FEATURES WILL NOT INTRODUCE BREAKING CHANGES, UNTIL WE REACH A 1.0 RELEASE. WE WILL BEGIN ADMITTING SMALL BATCHES OF DEVELOPERS INTO THE BETA, AT WHICH POINT WE WILL PROVIDE SUPPORT FOR THOSE DEVELOPERS IN OUR DISCORD. 
+If you believe yourself to have a critical need to be in the early beta participants, and can accept that major changes are in progress, please DM Lazarus#7304 via the Croquet Discord.
+
+
 # Install
 Clone the Repo with the following command:
 ```
@@ -84,9 +88,6 @@ Select it and click "Make this the active input map"
 Skip this step if you want to use your own completely custom set of input events.
 
 
-
-
-
 ## Create a Unity Scene
 
 Create a new scene
@@ -94,10 +95,6 @@ Add a CroquetBridge Prefab from the Packages Prefabs to your scene.
 add your App's name (corresponds to the /croquet/yourappname/ folder) to the Croquet Bridge Object.
 
 Associate the CroquetSettings Object created in the last step with the CroquetBridge.
-
-
-
-
 
 
 # Usage
