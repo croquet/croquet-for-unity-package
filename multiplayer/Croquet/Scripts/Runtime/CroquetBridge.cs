@@ -225,13 +225,15 @@ public class CroquetBridge : MonoBehaviour
         //var listener = typeof(WebSocketServer).GetField("_listener", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(ws) as System.Net.Sockets.TcpListener;
         //listener.Server.NoDelay = true;
 
+#if UNITY_EDITOR
         if (appProperties.apiKey == "" || appProperties.apiKey == "PUT_YOUR_API_KEY_HERE")
         {
             Debug.LogError("Cannot play without a valid API key in the Settings object");
             EditorApplication.ExitPlaymode();
             return;
         }
-
+#endif
+        
         // recover a specific session name from PlayerPrefs
         sessionNameValue = PlayerPrefs.GetInt("sessionNameValue", 1);
         //Debug.Log($"SESSION NAME VAL: {sessionNameValue}");
