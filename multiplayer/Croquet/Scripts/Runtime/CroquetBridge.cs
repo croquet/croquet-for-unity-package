@@ -661,7 +661,7 @@ public class CroquetBridge : MonoBehaviour
             }
         }
 
-        if (cgo.recolorable)
+        if (cgo.recolorable && spec.c[0] != -1f) // a red value of -1 means "don't recolour"
         {
             Material material = obj.GetComponentInChildren<Renderer>().material;
             if (spec.a != 1f)
