@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
-using System;
+using System.IO;
 using UnityEditor.SceneManagement;
 using UnityEngine.SceneManagement;
 
@@ -14,7 +14,7 @@ class CroquetBuildPreprocess : IPreprocessBuildWithReport
         BuildTarget target = report.summary.platform;
         if (target == BuildTarget.StandaloneWindows || target == BuildTarget.StandaloneWindows64)
         {
-            string src = "Assets/Croquet/NodeJS/node.exe";
+            string src = CroquetBuilder.PathToNodeExe;
             string dest = "Assets/StreamingAssets/croquet-bridge/node/node.exe";
             FileUtil.CopyFileOrDirectory(src, dest);
         }

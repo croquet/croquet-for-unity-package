@@ -53,6 +53,9 @@ public class CroquetBuilder
         sceneBridgeComponent = bridgeComp;
     }
 
+    public static string PathToNodeExe = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath,
+        "..\\..\\Packages\\com.croquet.multiplayer\\multiplayer\\Croquet\\NodeJS\\node.exe"));
+
     public struct JSBuildDetails
     {
         public JSBuildDetails(string name, bool useNode, string pathToNode)
@@ -125,7 +128,7 @@ public class CroquetBuilder
                 target = details.useNodeJS ? "node" : "web";
                 break;
             case RuntimePlatform.WindowsEditor:
-                nodeExecPath = "\"" + Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..\\..\\Packages\\com.croquet.multiplayer\\multiplayer\\Croquet\\NodeJS\\node.exe")) + "\"";
+                nodeExecPath = "\"" + PathToNodeExe + "\"";
                 executable = "powershell.exe";
                 target = "node"; // actually not used
                 arguments = $"-NoProfile -file \"runwebpack.ps1\" ";
