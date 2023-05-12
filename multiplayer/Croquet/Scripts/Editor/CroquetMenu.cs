@@ -83,7 +83,9 @@ public class CroquetMenu
     private const string StopperItemHere = "Croquet/Stop JS Watcher (this scene)";
     private const string StopperItemOther = "Croquet/Stop JS Watcher (other scene)";
 
-    [MenuItem(BuildNowItem)]
+    private const string CopyJSItem = "Croquet/Copy JS Sample Zip";
+
+    [MenuItem(BuildNowItem, false, 100)]
     private static void BuildNow()
     {
         CroquetBuilder.StartBuild(false); // false => no watcher
@@ -105,7 +107,7 @@ public class CroquetMenu
         return true;
     }
 
-    [MenuItem(BuildOnPlayItem)]
+    [MenuItem(BuildOnPlayItem, false, 100)]
     private static void BuildOnPlayToggle()
     {
         CroquetBuilder.BuildOnPlayEnabled = !CroquetBuilder.BuildOnPlayEnabled;
@@ -121,7 +123,7 @@ public class CroquetMenu
     }
 
 #if !UNITY_EDITOR_WIN
-    [MenuItem(StarterItem)]
+    [MenuItem(StarterItem, false, 100)]
     private static void StartWatcher()
     {
         CroquetBuilder.StartBuild(true); // true => start watcher
@@ -136,7 +138,7 @@ public class CroquetMenu
         return CroquetBuilder.RunningWatcherApp() == "";
     }
 
-    [MenuItem(StopperItemHere)]
+    [MenuItem(StopperItemHere, false, 100)]
     private static void StopWatcherHere()
     {
         CroquetBuilder.StopWatcher();
@@ -150,7 +152,7 @@ public class CroquetMenu
         return CroquetBuilder.RunningWatcherApp() == CroquetBuilder.GetSceneBuildDetails().appName;
     }
 
-    [MenuItem(StopperItemOther)]
+    [MenuItem(StopperItemOther, false, 100)]
     private static void StopWatcherOther()
     {
         CroquetBuilder.StopWatcher();
@@ -165,4 +167,15 @@ public class CroquetMenu
         return appName != "" && appName != CroquetBuilder.GetSceneBuildDetails().appName;
     }
 #endif
+    
+    
+    [MenuItem(CopyJSItem, false, 200)]
+    private static void CopyJS()
+    {
+        string src = CroquetBuilder.PathToJSZip;
+        string dest = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "..", "..", "croquet.zip"));
+
+        Debug.Log($"copying from {src} to {dest}");
+        FileUtil.CopyFileOrDirectory(src, dest);
+    }
 }
