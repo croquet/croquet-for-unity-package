@@ -23,7 +23,6 @@ public class CroquetEntitySystem : CroquetBridgeExtension
     public static CroquetEntitySystem Instance { get; private set; }
     
     
-    
     /// <summary>
     /// Find GameObject with a specific Croquet ID
     /// </summary>

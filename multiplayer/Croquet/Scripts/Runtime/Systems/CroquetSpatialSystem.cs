@@ -5,22 +5,31 @@ using UnityEngine;
 
 public class CroquetSpatialSystem : CroquetBridgeExtension
 {
-    
-    public List<String> Messages = new List<string>()
+    public Dictionary<string, CroquetSpatialComponent> SpatialComponents = new(); 
+
+    public List<String> Messages = new()
     {
         "updateSpatial",
         "setParent",
         "unparent",
     };
     
-    // Instead of doing this
-    // Dictionary<string, Vector3> desiredScale = new Dictionary<string, Vector3>();
-    // Dictionary<string, Quaternion> desiredRot = new Dictionary<string, Quaternion>();
-    // Dictionary<string, Vector3> desiredPos = new Dictionary<string, Vector3>();
-    // We do this
-    public Dictionary<string, CroquetSpatialComponent> SpatialComponents = new Dictionary<String, CroquetSpatialComponent>(); 
-    // mapping ID to a specific CROQUETSPATIALCOMPONENT
+    // Create Singleton Reference
+    public static CroquetSpatialSystem Instance { get; private set; }
 
+    private void Awake()
+    {
+        // Create Singleton Accessor
+        // If there is an instance, and it's not me, delete myself.
+        if (Instance != null && Instance != this) 
+        { 
+            Destroy(this); 
+        }
+        else 
+        { 
+            Instance = this; 
+        } 
+    }
 
     public void Start()
     {
@@ -58,59 +67,38 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
         }
     }
     
-    // Frame by frame tell stuff to move around
+    /// <summary>
+    /// Update the Unity Transform Components in the Scene to reflect the latest desired state.
+    /// </summary>
     void UpdateTransforms()
     {
         foreach (KeyValuePair<string, CroquetSpatialComponent> kvp in SpatialComponents)
         {
             string id = kvp.Key;
-            CroquetSpatialComponent obj = kvp.Value;
-            if (obj == null) continue;
-
-            float lerpFactor = 0.2f;
-            bool anyChange = false;
-            if (desiredScale.ContainsKey(id))
+            CroquetSpatialComponent spatialComponent = kvp.Value;
+            
+            if (Vector3.Distance(spatialComponent.scale,spatialComponent.transform.localScale) > spatialComponent.scaleDeltaEpsilon)
             {
-                obj.transform.localScale = Vector3.Lerp(obj.transform.localScale, desiredScale[id], lerpFactor);
-                anyChange = true;
-                if (Vector3.Distance(obj.transform.localScale, desiredScale[id]) < 0.01) desiredScale.Remove(id);
+                spatialComponent.transform.localScale = Vector3.Lerp(spatialComponent.transform.localScale, spatialComponent.scale, spatialComponent.scaleLerpFactor);
             }
-            if (desiredRot.ContainsKey(id))
+            if (Quaternion.Angle(spatialComponent.rotation,spatialComponent.transform.localRotation) > spatialComponent.rotationDeltaEpsilon)
             {
-                obj.transform.localRotation = Quaternion.Lerp(obj.transform.localRotation, desiredRot[id], lerpFactor);
-                anyChange = true;
-                if (Quaternion.Angle(obj.transform.localRotation, desiredRot[id]) < 0.1) desiredRot.Remove(id);
+                spatialComponent.transform.localRotation = Quaternion.Slerp(spatialComponent.transform.localRotation, spatialComponent.rotation, spatialComponent.rotationLerpFactor);
             }
-            if (desiredPos.ContainsKey(id))
+            if (Vector3.Distance(spatialComponent.position,spatialComponent.transform.localPosition) > spatialComponent.positionDeltaEpsilon)
             {
-                obj.transform.localPosition = Vector3.Lerp(obj.transform.localPosition, desiredPos[id], lerpFactor);
-                anyChange = true;
-                if (Vector3.Distance(obj.transform.localPosition, desiredPos[id]) < 0.01) desiredPos.Remove(id);
-            }
-            if (int.Parse(id) >= 100) // not one of the reserved objects (e.g., camera)
-            {
-                Renderer renderer = obj.GetComponentInChildren<Renderer>();
-                Material material;
-                if (renderer != null)
-                {
-                    material = renderer.material;
-                }
-                else // early return if bad material
-                {
-                    return;
-                }
-
-                if (anyChange)
-                {
-                    obj.SetActive(true);
-                    
-                }
+                spatialComponent.transform.localPosition = Vector3.Lerp(spatialComponent.transform.localPosition, spatialComponent.position, spatialComponent.positionLerpFactor);
             }
         }
     }
     
-    // processing of message from Croquet updating the position component
-    int UpdateSpatial(byte[] rawData, int startPos)
+    /// <summary>
+    /// processing of message from Croquet updating the position component
+    /// </summary>
+    /// <param name="rawData">TODO:Aran</param>
+    /// <param name="startPos">TODO:Aran</param>
+    /// <returns></returns>
+    void UpdateSpatial(byte[] rawData, int startPos)
     {
         const uint SCALE = 32;
         const uint SCALE_SNAP = 16;
@@ -119,7 +107,6 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
         const uint POS = 2;
         const uint POS_SNAP = 1;
         
-        int objectCount = 0;
         int bufferPos = startPos; // byte index through the buffer
         while (bufferPos < rawData.Length)
         {
@@ -132,66 +119,57 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
             bufferPos += 4;
             string id = (encodedId >> 6).ToString();
             
-            if (croquetObjects.ContainsKey(id)) 
-            {
-                objectCount++;
                 
-                Transform trans = SpatialComponents[id].transform;
-                if ((encodedId & SCALE) != 0)
+            Transform trans = SpatialComponents[id].transform;
+            if ((encodedId & SCALE) != 0)
+            {
+                Vector3 updatedScale = Vector3FromBuffer(rawData, bufferPos);
+                bufferPos += 12;
+                if ((encodedId & SCALE_SNAP) != 0)
                 {
-                    Vector3 updatedScale = Vector3FromBuffer(rawData, bufferPos);
-                    bufferPos += 12;
-                    if ((encodedId & SCALE_SNAP) != 0)
-                    {
-                        // immediately snap scale
-                        trans.localScale = updatedScale;
-                        desiredScale.Remove(id); //TODO W ARAN: change this
-                    }
-                    else
-                    {
-                        SpatialComponents[id].scale = updatedScale;
-                    }
-                    // Log("verbose", "scale: " + s.ToString());
+                    // immediately snap scale
+                    trans.localScale = updatedScale;
                 }
-                if ((encodedId & ROT) != 0)
+                else
                 {
-                    Quaternion r = QuaternionFromBuffer(rawData, bufferPos);
-                    bufferPos += 16;
-                    if ((encodedId & ROT_SNAP) != 0)
-                    {
-                        trans.localRotation = r;
-                        desiredRot.Remove(id);
-                    }
-                    else
-                    {
-                        desiredRot[id] = r;
-                    }
+                    SpatialComponents[id].scale = updatedScale;
                 }
-                if ((encodedId & POS) != 0)
+                // Log("verbose", "scale: " + s.ToString());
+            }
+            if ((encodedId & ROT) != 0)
+            {
+                Quaternion updatedQuatRot = QuaternionFromBuffer(rawData, bufferPos);
+                bufferPos += 16;
+                if ((encodedId & ROT_SNAP) != 0)
                 {
-                    // in Unity it's referred to as position
-                    Vector3 updatedPosition = Vector3FromBuffer(rawData, bufferPos);
-                    // if (do_log) Debug.Log($"camera to {p} with snap: {(encodedId & POS_SNAP) != 0}");
-                    bufferPos += 12;
-                    if ((encodedId & POS_SNAP) != 0)
-                    {
-                        trans.localPosition = updatedPosition;
-                        desiredPos.Remove(id);
-                    }
-                    else
-                    {
-                        SpatialComponents[id].position = updatedPosition;
-                    }
-                    // Log("verbose", "pos: " + p.ToString());
+                    trans.localRotation = updatedQuatRot;
                 }
+                else
+                {
+                    SpatialComponents[id].rotation = updatedQuatRot.eulerAngles;
+                }
+            }
+            if ((encodedId & POS) != 0)
+            {
+                // in Unity it's referred to as position
+                Vector3 updatedPosition = Vector3FromBuffer(rawData, bufferPos);
+                // if (do_log) Debug.Log($"camera to {p} with snap: {(encodedId & POS_SNAP) != 0}");
+                bufferPos += 12;
+                if ((encodedId & POS_SNAP) != 0)
+                {
+                    trans.localPosition = updatedPosition;
+                }
+                else
+                {
+                    SpatialComponents[id].position = updatedPosition;
+                }
+                // Log("verbose", "pos: " + p.ToString());
             }
             else Debug.Log($"attempt to update absent object {id}");
         }
 
-        return objectCount;
+        return;
     }
-
-    
     
     public override void ProcessCommand(string command, string[] args)
     {
@@ -211,6 +189,7 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
         }
         
     }
+    
     Quaternion QuaternionFromBuffer(byte[] rawData, int startPos)
     {
         return new Quaternion(
