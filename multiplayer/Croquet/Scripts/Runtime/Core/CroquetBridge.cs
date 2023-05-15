@@ -23,7 +23,7 @@ public class CroquetBridge : MonoBehaviour
     public string appName;
     public bool useNodeJS;
     public bool croquetSessionReady = false;
-
+    
     public bool showRigidbodyStateHighlight = false;
 
     HttpServer ws = null;
@@ -552,24 +552,24 @@ public class CroquetBridge : MonoBehaviour
             if (cbe.ProcessCommand(command, args)) return;
         }
         
-        if (command == "updateGeometry") UpdateGeometry(args);
-        else if (command == "makeObject") MakeObject(args);
-        else if (command == "registerAsAvatar") RegisterAsAvatar(args[0]);
-        else if (command == "unregisterAsAvatar") UnregisterAsAvatar(args[0]);
-        else if (command == "grabCamera") GrabCamera(args);
-        else if (command == "releaseCamera") ReleaseCamera(args);
-        else if (command == "setParent") SetParent(args);
-        else if (command == "unparent") Unparent(args);
-        else if (command == "destroyObject") DestroyObject(args[0]);
+        if (command == "updateGeometry") UpdateGeometry(args); // OUT: SPATIAL
+        else if (command == "makeObject") MakeObject(args); // OUT:ENTITY
+        else if (command == "registerAsAvatar") RegisterAsAvatar(args[0]); // OUT:CUSTOM
+        else if (command == "unregisterAsAvatar") UnregisterAsAvatar(args[0]);// OUT:CUSTOM
+        else if (command == "grabCamera") GrabCamera(args);// OUT:CUSTOM
+        else if (command == "releaseCamera") ReleaseCamera(args);// OUT:CUSTOM
+        else if (command == "setParent") SetParent(args);// OUT:SPATIAL
+        else if (command == "unparent") Unparent(args); //OUT:SPATIAL
+        else if (command == "destroyObject") DestroyObject(args[0]); //OUT:ENTITY
         else if (command == "croquetPing") HandleCroquetPing(args[0]);
-        else if (command == "setLogOptions") SetLogOptions(args[0]);
-        else if (command == "setMeasureOptions") SetMeasureOptions(args[0]);
+        else if (command == "setLogOptions") SetLogOptions(args[0]);  //OUT:LOGGER
+        else if (command == "setMeasureOptions") SetMeasureOptions(args[0]);//OUT:METRICS
         else if (command == "setReservedIds") SetReservedIds(args[0]);
         else if (command == "joinProgress") HandleJoinProgress(args[0]);
         else if (command == "croquetSessionReady") HandleSessionReady();
         else if (command == "croquetSessionDisconnected") HandleSessionDisconnected();
-        else if (command == "setColor") SetColor(args); // introduced for tutorial4
-        else if (command == "makeClickable") MakeClickable(args); // introduced for tutorial5
+        else if (command == "setColor") SetColor(args); // OUT:CUSTOM
+        else if (command == "makeClickable") MakeClickable(args); // OUT:CUSTOM
         else
         {
             // not a known command; maybe just text for logging
