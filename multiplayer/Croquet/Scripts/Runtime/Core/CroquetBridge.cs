@@ -10,7 +10,6 @@ using UnityEngine;
 using WebSocketSharp;
 using WebSocketSharp.Server;
 using UnityEngine.Networking;
-using UnityEngine.AddressableAssets;
 using UnityEngine.InputSystem;
 using UnityEngine.ResourceManagement.AsyncOperations;
 using UnityEngine.ResourceManagement.ResourceLocations;
@@ -48,17 +47,13 @@ public class CroquetBridge : MonoBehaviour
     float lastMessageSend = 0; // realtimeSinceStartup
 
     private Dictionary<string, string> reservedIds = new Dictionary<string, string>();
-    Dictionary<string, GameObject> croquetObjects = new Dictionary<string, GameObject>();
     public string localAvatarId = "";
     public string cameraOwnerId = "";
-    Dictionary<string, Vector3> desiredScale = new Dictionary<string, Vector3>();
-    Dictionary<string, Quaternion> desiredRot = new Dictionary<string, Quaternion>();
-    Dictionary<string, Vector3> desiredPos = new Dictionary<string, Vector3>();
 
     LoadingProgressDisplay loadingProgressDisplay;
-    bool loadingInProgress = true;
+    public bool loadingInProgress = true;
 
-    static CroquetBridge bridge = null;
+    public static CroquetBridge bridge = null;
     private CroquetRunner croquetRunner;
 
     private CroquetBridgeExtension[] bridgeExtensions = new CroquetBridgeExtension[0];
@@ -91,8 +86,6 @@ public class CroquetBridge : MonoBehaviour
     float inProcessingTime = 0;
     float lastMessageDiagnostics; // realtimeSinceStartup
     
-    private Dictionary<string, GameObject> addressableAssets;
-    private bool addressablesReady = false;
     
     void Awake()
     {
@@ -109,52 +102,14 @@ public class CroquetBridge : MonoBehaviour
         SetMeasureOptions("bundle,geom"); // @@ typically useful for development
         stopWatch.Start();
         
-        addressableAssets = new Dictionary<string, GameObject>();
-        StartCoroutine(LoadAddressableAssetsWithLabel(appName));
+    }
+
+    public void RegisterBridgeExtension(CroquetBridgeExtension extension)
+    {
+        bridgeExtensions.Append(extension);
     }
     
-    IEnumerator LoadAddressableAssetsWithLabel(string label)
-    {
-        // @@ LoadAssetsAsync throws an error - asynchronously - if there are
-        // no assets that match the key.  One way to avoid that error is to run
-        // the following code to get a list of locations matching the key.
-        // If the list is empty, don't run the LoadAssetsAsync.
-        // Presumably there are more efficient ways to do this (in particular, when
-        // there *are* matches).  Maybe by using the list?
-
-        //Returns any IResourceLocations that are mapped to the supplied label
-        AsyncOperationHandle<IList<IResourceLocation>> handle = Addressables.LoadResourceLocationsAsync(label);
-        yield return handle;
-
-        IList<IResourceLocation> result = handle.Result;
-        int prefabs = 0;
-        foreach (var loc in result) {
-            if (loc.ToString().EndsWith(".prefab")) prefabs++;
-        }
-        // int count = result.Count;
-        // Debug.Log($"Found {prefabs} addressable prefabs");
-        Addressables.Release(handle);
-
-        if (prefabs != 0)
-        {
-            // Load any assets labelled with this appName from the Addressable Assets
-            Addressables.LoadAssetsAsync<GameObject>(label, null).Completed += objects =>
-            {
-                foreach (var go in objects.Result)
-                {
-                    Debug.Log($"Addressable Loaded: {go.name}");
-                    addressableAssets.Add(go.name.ToLower(), go); // @@ remove case-sensitivity
-                }
-
-                addressablesReady = true;
-            };
-        }
-        else
-        {
-            Debug.Log($"No addressable assets are tagged '{label}'");
-            addressablesReady = true;
-        }
-    }
+    
     
     void Start()
     {
@@ -165,8 +120,7 @@ public class CroquetBridge : MonoBehaviour
         
         lastMessageDiagnostics = Time.realtimeSinceStartup;
         
-        // StartWS will be called to set up the websocket, and hence the session,
-        // from Update() once we're sure the addressables are loaded.
+        // StartWS will be called to set up the websocket, and hence the session
     }
     
     private void OnDestroy()
@@ -216,7 +170,8 @@ public class CroquetBridge : MonoBehaviour
         }
     }
 
-    private int sessionNameValue = -999; // @@ when running in the editor it would be good to see this; figure out how to make it read-only
+    // TODO: remove sentinel value
+    public int sessionNameValue = -999; // @@ when running in the editor it would be good to see this; figure out how to make it read-only
     
     void StartWS()
     {
@@ -403,6 +358,7 @@ public class CroquetBridge : MonoBehaviour
         SendDeferredMessages();
     }
 
+    // TODO: Utility
     public string PackCroquetMessage(string[] strings)
     {
         return String.Join('\x01', strings);
@@ -431,12 +387,12 @@ public class CroquetBridge : MonoBehaviour
         // before WS has been started, check whether we're ready to do so
         if (sessionNameValue == -999)
         {
-            if (addressablesReady) StartWS();
+            StartWS();
         }
-        else
+        if (loadingInProgress)
         {
-            // session is notionally up and running
-            UpdateGeometries();
+            if (loadingProgressDisplay != null) loadingProgressDisplay.Hide();
+            loadingInProgress = false;
         }
     }
     
@@ -469,11 +425,6 @@ public class CroquetBridge : MonoBehaviour
         }
     }
 
-    private void unused_FixedUpdate()
-    {
-        UpdateGeometries();
-    }
-
     void ProcessCroquetMessages()
     {
         float start = Time.realtimeSinceStartup;
@@ -497,7 +448,9 @@ public class CroquetBridge : MonoBehaviour
                     string[] strings = System.Text.Encoding.UTF8.GetString(timeAndCmdBytes).Split('\x02');
                     string command = strings[1];
                     int count = 0;
-                    if (command == "updateGeometry") count = BundledUpdateGeometry(rawData, sepPos + 1);
+                    
+                    // TODO: OUT:Spatial
+                    // if (command == "updateGeometry") count = BundledUpdateGeometry(rawData, sepPos + 1);
                     
                     long sendTime = long.Parse(strings[0]);
                     long transmissionDelay = nowWhenQueued - sendTime;
@@ -547,29 +500,28 @@ public class CroquetBridge : MonoBehaviour
         string[] args = strings[1..];
         Log("verbose", command + ": " + String.Join(", ", args));
 
-        foreach (CroquetBridgeExtension cbe in bridgeExtensions)
+        foreach (CroquetBridgeExtension extension in bridgeExtensions)
         {
-            if (cbe.ProcessCommand(command, args)) return;
+            if (extension.Messages.Contains(msg))
+            {
+                extension.ProcessCommand(command, args);
+                return;
+            }
         }
         
-        if (command == "updateGeometry") UpdateGeometry(args); // OUT: SPATIAL
-        else if (command == "makeObject") MakeObject(args); // OUT:ENTITY
-        else if (command == "registerAsAvatar") RegisterAsAvatar(args[0]); // OUT:CUSTOM
-        else if (command == "unregisterAsAvatar") UnregisterAsAvatar(args[0]);// OUT:CUSTOM
-        else if (command == "grabCamera") GrabCamera(args);// OUT:CUSTOM
-        else if (command == "releaseCamera") ReleaseCamera(args);// OUT:CUSTOM
-        else if (command == "setParent") SetParent(args);// OUT:SPATIAL
-        else if (command == "unparent") Unparent(args); //OUT:SPATIAL
-        else if (command == "destroyObject") DestroyObject(args[0]); //OUT:ENTITY
-        else if (command == "croquetPing") HandleCroquetPing(args[0]);
+        //if (command == "registerAsAvatar") RegisterAsAvatar(args[0]); // OUT:CUSTOM
+        //else if (command == "unregisterAsAvatar") UnregisterAsAvatar(args[0]);// OUT:CUSTOM
+        //else if (command == "grabCamera") GrabCamera(args);// OUT:CUSTOM CAM
+        //else if (command == "releaseCamera") ReleaseCamera(args);// OUT:CUSTOM CAM
+        if (command == "croquetPing") HandleCroquetPing(args[0]);
         else if (command == "setLogOptions") SetLogOptions(args[0]);  //OUT:LOGGER
         else if (command == "setMeasureOptions") SetMeasureOptions(args[0]);//OUT:METRICS
-        else if (command == "setReservedIds") SetReservedIds(args[0]);
+        //else if (command == "setReservedIds") SetReservedIds(args[0]); // TODO: What is this?
         else if (command == "joinProgress") HandleJoinProgress(args[0]);
         else if (command == "croquetSessionReady") HandleSessionReady();
         else if (command == "croquetSessionDisconnected") HandleSessionDisconnected();
-        else if (command == "setColor") SetColor(args); // OUT:CUSTOM
-        else if (command == "makeClickable") MakeClickable(args); // OUT:CUSTOM
+        //else if (command == "setColor") SetColor(args); // OUT:CUSTOM
+        //else if (command == "makeClickable") MakeClickable(args); // OUT:CUSTOM
         else
         {
             // not a known command; maybe just text for logging
@@ -579,471 +531,91 @@ public class CroquetBridge : MonoBehaviour
         inMessageCount++;
     }
 
-    void SetReservedIds(string packedIds)
-    {
-        // argument is a comma-separated list of strings, in pairs defining alias and id
-        // e.g., "camera,1,otherThing,2"
-        string[] strings = packedIds.Split(',');
-        for (int i = 0; i < strings.Length; i += 2)
-        {
-            // Debug.Log($"id {strings[i+1]} reserved for {strings[i]}");
-            reservedIds[strings[i]] = strings[i + 1];
-        }
+    // TODO: COMMENTED OUT BECAUSE CAMERA?
+    // void SetReservedIds(string packedIds)
+    // {
+    //     // argument is a comma-separated list of strings, in pairs defining alias and id
+    //     // e.g., "camera,1,otherThing,2"
+    //     string[] strings = packedIds.Split(',');
+    //     for (int i = 0; i < strings.Length; i += 2)
+    //     {
+    //         // Debug.Log($"id {strings[i+1]} reserved for {strings[i]}");
+    //         reservedIds[strings[i]] = strings[i + 1];
+    //     }
+    //
+    //     string cameraId = reservedIds["camera"];
+    //     croquetObjects[cameraId] = GameObject.FindWithTag("MainCamera");
+    // }
 
-        string cameraId = reservedIds["camera"];
-        croquetObjects[cameraId] = GameObject.FindWithTag("MainCamera");
-    }
+    // TODO: Commented out because avatar
+    // void RegisterAsAvatar(string id)
+    // {
+    //     if (localAvatarId == id) return; // already registered
+    //
+    //     GameObject obj = FindObject(id);
+    //     if (obj == null) return;
+    //
+    //     localAvatarId = id;
+    // }
 
-    [System.Serializable]
-    public class ObjectSpec
-    {
-        public string id; // currently an integer, but no point converting all the time
-        public string cN; // Croquet name (generally, the model id)
-        public bool cC; // confirmCreation: whether Croquet is waiting for a confirmCreation message for this 
-        public bool wTA; // waitToActivate:  whether to make visible immediately, or only on first posn update
-        public string type;
-        public string cs; // comma-separated list of extra components
-        public float[] c; // color;
-        public float a; // alpha;
-        public float[] s; // scale;
-        public float[] r; // rotation;
-        public float[] t; // translation;
-    }
+    // TODO: Commented out because avatar
+    // void UnregisterAsAvatar(string id)
+    // {
+    //     if (localAvatarId != id) return; // has already been switched
+    //
+    //     localAvatarId = "";
+    // }
 
-    void MakeObject(string[] args)
-    {
-        ObjectSpec spec = JsonUtility.FromJson<ObjectSpec>(args[0]);
-        Log("debug", $"making object {spec.id}");
+    // TODO: Commented out because camera
+    // void GrabCamera(string[] args)
+    // {
+    //     string id = args[0];
+    //     if (cameraOwnerId == id) return; // already registered
+    //
+    //     GameObject obj = FindObject(id);
+    //     if (obj == null) return;
+    //
+    //     cameraOwnerId = id;
+    //
+    //     string[] rot = args[1].Split(',');
+    //     string[] pos = args[2].Split(',');
+    //     
+    //     GameObject camera = GameObject.FindWithTag("MainCamera");
+    //     camera.transform.SetParent(obj.transform, false); // false => ignore child's existing world position
+    //     List<string> geomUpdate = new List<string>();
+    //     geomUpdate.Add(reservedIds["camera"]);
+    //     geomUpdate.Add("rotationSnap");
+    //     geomUpdate.AddRange(rot);
+    //     geomUpdate.Add("translationSnap"); // the keyword we'd get from Croquet
+    //     geomUpdate.AddRange(pos);
+    //     UpdateGeometry(geomUpdate.ToArray());
+    // }
+    //
+    // // TODO: Commented out because camera
+    // void ReleaseCamera(string[] args)
+    // {
+    //     string id = args[0];
+    //     if (cameraOwnerId != id) return; // has already been switched
+    //
+    //     cameraOwnerId = "";
+    //     GameObject camera = GameObject.FindWithTag("MainCamera");
+    //     camera.transform.parent = null;
+    // }
 
-        // try to find a prefab with the given name
-        GameObject obj = null;
-        if (!spec.type.StartsWith("primitive"))
-        {
-            obj = Instantiate(addressableAssets[spec.type.ToLower()]); // @@ remove case-sensitivity
-        }
-        if (obj == null)
-        {
-            Log("debug", $"Specified spec.type ({spec.type}) is not found as a prefab!");
-            PrimitiveType type = PrimitiveType.Cube;
-            if (spec.type == "primitiveSphere") type = PrimitiveType.Sphere;
 
-            obj = new GameObject(spec.type);
-            obj.AddComponent<CroquetGameObject>();
-            GameObject inner = GameObject.CreatePrimitive(type);
-            inner.transform.parent = obj.transform;
-        }
-
-        CroquetGameObject cgo = obj.GetComponent<CroquetGameObject>();
-        cgo.croquetGameHandle = spec.id;
-        if (spec.type.StartsWith("primitive")) cgo.recolorable = true; // all primitives can take arbitrary colour
-        if (spec.cN != "") cgo.croquetActorId = spec.cN;
-
-        if (spec.cs != "")
-        {
-            string[] comps = spec.cs.Split(',');
-            foreach (string compName in comps)
-            {
-                try
-                {
-                    Type packageType = Type.GetType(compName);
-                    if (packageType != null) obj.AddComponent(packageType);
-                    else
-                    {
-                        string assemblyQualifiedName =
-                            System.Reflection.Assembly.CreateQualifiedName("Assembly-CSharp", compName);
-                        Type customType = Type.GetType(assemblyQualifiedName);
-                        if (customType != null) obj.AddComponent(customType);
-                        else Debug.LogError($"Unable to find component {compName} in package or main assembly");
-                    }
-                }
-                catch (Exception e)
-                {
-                    Debug.LogError($"Error in adding component {compName}: {e}");
-                }
-            }
-        }
-
-        if (cgo.recolorable && spec.c[0] != -1f) // a red value of -1 means "don't recolour"
-        {
-            Material material = obj.GetComponentInChildren<Renderer>().material;
-            if (spec.a != 1f)
-            {
-                // sorcery from https://forum.unity.com/threads/standard-material-shader-ignoring-setfloat-property-_mode.344557/
-                material.SetOverrideTag("RenderType", "Transparent");
-                material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.One);
-                material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-                material.SetInt("_ZWrite", 0);
-                material.DisableKeyword("_ALPHATEST_ON");
-                material.DisableKeyword("_ALPHABLEND_ON");
-                material.EnableKeyword("_ALPHAPREMULTIPLY_ON");
-                material.renderQueue = 3000;
-            }
-
-            Color color = new Color(spec.c[0], spec.c[1], spec.c[2], spec.a);
-            material.SetColor("_Color", color);
-        }
-
-        obj.SetActive(!spec.wTA);
-
-        croquetObjects[spec.id] = obj;
-
-        obj.transform.localScale = new Vector3(spec.s[0], spec.s[1], spec.s[2]);
-        // normalise the quaternion because it's potentially being sent with reduced precision
-        obj.transform.localRotation = Quaternion.Normalize(new Quaternion(spec.r[0], spec.r[1], spec.r[2], spec.r[3]));
-        obj.transform.localPosition = new Vector3(spec.t[0], spec.t[1], spec.t[2]);
-
-        if (spec.cC)
-        {
-            SendToCroquet("objectCreated", spec.id.ToString(), DateTimeOffset.Now.ToUnixTimeMilliseconds().ToString());
-        }
-    }
-
-    public GameObject FindObject(string id)
-    {
-        GameObject obj;
-        if (croquetObjects.TryGetValue(id, out obj)) return obj;
-        Log("debug", $"Failed to find object {id}");
-        return null;
-    }
     
-    void RegisterAsAvatar(string id)
-    {
-        if (localAvatarId == id) return; // already registered
-
-        GameObject obj = FindObject(id);
-        if (obj == null) return;
-
-        localAvatarId = id;
-    }
-
-    void UnregisterAsAvatar(string id)
-    {
-        if (localAvatarId != id) return; // has already been switched
-
-        localAvatarId = "";
-    }
-
-    void GrabCamera(string[] args)
-    {
-        string id = args[0];
-        if (cameraOwnerId == id) return; // already registered
-
-        GameObject obj = FindObject(id);
-        if (obj == null) return;
-
-        cameraOwnerId = id;
-
-        string[] rot = args[1].Split(',');
-        string[] pos = args[2].Split(',');
-        
-        GameObject camera = GameObject.FindWithTag("MainCamera");
-        camera.transform.SetParent(obj.transform, false); // false => ignore child's existing world position
-        List<string> geomUpdate = new List<string>();
-        geomUpdate.Add(reservedIds["camera"]);
-        geomUpdate.Add("rotationSnap");
-        geomUpdate.AddRange(rot);
-        geomUpdate.Add("translationSnap"); // the keyword we'd get from Croquet
-        geomUpdate.AddRange(pos);
-        UpdateGeometry(geomUpdate.ToArray());
-    }
-
-    void ReleaseCamera(string[] args)
-    {
-        string id = args[0];
-        if (cameraOwnerId != id) return; // has already been switched
-
-        cameraOwnerId = "";
-        GameObject camera = GameObject.FindWithTag("MainCamera");
-        camera.transform.parent = null;
-    }
-
-    void SetParent(string[] args)
-    {
-        GameObject child = FindObject(args[0]);
-        GameObject parent = FindObject(args[1]);
-        if (parent && child)
-        {
-            child.transform.SetParent(parent.transform, false); // false => ignore child's existing world position
-        }
-    }
     
-    void Unparent(string[] args)
-    {
-        GameObject child = FindObject(args[0]);
-        if (child)
-        {
-            child.transform.SetParent(null);
-        }
-    }
 
-    void DestroyObject(string id)
-    {
-        Log("debug", "destroying object " + id.ToString());
-        if (cameraOwnerId == id)
-        {
-            cameraOwnerId = "";
-            GameObject camera = GameObject.FindWithTag("MainCamera");
-            camera.transform.parent = null;
-        }
-        if (croquetObjects.ContainsKey(id))
-        {
-            GameObject obj = croquetObjects[id];
-            Destroy(obj);
-            desiredScale.Remove(id);
-            desiredRot.Remove(id);
-            desiredPos.Remove(id);
-            croquetObjects.Remove(id);
-        }
-        else
-        {
-            // asking to destroy a pawn for which there's no view can happen just because of
-            // creation/destruction timing in worldcore.  not necessarily a problem.
-            Log("debug", $"attempt to destroy absent object {id}");
-        }
-    }
+
     
-    Vector3 Vector3FromBuffer(byte[] rawData, int startPos)
-    {
-        return new Vector3(
-            BitConverter.ToSingle(rawData, startPos),
-            BitConverter.ToSingle(rawData, startPos + 4),
-            BitConverter.ToSingle(rawData, startPos + 8)
-        );
-    }
+    
+    
 
-    Quaternion QuaternionFromBuffer(byte[] rawData, int startPos)
-    {
-        return new Quaternion(
-            BitConverter.ToSingle(rawData, startPos),
-            BitConverter.ToSingle(rawData, startPos + 4),
-            BitConverter.ToSingle(rawData, startPos + 8),
-            BitConverter.ToSingle(rawData, startPos + 12)
-        );
-    }
+    
 
-    int BundledUpdateGeometry(byte[] rawData, int startPos)
-    {
-        if (loadingInProgress)
-        {
-            Log("diagnostics", "first geometry update");
-            if (loadingProgressDisplay != null) loadingProgressDisplay.Hide();
-            loadingInProgress = false;
-        }
+    
 
-        const uint SCALE = 32;
-        const uint SCALE_SNAP = 16;
-        const uint ROT = 8;
-        const uint ROT_SNAP = 4;
-        const uint POS = 2;
-        const uint POS_SNAP = 1;
-        
-        int objectCount = 0;
-        int bufferPos = startPos; // byte index through the buffer
-        while (bufferPos < rawData.Length)
-        {
-            // first number encodes object id and (in bits 0-5) whether there is an update (with/without
-            // a snap) for each of scale, rotation, translation.  this leaves room for 2**26
-            // possible ids - i.e., around 67 million.  that seems more than enough for any given
-            // instant, but if some app creates and destroys thousands of entities per second, we
-            // would need some kind of id recycling so we don't run out.
-            UInt32 encodedId = BitConverter.ToUInt32(rawData, bufferPos);
-            bufferPos += 4;
-            string id = (encodedId >> 6).ToString();
-            if (croquetObjects.ContainsKey(id))
-            {
-                objectCount++;
-                
-                Transform trans = croquetObjects[id].transform;
-                if ((encodedId & SCALE) != 0)
-                {
-                    Vector3 s = Vector3FromBuffer(rawData, bufferPos);
-                    bufferPos += 12;
-                    if ((encodedId & SCALE_SNAP) != 0)
-                    {
-                        trans.localScale = s;
-                        desiredScale.Remove(id);
-                    }
-                    else
-                    {
-                        desiredScale[id] = s;
-                    }
-                    // Log("verbose", "scale: " + s.ToString());
-                }
-                if ((encodedId & ROT) != 0)
-                {
-                    Quaternion r = QuaternionFromBuffer(rawData, bufferPos);
-                    bufferPos += 16;
-                    if ((encodedId & ROT_SNAP) != 0)
-                    {
-                        trans.localRotation = r;
-                        desiredRot.Remove(id);
-                    }
-                    else
-                    {
-                        desiredRot[id] = r;
-                    }
-                    // Log("verbose", "rot: " + r.ToString());
-                }
-                if ((encodedId & POS) != 0)
-                {
-                    // in Unity it's referred to as position
-                    Vector3 p = Vector3FromBuffer(rawData, bufferPos);
-                    // if (do_log) Debug.Log($"camera to {p} with snap: {(encodedId & POS_SNAP) != 0}");
-                    bufferPos += 12;
-                    if ((encodedId & POS_SNAP) != 0)
-                    {
-                        trans.localPosition = p;
-                        desiredPos.Remove(id);
-                    }
-                    else
-                    {
-                        desiredPos[id] = p;
-                    }
-                    // Log("verbose", "pos: " + p.ToString());
-                }
-            }
-            else Log("debug", $"attempt to update absent object {id}");
-        }
-
-        return objectCount;
-    }
-
-    void UpdateGeometry(string[] strings)
-    {
-        if (loadingInProgress)
-        {
-            Log("diagnostics", "first geometry update");
-            if (loadingProgressDisplay != null) loadingProgressDisplay.Hide();
-            loadingInProgress = false;
-        }
-
-        string id = strings[0];
-        if (croquetObjects.ContainsKey(id))
-        {
-            Transform trans = croquetObjects[id].transform;
-            for (int i = 1; i < strings.Length;)
-            {
-                string aspect = strings[i];
-                if (aspect == "scale" || aspect == "scaleSnap")
-                {
-                    Vector3 s = new Vector3(float.Parse(strings[i + 1]), float.Parse(strings[i + 2]), float.Parse(strings[i + 3]));
-                    i += 4;
-                    if (aspect == "scaleSnap")
-                    {
-                        trans.localScale = s;
-                        desiredScale.Remove(id);
-                    }
-                    else
-                    {
-                        desiredScale[id] = s;
-                    }
-                    // Log("verbose", "scale: " + scale.ToString());
-                }
-                else if (aspect == "rotation" || aspect == "rotationSnap")
-                {
-                    Quaternion r = Quaternion.Normalize(new Quaternion(float.Parse(strings[i + 1]), float.Parse(strings[i + 2]), float.Parse(strings[i + 3]), float.Parse(strings[i + 4])));
-                    i += 5;
-                    if (aspect == "rotationSnap")
-                    {
-                        trans.localRotation = r;
-                        desiredRot.Remove(id);
-                    }
-                    else
-                    {
-                        desiredRot[id] = r;
-                    }
-                    // Log("verbose", "rot: " + r.ToString());
-                }
-                else if (aspect == "translation" || aspect == "translationSnap")
-                {
-                    // in Unity it's referred to as position
-                    Vector3 p = new Vector3(float.Parse(strings[i + 1]), float.Parse(strings[i + 2]), float.Parse(strings[i + 3]));
-                    i += 4;
-                    // if (do_log) Debug.Log($"one-off camera to {p} with snap: {aspect == "translationSnap"}");
-
-                    if (aspect == "translationSnap")
-                    {
-                        trans.localPosition = p;
-                        desiredPos.Remove(id);
-                    }
-                    else
-                    {
-                        desiredPos[id] = p;
-                    }
-                    // Log("verbose", "pos: " + p.ToString());
-                }
-                else
-                {
-                    Log("debug", "invalid geometry message: " + String.Join(",", strings));
-                    break;
-                }
-            }
-        }
-        else Log("debug", $"attempt to update absent object {id}");
-    }
-
-    void UpdateGeometries()
-    {
-        // timing note: running in MacOS editor, when 450 objects have updates their total
-        // processing time is around 2ms.
-        foreach (KeyValuePair<string, GameObject> kvp in croquetObjects)
-        {
-            string id = kvp.Key;
-            GameObject obj = kvp.Value;
-            if (obj == null) continue;
-
-            float lerpFactor = 0.2f;
-            bool anyChange = false;
-            if (desiredScale.ContainsKey(id))
-            {
-                obj.transform.localScale = Vector3.Lerp(obj.transform.localScale, desiredScale[id], lerpFactor);
-                anyChange = true;
-                if (Vector3.Distance(obj.transform.localScale, desiredScale[id]) < 0.01) desiredScale.Remove(id);
-            }
-            if (desiredRot.ContainsKey(id))
-            {
-                obj.transform.localRotation = Quaternion.Lerp(obj.transform.localRotation, desiredRot[id], lerpFactor);
-                anyChange = true;
-                if (Quaternion.Angle(obj.transform.localRotation, desiredRot[id]) < 0.1) desiredRot.Remove(id);
-            }
-            if (desiredPos.ContainsKey(id))
-            {
-                obj.transform.localPosition = Vector3.Lerp(obj.transform.localPosition, desiredPos[id], lerpFactor);
-                anyChange = true;
-                if (Vector3.Distance(obj.transform.localPosition, desiredPos[id]) < 0.01) desiredPos.Remove(id);
-            }
-            if (int.Parse(id) >= 100) // not one of the reserved objects (e.g., camera)
-            {
-                Renderer renderer = obj.GetComponentInChildren<Renderer>();
-                Material material;
-                if (renderer != null)
-                {
-                    material = renderer.material;
-                }
-                else // early return if bad material
-                {
-                    return;
-                }
-
-                if (anyChange)
-                {
-                    obj.SetActive(true);
-                    if (showRigidbodyStateHighlight)
-                    {
-                        material.EnableKeyword("_EMISSION");
-                        material.SetColor("_EmissionColor", new Color(0.1f, 0.1f, 0.1f));
-                    }
-                }
-                else
-                {
-                    if (showRigidbodyStateHighlight)
-                    {
-                        material.DisableKeyword("_EMISSION");
-                    }
-                }
-            }
-        }
-    }
+    
     
     void HandleCroquetPing(string time)
     {
@@ -1062,24 +634,26 @@ public class CroquetBridge : MonoBehaviour
         croquetSessionReady = true;
     }
 
+    // TODO: All systems should get this event and respond accordingly
     void HandleSessionDisconnected()
     {
-        Log("session", "Croquet session disconnected");
-        croquetSessionReady = false;
-
-        string[] allIds = croquetObjects.Keys.ToArray();
-        foreach (string id in allIds)
-        {
-            // @@ for now, we assume that everything not listed in
-            // the reservedIds dictionary (e.g., the camera) can
-            // be destroyed
-            if (!reservedIds.ContainsValue(id)) DestroyObject(id);
-        }
-        
-        croquetObjects.Clear();
-        reservedIds.Clear();
+        // Log("session", "Croquet session disconnected");
+        // croquetSessionReady = false;
+        //
+        // string[] allIds = croquetObjects.Keys.ToArray();
+        // foreach (string id in allIds)
+        // {
+        //     // @@ for now, we assume that everything not listed in
+        //     // the reservedIds dictionary (e.g., the camera) can
+        //     // be destroyed
+        //     if (!reservedIds.ContainsValue(id)) DestroyObject(id);
+        // }
+        //
+        // croquetObjects.Clear();
+        // reservedIds.Clear();
     }
 
+    // OUT: Logger Util
     void SetLogOptions(string options)
     {
         // arg is a comma-separated list of the log categories to show
@@ -1093,6 +667,7 @@ public class CroquetBridge : MonoBehaviour
         logOptions["routeToCroquet"] = wanted.Contains("routeToCroquet");
     }
 
+    // OUT: Metrics system util
     void SetMeasureOptions(string options)
     {
         // arg is a comma-separated list of the measure categories to send
@@ -1119,6 +694,7 @@ public class CroquetBridge : MonoBehaviour
         loadingProgressDisplay.SetProgress(barRatio, $"Loading... ({loadRatio * 100:#0.0}%)");
     }
 
+    // OUT: Logging System
     void Log(string category, string msg)
     {
         bool loggable;
@@ -1136,6 +712,7 @@ public class CroquetBridge : MonoBehaviour
         }
     }
 
+    // OUT metrics system
     void Measure(params string[] strings)
     {
         string category = strings[0];
@@ -1149,51 +726,54 @@ public class CroquetBridge : MonoBehaviour
     }
     
     // app-specific additions
-    void SetColor(string[] strings)
-    {
-        // strings[0] is the object id
-        // strings[1] is a comma-separated list of rgb or rgba 0..1 values
-        string id = strings[0];
-        // Debug.Log("setColor " + strings[0] + " to " + strings[1]);
-        if (croquetObjects.ContainsKey(id))
-        {
-            GameObject obj = croquetObjects[id];
-            Material material = obj.GetComponentInChildren<Renderer>().material;
-            
-            string[] numStrs = strings[1].Split(",");
-            float r = float.Parse(numStrs[0]);
-            float g = float.Parse(numStrs[1]);
-            float b = float.Parse(numStrs[2]);
-            float a = numStrs.Length == 4 ? float.Parse(numStrs[3]) : 1f;
-            if (a != 1f)
-            {
-                // sorcery from https://forum.unity.com/threads/standard-material-shader-ignoring-setfloat-property-_mode.344557/
-                material.SetOverrideTag("RenderType", "Transparent");
-                material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.One);
-                material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-                material.SetInt("_ZWrite", 0);
-                material.DisableKeyword("_ALPHATEST_ON");
-                material.DisableKeyword("_ALPHABLEND_ON");
-                material.EnableKeyword("_ALPHAPREMULTIPLY_ON");
-                material.renderQueue = 3000;
-            }
-            Color color = new Color(r, g, b, a);
-            material.SetColor("_Color", color);
-        }
-    }
+    
+    // OUT: Material System
+    // void SetColor(string[] strings)
+    // {
+    //     // strings[0] is the object id
+    //     // strings[1] is a comma-separated list of rgb or rgba 0..1 values
+    //     string id = strings[0];
+    //     // Debug.Log("setColor " + strings[0] + " to " + strings[1]);
+    //     if (croquetObjects.ContainsKey(id))
+    //     {
+    //         GameObject obj = croquetObjects[id];
+    //         Material material = obj.GetComponentInChildren<Renderer>().material;
+    //         
+    //         string[] numStrs = strings[1].Split(",");
+    //         float r = float.Parse(numStrs[0]);
+    //         float g = float.Parse(numStrs[1]);
+    //         float b = float.Parse(numStrs[2]);
+    //         float a = numStrs.Length == 4 ? float.Parse(numStrs[3]) : 1f;
+    //         if (a != 1f)
+    //         {
+    //             // sorcery from https://forum.unity.com/threads/standard-material-shader-ignoring-setfloat-property-_mode.344557/
+    //             material.SetOverrideTag("RenderType", "Transparent");
+    //             material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.One);
+    //             material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+    //             material.SetInt("_ZWrite", 0);
+    //             material.DisableKeyword("_ALPHATEST_ON");
+    //             material.DisableKeyword("_ALPHABLEND_ON");
+    //             material.EnableKeyword("_ALPHAPREMULTIPLY_ON");
+    //             material.renderQueue = 3000;
+    //         }
+    //         Color color = new Color(r, g, b, a);
+    //         material.SetColor("_Color", color);
+    //     }
+    // }
 
-    void MakeClickable(string[] strings)
-    {
-        string id = strings[0];
-        string layers = strings[1];
-        if (croquetObjects.ContainsKey(id))
-        {
-            GameObject obj = croquetObjects[id];
-            CroquetGameObject cgo = obj.GetComponent<CroquetGameObject>();
-            cgo.clickable = true;
-            if (layers != "") cgo.clickLayers = layers.Split(',');
-            // Debug.Log($"hittable object {cgo.croquetActorId} has handle {cgo.croquetGameHandle}");
-        }
-    }
+    // OUT: Interaction System
+    // void MakeClickable(string[] strings)
+    // {
+    //     string id = strings[0];
+    //     string layers = strings[1];
+    //     if (croquetObjects.ContainsKey(id))
+    //     {
+    //         GameObject obj = croquetObjects[id];
+    //         CroquetGameObject cgo = obj.GetComponent<CroquetGameObject>();
+    //         cgo.clickable = true;
+    //         if (layers != "") cgo.clickLayers = layers.Split(',');
+    //         // Debug.Log($"hittable object {cgo.croquetActorId} has handle {cgo.croquetGameHandle}");
+    //     }
+    // }
 }
 
