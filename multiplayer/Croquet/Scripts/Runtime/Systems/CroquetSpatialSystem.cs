@@ -6,10 +6,9 @@ using UnityEngine;
 public class CroquetSpatialSystem : CroquetBridgeExtension
 {
     
-    
-    public List<String> Messages=new List<string>()
+    public List<String> Messages = new List<string>()
     {
-        "updateGeometry",
+        "updateSpatial",
         "setParent",
         "unparent",
     };
@@ -33,10 +32,11 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
             SpatialComponents.Add(id, spatialComponent);
         }
     }
+    
     private void Update()
     {
         // session is notionally up and running
-        UpdateGeometries();
+        UpdateSpatial();
     }
 
     void Unparent(string[] args)
@@ -58,11 +58,9 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
         }
     }
     
-    // OUT:SPATIAL SYSTEM
-    void UpdateGeometry(string[] strings)
+    // Frame by frame tell stuff to move around
+    void Update()
     {
-        Debug.Log("first geometry update");
-        
         // THIS INSTEAD OF CONTAINSKEY()
         string id = strings[0];
         foreach (var spatialComponent in SpatialComponents)
@@ -70,74 +68,6 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
             Transform trans = SpatialComponents[id].transform;
             
         }
-        
-        
-        if (croquetObjects.ContainsKey(id))
-        {
-            Transform trans = croquetObjects[id].transform;
-            for (int i = 1; i < strings.Length;)
-            {
-                string aspect = strings[i];
-                if (aspect == "scale" || aspect == "scaleSnap")
-                {
-                    Vector3 s = new Vector3(float.Parse(strings[i + 1]), float.Parse(strings[i + 2]), float.Parse(strings[i + 3]));
-                    i += 4;
-                    if (aspect == "scaleSnap")
-                    {
-                        trans.localScale = s;
-                        desiredScale.Remove(id);
-                    }
-                    else
-                    {
-                        desiredScale[id] = s;
-                    }
-                    // Log("verbose", "scale: " + scale.ToString());
-                }
-                else if (aspect == "rotation" || aspect == "rotationSnap")
-                {
-                    Quaternion r = Quaternion.Normalize(new Quaternion(float.Parse(strings[i + 1]), float.Parse(strings[i + 2]), float.Parse(strings[i + 3]), float.Parse(strings[i + 4])));
-                    i += 5;
-                    if (aspect == "rotationSnap")
-                    {
-                        trans.localRotation = r;
-                        desiredRot.Remove(id);
-                    }
-                    else
-                    {
-                        desiredRot[id] = r;
-                    }
-                    // Log("verbose", "rot: " + r.ToString());
-                }
-                else if (aspect == "translation" || aspect == "translationSnap")
-                {
-                    // in Unity it's referred to as position
-                    Vector3 p = new Vector3(float.Parse(strings[i + 1]), float.Parse(strings[i + 2]), float.Parse(strings[i + 3]));
-                    i += 4;
-                    // if (do_log) Debug.Log($"one-off camera to {p} with snap: {aspect == "translationSnap"}");
-
-                    if (aspect == "translationSnap")
-                    {
-                        trans.localPosition = p;
-                        desiredPos.Remove(id);
-                    }
-                    else
-                    {
-                        desiredPos[id] = p;
-                    }
-                    // Log("verbose", "pos: " + p.ToString());
-                }
-                else
-                {
-                    Debug.Log("invalid geometry message: " + String.Join(",", strings));
-                    break;
-                }
-            }
-        }
-        else Debug.Log( $"attempt to update absent object {id}");
-    }
-    
-    void UpdateGeometries()
-    {
         // timing note: running in MacOS editor, when 450 objects have updates their total
         // processing time is around 2ms.
         foreach (KeyValuePair<string, GameObject> kvp in croquetObjects)
@@ -182,31 +112,15 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
                 if (anyChange)
                 {
                     obj.SetActive(true);
-                    if (showRigidbodyStateHighlight)
-                    {
-                        material.EnableKeyword("_EMISSION");
-                        material.SetColor("_EmissionColor", new Color(0.1f, 0.1f, 0.1f));
-                    }
-                }
-                else
-                {
-                    if (showRigidbodyStateHighlight)
-                    {
-                        material.DisableKeyword("_EMISSION");
-                    }
+                    
                 }
             }
         }
     }
     
-    int BundledUpdateGeometry(byte[] rawData, int startPos)
+    // processing of message from Croquet updating the position component
+    int UpdateSpatial(byte[] rawData, int startPos)
     {
-        if (loadingInProgress)
-        {
-            Log("diagnostics", "first geometry update");
-            if (loadingProgressDisplay != null) loadingProgressDisplay.Hide();
-            loadingInProgress = false;
-        }
 
         const uint SCALE = 32;
         const uint SCALE_SNAP = 16;
