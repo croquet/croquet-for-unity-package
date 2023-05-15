@@ -28,15 +28,15 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
         foreach (CroquetSpatialComponent spatialComponent in FindObjectsOfType<CroquetSpatialComponent>())
         {
             // Retrieve the necessary identifier
-            var id = spatialComponent.gameObject.GetComponent<CroquetEntity>().croquetActorId;
+            var id = spatialComponent.gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
             SpatialComponents.Add(id, spatialComponent);
         }
     }
     
     private void Update()
     {
-        // session is notionally up and running
-        UpdateSpatial();
+        // Update the transform (position, rotation, scale) in the scene
+        UpdateTransforms();
     }
 
     void Unparent(string[] args)
@@ -59,21 +59,12 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
     }
     
     // Frame by frame tell stuff to move around
-    void Update()
+    void UpdateTransforms()
     {
-        // THIS INSTEAD OF CONTAINSKEY()
-        string id = strings[0];
-        foreach (var spatialComponent in SpatialComponents)
-        {
-            Transform trans = SpatialComponents[id].transform;
-            
-        }
-        // timing note: running in MacOS editor, when 450 objects have updates their total
-        // processing time is around 2ms.
-        foreach (KeyValuePair<string, GameObject> kvp in croquetObjects)
+        foreach (KeyValuePair<string, CroquetSpatialComponent> kvp in SpatialComponents)
         {
             string id = kvp.Key;
-            GameObject obj = kvp.Value;
+            CroquetSpatialComponent obj = kvp.Value;
             if (obj == null) continue;
 
             float lerpFactor = 0.2f;
@@ -121,7 +112,6 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
     // processing of message from Croquet updating the position component
     int UpdateSpatial(byte[] rawData, int startPos)
     {
-
         const uint SCALE = 32;
         const uint SCALE_SNAP = 16;
         const uint ROT = 8;
@@ -141,23 +131,25 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
             UInt32 encodedId = BitConverter.ToUInt32(rawData, bufferPos);
             bufferPos += 4;
             string id = (encodedId >> 6).ToString();
-            if (croquetObjects.ContainsKey(id))
+            
+            if (croquetObjects.ContainsKey(id)) 
             {
                 objectCount++;
                 
-                Transform trans = croquetObjects[id].transform;
+                Transform trans = SpatialComponents[id].transform;
                 if ((encodedId & SCALE) != 0)
                 {
-                    Vector3 s = Vector3FromBuffer(rawData, bufferPos);
+                    Vector3 updatedScale = Vector3FromBuffer(rawData, bufferPos);
                     bufferPos += 12;
                     if ((encodedId & SCALE_SNAP) != 0)
                     {
-                        trans.localScale = s;
-                        desiredScale.Remove(id);
+                        // immediately snap scale
+                        trans.localScale = updatedScale;
+                        desiredScale.Remove(id); //TODO W ARAN: change this
                     }
                     else
                     {
-                        desiredScale[id] = s;
+                        SpatialComponents[id].scale = updatedScale;
                     }
                     // Log("verbose", "scale: " + s.ToString());
                 }
@@ -174,27 +166,26 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
                     {
                         desiredRot[id] = r;
                     }
-                    // Log("verbose", "rot: " + r.ToString());
                 }
                 if ((encodedId & POS) != 0)
                 {
                     // in Unity it's referred to as position
-                    Vector3 p = Vector3FromBuffer(rawData, bufferPos);
+                    Vector3 updatedPosition = Vector3FromBuffer(rawData, bufferPos);
                     // if (do_log) Debug.Log($"camera to {p} with snap: {(encodedId & POS_SNAP) != 0}");
                     bufferPos += 12;
                     if ((encodedId & POS_SNAP) != 0)
                     {
-                        trans.localPosition = p;
+                        trans.localPosition = updatedPosition;
                         desiredPos.Remove(id);
                     }
                     else
                     {
-                        desiredPos[id] = p;
+                        SpatialComponents[id].position = updatedPosition;
                     }
                     // Log("verbose", "pos: " + p.ToString());
                 }
             }
-            else Log("debug", $"attempt to update absent object {id}");
+            else Debug.Log($"attempt to update absent object {id}");
         }
 
         return objectCount;
@@ -204,26 +195,39 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
     
     public override void ProcessCommand(string command, string[] args)
     {
-        if 
-        UpdateGeometry(args);
+        if (command.Equals("updateSpatial"))
+        {
+            UpdateSpatial(args);// TODO ARAN: together fix the data format coming in
+        } 
+        else if (command.Equals("setParent"))
+        {
+            // associate parent
+            //SetParent();
+        }
+        else if (command.Equals("unparent"))
+        {
+            // unassociate parent
+            //UnsetParent();
+        }
+        
+    }
+    Quaternion QuaternionFromBuffer(byte[] rawData, int startPos)
+    {
+        return new Quaternion(
+            BitConverter.ToSingle(rawData, startPos),
+            BitConverter.ToSingle(rawData, startPos + 4),
+            BitConverter.ToSingle(rawData, startPos + 8),
+            BitConverter.ToSingle(rawData, startPos + 12)
+        );
+    }
+
+    Vector3 Vector3FromBuffer(byte[] rawData, int startPos)
+    {
+        return new Vector3(
+            BitConverter.ToSingle(rawData, startPos),
+            BitConverter.ToSingle(rawData, startPos + 4),
+            BitConverter.ToSingle(rawData, startPos + 8)
+        );
     }
 }
 
-Quaternion QuaternionFromBuffer(byte[] rawData, int startPos)
-{
-    return new Quaternion(
-        BitConverter.ToSingle(rawData, startPos),
-        BitConverter.ToSingle(rawData, startPos + 4),
-        BitConverter.ToSingle(rawData, startPos + 8),
-        BitConverter.ToSingle(rawData, startPos + 12)
-    );
-}
-
-Vector3 Vector3FromBuffer(byte[] rawData, int startPos)
-{
-    return new Vector3(
-        BitConverter.ToSingle(rawData, startPos),
-        BitConverter.ToSingle(rawData, startPos + 4),
-        BitConverter.ToSingle(rawData, startPos + 8)
-    );
-}

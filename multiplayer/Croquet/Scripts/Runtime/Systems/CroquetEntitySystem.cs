@@ -18,6 +18,7 @@ public class CroquetEntitySystem : CroquetBridgeExtension
     private Dictionary<string, GameObject> addressableAssets;
     private bool addressablesReady = false;
 
+    
     // Create Singleton Reference
     public static CroquetEntitySystem Instance { get; private set; }
     
