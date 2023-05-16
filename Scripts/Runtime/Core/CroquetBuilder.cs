@@ -54,7 +54,7 @@ public class CroquetBuilder
     }
 
     public static string PathToJSZip = Path.GetFullPath("Packages/com.croquet.multiplayer/.SAMPLE.JS.SOURCE/croquet.zip");
-    public static string PathToNodeExe = Path.GetFullPath("Packages/com.croquet.multiplayer/multiplayer/Croquet/NodeJS/node.exe");
+    public static string PathToNodeExe = Path.GetFullPath("Packages/com.croquet.multiplayer/NodeJS/node.exe");
 
     public struct JSBuildDetails
     {
