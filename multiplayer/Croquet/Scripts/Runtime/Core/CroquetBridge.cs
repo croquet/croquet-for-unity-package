@@ -53,21 +53,19 @@ public class CroquetBridge : MonoBehaviour
     LoadingProgressDisplay loadingProgressDisplay;
     public bool loadingInProgress = true;
 
-    public static CroquetBridge bridge = null;
+    public static CroquetBridge Instance { get; private set; }
     private CroquetRunner croquetRunner;
 
     private CroquetBridgeExtension[] bridgeExtensions = new CroquetBridgeExtension[0];
     
     public static void SendCroquet(params string[] strings)
     {
-        if (bridge == null) return;
-        bridge.SendToCroquet(strings);    
+        Instance.SendToCroquet(strings);    
     }
     
     public static void SendCroquetSync(params string[] strings)
     {
-        if (bridge == null) return;
-        bridge.SendToCroquetSync(strings);   
+        Instance.SendToCroquetSync(strings);   
     }
 
     // settings for logging and measuring (on JS-side performance log).  absence of an entry for a
@@ -90,7 +88,16 @@ public class CroquetBridge : MonoBehaviour
     
     void Awake()
     {
-        bridge = this;
+        // Create Singleton Accessor
+        // If there is an instance, and it's not me, delete myself.
+        if (Instance != null && Instance != this) 
+        { 
+            Destroy(this); 
+        }
+        else 
+        { 
+            Instance = this; 
+        } 
         croquetRunner = this.gameObject.GetComponent<CroquetRunner>();
         LoadingProgressDisplay loadingObj = GameObject.FindObjectOfType<LoadingProgressDisplay>();
         if (loadingObj != null)
@@ -107,6 +114,7 @@ public class CroquetBridge : MonoBehaviour
 
     public void RegisterBridgeExtension(CroquetBridgeExtension extension)
     {
+        Debug.Log("THIS");
         bridgeExtensions.Append(extension);
     }
     
@@ -140,11 +148,11 @@ public class CroquetBridge : MonoBehaviour
             // hint from https://github.com/sta/websocket-sharp/issues/236
             clientSock = Context.WebSocket;
 
-            bridge.Log("session", "server socket opened");
+            Instance.Log("session", "server socket opened");
 
-            string apiKey = bridge.appProperties.apiKey;
-            string appId = bridge.appProperties.appPrefix + "." + bridge.appName;
-            string sessionName = bridge.sessionNameValue.ToString();
+            string apiKey = Instance.appProperties.apiKey;
+            string appId = Instance.appProperties.appPrefix + "." + Instance.appName;
+            string sessionName = Instance.sessionNameValue.ToString();
             
             string[] command = new string[] {
                 "readyForSession",
@@ -156,7 +164,7 @@ public class CroquetBridge : MonoBehaviour
             string msg = String.Join('\x01', command);
             clientSock.Send(msg);
             
-            bridge.SetLoadingStage(0.50f, "bridge connected");
+            Instance.SetLoadingStage(0.50f, "bridge connected");
         }
 
         protected override void OnMessage(MessageEventArgs e)
@@ -167,7 +175,7 @@ public class CroquetBridge : MonoBehaviour
 
         protected override void OnClose(CloseEventArgs e)
         {
-            bridge.Log("session", System.String.Format("server socket closed {0}: {1}", e.Code, e.Reason));
+            Instance.Log("session", System.String.Format("server socket closed {0}: {1}", e.Code, e.Reason));
         }
     }
 
@@ -450,7 +458,7 @@ public class CroquetBridge : MonoBehaviour
                     string command = strings[1];
                     int count = 0;
                     
-                    ProcessCroquetMessage(command, rawData, startIndex);
+                    ProcessCroquetMessage(command, rawData, sepPos + 1);
                     
                     long sendTime = long.Parse(strings[0]);
                     long transmissionDelay = nowWhenQueued - sendTime;
@@ -514,8 +522,7 @@ public class CroquetBridge : MonoBehaviour
                 return;
             }
         }
-        
-        
+
         //if (command == "registerAsAvatar") RegisterAsAvatar(args[0]); // OUT:CUSTOM
         //else if (command == "unregisterAsAvatar") UnregisterAsAvatar(args[0]);// OUT:CUSTOM
         //else if (command == "grabCamera") GrabCamera(args);// OUT:CUSTOM CAM
@@ -591,56 +598,7 @@ public class CroquetBridge : MonoBehaviour
     //     localAvatarId = "";
     // }
 
-    // TODO: Commented out because camera
-    // void GrabCamera(string[] args)
-    // {
-    //     string id = args[0];
-    //     if (cameraOwnerId == id) return; // already registered
-    //
-    //     GameObject obj = FindObject(id);
-    //     if (obj == null) return;
-    //
-    //     cameraOwnerId = id;
-    //
-    //     string[] rot = args[1].Split(',');
-    //     string[] pos = args[2].Split(',');
-    //     
-    //     GameObject camera = GameObject.FindWithTag("MainCamera");
-    //     camera.transform.SetParent(obj.transform, false); // false => ignore child's existing world position
-    //     List<string> geomUpdate = new List<string>();
-    //     geomUpdate.Add(reservedIds["camera"]);
-    //     geomUpdate.Add("rotationSnap");
-    //     geomUpdate.AddRange(rot);
-    //     geomUpdate.Add("translationSnap"); // the keyword we'd get from Croquet
-    //     geomUpdate.AddRange(pos);
-    //     UpdateGeometry(geomUpdate.ToArray());
-    // }
-    //
-    // // TODO: Commented out because camera
-    // void ReleaseCamera(string[] args)
-    // {
-    //     string id = args[0];
-    //     if (cameraOwnerId != id) return; // has already been switched
-    //
-    //     cameraOwnerId = "";
-    //     GameObject camera = GameObject.FindWithTag("MainCamera");
-    //     camera.transform.parent = null;
-    // }
-
-
-    
-    
-
-
-    
-    
-    
-
-    
-
-    
-
-    
+ 
     
     void HandleCroquetPing(string time)
     {
@@ -786,19 +744,5 @@ public class CroquetBridge : MonoBehaviour
     //     }
     // }
 
-    // OUT: Interaction System
-    // void MakeClickable(string[] strings)
-    // {
-    //     string id = strings[0];
-    //     string layers = strings[1];
-    //     if (croquetObjects.ContainsKey(id))
-    //     {
-    //         GameObject obj = croquetObjects[id];
-    //         CroquetGameObject cgo = obj.GetComponent<CroquetGameObject>();
-    //         cgo.clickable = true;
-    //         if (layers != "") cgo.clickLayers = layers.Split(',');
-    //         // Debug.Log($"hittable object {cgo.croquetActorId} has handle {cgo.croquetGameHandle}");
-    //     }
-    // }
 }
 

@@ -13,7 +13,7 @@ public class CroquetSpatialComponent : MonoBehaviour
     
     [Header("Options")]
     public bool initializeWithSceneTransform = false;
-    
+    [Space(10)]
     public float positionDeltaEpsilon = 0.01f;
     public float rotationDeltaEpsilon = 0.01f;
     public float scaleDeltaEpsilon = 0.01f;
@@ -24,4 +24,5 @@ public class CroquetSpatialComponent : MonoBehaviour
     public float scaleLerpFactor = 0.2f;
     
     //TODO: lerpCurve support
+    
 }

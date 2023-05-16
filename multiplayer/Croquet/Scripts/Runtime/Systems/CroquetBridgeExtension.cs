@@ -15,7 +15,7 @@ public abstract class CroquetBridgeExtension : MonoBehaviour
         throw new NotImplementedException();
     }
 
-    public List<String> KnownCommands;
+    public abstract List<String> KnownCommands { get;}
     //TODO: implement
     //public abstract void OnSessionDisconnect();
 }

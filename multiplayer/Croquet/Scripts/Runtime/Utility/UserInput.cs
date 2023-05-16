@@ -136,19 +136,20 @@ namespace Croquet.Adapters
                 Transform objectHit = hit.transform;
                 while (true)
                 {
-                    CroquetGameObject cgo = objectHit.gameObject.GetComponent<CroquetGameObject>();
-                    if (cgo)
+                    CroquetInteractableComponent interactable = objectHit.gameObject.GetComponent<CroquetInteractableComponent>();
+                    CroquetEntityComponent entity = objectHit.GetComponent<CroquetEntityComponent>();
+                    if (interactable)
                     {
-                        if (cgo.clickable)
+                        if (interactable.clickable)
                         {
                             // collect id, hit.x, hit.y, hit.z[, layer1, layer2 etc]
                             List<string> oneHit = new List<string>();
-                            oneHit.Add(cgo.croquetGameHandle);
+                            oneHit.Add(entity.croquetGameHandle);
                             Vector3 xyz = hit.point;
                             oneHit.Add(xyz.x.ToString());
                             oneHit.Add(xyz.y.ToString());
                             oneHit.Add(xyz.z.ToString());
-                            oneHit.AddRange(cgo.clickLayers);
+                            //oneHit.AddRange(interactable.clickLayers);
 
                             clickDetails.Add(String.Join(',', oneHit.ToArray()));
                         }

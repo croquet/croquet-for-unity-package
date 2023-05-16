@@ -5,15 +5,15 @@ using UnityEngine;
 
 public class CroquetSpatialSystem : CroquetBridgeExtension
 {
-    public Dictionary<string, CroquetSpatialComponent> SpatialComponents = new(); 
- 
-    public List<String> KnownCommands = new()
+    public Dictionary<string, CroquetSpatialComponent> SpatialComponents = new();
+
+    public override List<String> KnownCommands { get;  } = new()
     {
         "updateSpatial",
         "setParent",
         "unparent",
     };
-    
+
     // Create Singleton Reference
     public static CroquetSpatialSystem Instance { get; private set; }
 
@@ -172,12 +172,12 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
         if (command.Equals("setParent"))
         {
             // associate parent
-            //SetParent();
+            SetParent(args);
         }
         else if (command.Equals("unparent"))
         {
             // unassociate parent
-            //UnsetParent();
+            Unparent(args);
         }
     }
 
