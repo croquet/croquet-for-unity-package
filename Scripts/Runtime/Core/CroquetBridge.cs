@@ -184,7 +184,7 @@ public class CroquetBridge : MonoBehaviour
     
     void StartWS()
     {
-        // could try this workaround (effectively disabling Nagel), as suggested at
+        // TODO: could try this workaround (effectively disabling Nagel), as suggested at
         // https://github.com/sta/websocket-sharp/issues/327
         //var listener = typeof(WebSocketServer).GetField("_listener", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(ws) as System.Net.Sockets.TcpListener;
         //listener.Server.NoDelay = true;
@@ -200,7 +200,6 @@ public class CroquetBridge : MonoBehaviour
         
         // recover a specific session name from PlayerPrefs
         sessionNameValue = PlayerPrefs.GetInt("sessionNameValue", 1);
-        //Debug.Log($"SESSION NAME VAL: {sessionNameValue}");
         
         Log("session", "building WS Server on open port");
         int port = appProperties.preferredPort;
@@ -522,20 +521,13 @@ public class CroquetBridge : MonoBehaviour
                 return;
             }
         }
-
-        //if (command == "registerAsAvatar") RegisterAsAvatar(args[0]); // OUT:CUSTOM
-        //else if (command == "unregisterAsAvatar") UnregisterAsAvatar(args[0]);// OUT:CUSTOM
-        //else if (command == "grabCamera") GrabCamera(args);// OUT:CUSTOM CAM
-        //else if (command == "releaseCamera") ReleaseCamera(args);// OUT:CUSTOM CAM
+        
         if (command == "croquetPing") HandleCroquetPing(args[0]);
         else if (command == "setLogOptions") SetLogOptions(args[0]);  //OUT:LOGGER
         else if (command == "setMeasureOptions") SetMeasureOptions(args[0]);//OUT:METRICS
-        //else if (command == "setReservedIds") SetReservedIds(args[0]); // TODO: What is this?
         else if (command == "joinProgress") HandleJoinProgress(args[0]);
         else if (command == "croquetSessionReady") HandleSessionReady();
         else if (command == "croquetSessionDisconnected") HandleSessionDisconnected();
-        //else if (command == "setColor") SetColor(args); // OUT:CUSTOM
-        //else if (command == "makeClickable") MakeClickable(args); // OUT:CUSTOM
         else
         {
             // not a known command; maybe just text for logging

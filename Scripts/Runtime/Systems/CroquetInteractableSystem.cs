@@ -4,7 +4,9 @@ using UnityEngine;
 
 public class CroquetInteractableSystem : MonoBehaviour
 {
-    void MakeClickable(string[] strings)
+    //else if (command == "makeClickable") MakeClickable(args); 
+    
+    private void MakeClickable(string[] strings)
     {
         // string id = strings[0];
         // string layers = strings[1];

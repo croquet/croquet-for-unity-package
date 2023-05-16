@@ -4,6 +4,10 @@ using UnityEngine;
 
 public class CroquetCameraSystem : MonoBehaviour
 {
+    //else if (command == "grabCamera") GrabCamera(args);// OUT:CUSTOM CAM
+    //else if (command == "releaseCamera") ReleaseCamera(args);// OUT:CUSTOM CAM
+    
+    
     // void ReleaseCamera(string[] args)
     // {
     //     string id = args[0];

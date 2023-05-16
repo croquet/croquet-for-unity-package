@@ -4,15 +4,7 @@ using UnityEngine;
 
 public class CroquetAvatarSystem : MonoBehaviour
 {
-    // Start is called before the first frame update
-    void Start()
-    {
-        
-    }
-
-    // Update is called once per frame
-    void Update()
-    {
-        
-    }
+    //if (command == "registerAsAvatar") RegisterAsAvatar(args[0]); // OUT:CUSTOM
+    //else if (command == "unregisterAsAvatar") UnregisterAsAvatar(args[0]);// OUT:CUSTOM
+    
 }

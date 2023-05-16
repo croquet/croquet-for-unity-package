@@ -16,7 +16,7 @@ public class CroquetEntitySystem : CroquetBridgeExtension
     Dictionary<string, GameObject> croquetObjects = new Dictionary<string, GameObject>();
 
     private Dictionary<string, GameObject> addressableAssets;
-    private bool addressablesReady = false;
+    private bool addressablesReady = false; // make public read or emit event to inform other systems that the assets are loaded
 
     
     // Create Singleton Reference
@@ -24,8 +24,8 @@ public class CroquetEntitySystem : CroquetBridgeExtension
 
     public override List<string> KnownCommands { get; } = new List<string>()
     {
-    "makeObject",
-    "destroyObject"
+        "makeObject",
+        "destroyObject"
     };
 
     /// <summary>
