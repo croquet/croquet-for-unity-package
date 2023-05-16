@@ -23,6 +23,5 @@ public class CroquetSpatialComponent : MonoBehaviour
     public float rotationLerpFactor = 0.2f;
     public float scaleLerpFactor = 0.2f;
     
-    
-   
+    //TODO: lerpCurve support
 }

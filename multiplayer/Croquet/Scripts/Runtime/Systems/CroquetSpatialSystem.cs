@@ -93,7 +93,7 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
     }
     
     /// <summary>
-    /// processing of message from Croquet updating the position component
+    /// Processing messages from Croquet to update the spatial component
     /// </summary>
     /// <param name="rawData">TODO:Aran</param>
     /// <param name="startPos">TODO:Aran</param>
@@ -146,7 +146,7 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
                 }
                 else
                 {
-                    SpatialComponents[id].rotation = updatedQuatRot.eulerAngles;
+                    SpatialComponents[id].rotation = updatedQuatRot;
                 }
             }
             if ((encodedId & POS) != 0)
