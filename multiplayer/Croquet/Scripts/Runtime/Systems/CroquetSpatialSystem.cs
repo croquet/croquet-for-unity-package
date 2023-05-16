@@ -119,7 +119,6 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
             bufferPos += 4;
             string id = (encodedId >> 6).ToString();
             
-                
             Transform trans = SpatialComponents[id].transform;
             if ((encodedId & SCALE) != 0)
             {
@@ -151,9 +150,7 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
             }
             if ((encodedId & POS) != 0)
             {
-                // in Unity it's referred to as position
                 Vector3 updatedPosition = Vector3FromBuffer(rawData, bufferPos);
-                // if (do_log) Debug.Log($"camera to {p} with snap: {(encodedId & POS_SNAP) != 0}");
                 bufferPos += 12;
                 if ((encodedId & POS_SNAP) != 0)
                 {
@@ -167,7 +164,6 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
             }
             else Debug.Log($"attempt to update absent object {id}");
         }
-
         return;
     }
     
@@ -187,7 +183,6 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
             // unassociate parent
             //UnsetParent();
         }
-        
     }
     
     Quaternion QuaternionFromBuffer(byte[] rawData, int startPos)
