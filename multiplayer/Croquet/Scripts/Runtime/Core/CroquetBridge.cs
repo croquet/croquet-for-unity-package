@@ -77,6 +77,7 @@ public class CroquetBridge : MonoBehaviour
     Dictionary<string, bool> measureOptions = new Dictionary<string, bool>();
     static string[] measureCategories = new string[] { "update", "bundle", "geom" };
 
+    // TODO: Create Counter System in Metric Class
     // diagnostics counters
     int outMessageCount = 0;
     int outBundleCount = 0;
@@ -358,7 +359,7 @@ public class CroquetBridge : MonoBehaviour
         SendDeferredMessages();
     }
 
-    // TODO: Utility
+    // TODO: OUT Utility
     public string PackCroquetMessage(string[] strings)
     {
         return String.Join('\x01', strings);
@@ -449,8 +450,7 @@ public class CroquetBridge : MonoBehaviour
                     string command = strings[1];
                     int count = 0;
                     
-                    // TODO: OUT:Spatial
-                    // if (command == "updateGeometry") count = BundledUpdateGeometry(rawData, sepPos + 1);
+                    ProcessCroquetMessage(command, rawData, startIndex);
                     
                     long sendTime = long.Parse(strings[0]);
                     long transmissionDelay = nowWhenQueued - sendTime;
@@ -467,9 +467,10 @@ public class CroquetBridge : MonoBehaviour
             string[] messages = nextMessage.Split('\x02');
             if (messages.Length > 1)
             {
+                // bundle of messages
                 inBundleCount++;
 
-                for (int i = 1; i < messages.Length; i++) ProcessCroquetCommand(messages[i]);
+                for (int i = 1; i < messages.Length; i++) ProcessCroquetMessage(messages[i]);
 
                 // to measure message-processing performance, we gather
                 //  JS now() when message was sent
@@ -486,13 +487,18 @@ public class CroquetBridge : MonoBehaviour
             }
             else
             {
-                ProcessCroquetCommand(messages[0]);
+                // single message
+                ProcessCroquetMessage(messages[0]);
             }            
         }
         inProcessingTime += Time.realtimeSinceStartup - start;
     }
 
-    void ProcessCroquetCommand(string msg)
+    /// <summary>
+    /// Croquet String Message
+    /// </summary>
+    /// <param name="msg"></param>
+    void ProcessCroquetMessage(string msg)
     {
         // a command message is an array of strings separated by \x01, of which the first is the command
         string[] strings = msg.Split('\x01');
@@ -502,12 +508,13 @@ public class CroquetBridge : MonoBehaviour
 
         foreach (CroquetBridgeExtension extension in bridgeExtensions)
         {
-            if (extension.Messages.Contains(msg))
+            if (extension.KnownCommands.Contains(command))
             {
                 extension.ProcessCommand(command, args);
                 return;
             }
         }
+        
         
         //if (command == "registerAsAvatar") RegisterAsAvatar(args[0]); // OUT:CUSTOM
         //else if (command == "unregisterAsAvatar") UnregisterAsAvatar(args[0]);// OUT:CUSTOM
@@ -529,6 +536,24 @@ public class CroquetBridge : MonoBehaviour
         }
 
         inMessageCount++;
+    }
+
+    /// <summary>
+    /// Croquet Byte Message
+    /// </summary>
+    /// <param name="command"></param>
+    /// <param name="data"></param>
+    /// <param name="startIndex"></param>
+    void ProcessCroquetMessage(string command, byte[] data, int startIndex)
+    {
+        foreach (CroquetBridgeExtension extension in bridgeExtensions)
+        {
+            if (extension.KnownCommands.Contains(command))
+            {
+                extension.ProcessCommand(command, data, startIndex);
+                return;
+            }
+        }
     }
 
     // TODO: COMMENTED OUT BECAUSE CAMERA?

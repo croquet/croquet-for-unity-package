@@ -36,7 +36,7 @@ public class CroquetEntitySystem : CroquetBridgeExtension
         return null;
     }
 
-    public List<String> Messages = new List<string>
+    public List<String> KnownCommands = new List<string>
     {
         "makeObject",
         "destroyObject"

@@ -5,9 +5,17 @@ using UnityEngine;
 
 public abstract class CroquetBridgeExtension : MonoBehaviour
 {
-    public abstract void ProcessCommand(string command, string[] args);
+    public virtual void ProcessCommand(string command, string[] args)
+    {
+        throw new NotImplementedException();
+    }
 
-    public List<String> Messages;
+    public virtual void ProcessCommand(string command, byte[] data, int startIndex)
+    {
+        throw new NotImplementedException();
+    }
+
+    public List<String> KnownCommands;
     //TODO: implement
     //public abstract void OnSessionDisconnect();
 }

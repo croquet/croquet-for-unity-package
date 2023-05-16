@@ -6,8 +6,8 @@ using UnityEngine;
 public class CroquetSpatialSystem : CroquetBridgeExtension
 {
     public Dictionary<string, CroquetSpatialComponent> SpatialComponents = new(); 
-
-    public List<String> Messages = new()
+ 
+    public List<String> KnownCommands = new()
     {
         "updateSpatial",
         "setParent",
@@ -169,11 +169,7 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
     
     public override void ProcessCommand(string command, string[] args)
     {
-        if (command.Equals("updateSpatial"))
-        {
-            UpdateSpatial(args);// TODO ARAN: together fix the data format coming in
-        } 
-        else if (command.Equals("setParent"))
+        if (command.Equals("setParent"))
         {
             // associate parent
             //SetParent();
@@ -183,6 +179,14 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
             // unassociate parent
             //UnsetParent();
         }
+    }
+
+    public override void ProcessCommand(string command, byte[] data, int startIndex)
+    {
+        if (command.Equals("updateSpatial"))
+        {
+            UpdateSpatial(data, startIndex);// TODO ARAN: together fix the data format coming in
+        } 
     }
     
     Quaternion QuaternionFromBuffer(byte[] rawData, int startPos)
