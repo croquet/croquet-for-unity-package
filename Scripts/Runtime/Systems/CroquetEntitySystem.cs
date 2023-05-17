@@ -222,6 +222,7 @@ public class CroquetEntitySystem : CroquetSystem
     GameObject CreateCroquetPrimitive(PrimitiveType type, Color color)
     {
         GameObject go = new GameObject();
+        go.name = $"primitive{type.ToString()}";
         go.AddComponent<CroquetEntityComponent>();
         GameObject inner = GameObject.CreatePrimitive(type);
         inner.transform.parent = go.transform;
