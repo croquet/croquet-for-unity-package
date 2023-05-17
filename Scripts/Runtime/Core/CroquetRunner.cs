@@ -41,7 +41,7 @@ public class CroquetRunner : MonoBehaviour
 
     private static string bridgeSourcePath; // croquet-bridge folder under StreamingAssets
     private static string appSourcePath; // app's own folder under StreamingAssets
-    private static string nodeExecName = "";
+    private static string nodeExecPath = ""; // provided by CroquetBridge
     
     struct CroquetNodeProcess : IJob
     {
@@ -65,16 +65,10 @@ public class CroquetRunner : MonoBehaviour
             croquetProcess.StartInfo.RedirectStandardOutput = true;
             croquetProcess.StartInfo.RedirectStandardError = true;
             croquetProcess.StartInfo.CreateNoWindow = true;
-            string nodeExecPath;
-#if UNITY_EDITOR
-            nodeExecPath = Path.Combine(Application.streamingAssetsPath, "../Croquet/NodeJS");
-#else
-            nodeExecPath = Path.Combine(bridgeSourcePath, "node");
-#endif
 
             string nodeEntry = "node-main.js";
             
-            croquetProcess.StartInfo.FileName = Path.Combine(nodeExecPath, nodeExecName); // on Mac, nodeExecName begins with / so will prevail
+            croquetProcess.StartInfo.FileName = nodeExecPath;
             croquetProcess.StartInfo.Arguments = $"{nodeEntry} {port}";
 
             croquetProcess.OutputDataReceived += OutputHandler;
@@ -125,85 +119,95 @@ public class CroquetRunner : MonoBehaviour
         CroquetBuilder.WaitUntilBuildComplete();
 #endif
 
-        // start up, either using WebView or Node.
+        // options for running Croquet code (given lack of webview support on Windows):
+        //
+        //   editor on MacOS:
+        //     a. webview
+        //     b. user-launched browser
+        //     c. nodeJS (using path from settings object)
+        //     d. user-launched nodeJS
+        //
+        //   editor on Windows:
+        //     e. nodeJS (using node.exe from package; forced when "user launched" is false)
+        //     f. user-launched nodeJS
+        //     g. user-launched browser
+        //
+        //   deployed standalone on anything other than Windows:
+        //     h. webview
+        //
+        //   deployed standalone on Windows:
+        //     i. nodeJS (using node.exe copied into StreamingAssets)
+        
         // only compile with WebViewObject on non-Windows platforms
 #if !(UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN || UNITY_WSA)
-        if (!useNodeJS)
+        if (!useNodeJS && !waitForUserLaunch)
         {
-            if (!waitForUserLaunch)
-            {
-                WebViewObject webViewObject = (new GameObject("WebViewObject")).AddComponent<WebViewObject>();
-                webViewObject.Init(
-                    separated: showWebview,
-                    enableWKWebView: true,
+            // cases (a), (h)
+            WebViewObject webViewObject = (new GameObject("WebViewObject")).AddComponent<WebViewObject>();
+            webViewObject.Init(
+                separated: showWebview,
+                enableWKWebView: true,
 
-                    cb: (msg) => { TimedLog(string.Format("CallFromJS[{0}]", msg)); },
-                    err: (msg) => { TimedLog(string.Format("CallOnError[{0}]", msg)); },
-                    httpErr: (msg) => { TimedLog(string.Format("CallOnHttpError[{0}]", msg)); },
-                    started: (msg) => { TimedLog(string.Format("CallOnStarted[{0}]", msg)); },
-                    hooked: (msg) => { TimedLog(string.Format("CallOnHooked[{0}]", msg)); },
-                    ld: (msg) =>
-                    {
-                        TimedLog(string.Format("CallOnLoaded[{0}]", msg));
-                        webViewObject.EvaluateJS(@"
-                          if (window && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.unityControl) {
-                            window.Unity = {
-                              call: function(msg) {
-                                window.webkit.messageHandlers.unityControl.postMessage(msg);
-                              }
-                            }
-                          } else {
-                            window.Unity = {
-                              call: function(msg) {
-                                window.location = 'unity:' + msg;
-                              }
-                            }
+                cb: (msg) => { TimedLog(string.Format("CallFromJS[{0}]", msg)); },
+                err: (msg) => { TimedLog(string.Format("CallOnError[{0}]", msg)); },
+                httpErr: (msg) => { TimedLog(string.Format("CallOnHttpError[{0}]", msg)); },
+                started: (msg) => { TimedLog(string.Format("CallOnStarted[{0}]", msg)); },
+                hooked: (msg) => { TimedLog(string.Format("CallOnHooked[{0}]", msg)); },
+                ld: (msg) =>
+                {
+                    TimedLog(string.Format("CallOnLoaded[{0}]", msg));
+                    webViewObject.EvaluateJS(@"
+                      if (window && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.unityControl) {
+                        window.Unity = {
+                          call: function(msg) {
+                            window.webkit.messageHandlers.unityControl.postMessage(msg);
                           }
-                        ");
-                        webViewObject.EvaluateJS(@"Unity.call('ua=' + navigator.userAgent)");
-                    }
-                );
+                        }
+                      } else {
+                        window.Unity = {
+                          call: function(msg) {
+                            window.location = 'unity:' + msg;
+                          }
+                        }
+                      }
+                    ");
+                    webViewObject.EvaluateJS(@"Unity.call('ua=' + navigator.userAgent)");
+                }
+            );
 #if UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
-                webViewObject.bitmapRefreshCycle = 1;
+            webViewObject.bitmapRefreshCycle = 1;
 #endif
 
-                //webViewObject.SetMargins(-5, -5, Screen.width - 8, Screen.height - 8);
-                //webViewObject.SetMargins(5, 5, (int)(Screen.width * 0.6f), (int)(Screen.height * 0.6f));
-                webViewObject.SetMargins(Screen.width - 5, Screen.height - 5, -100, -100);
-                webViewObject.SetVisibility(showWebview);
+            //webViewObject.SetMargins(-5, -5, Screen.width - 8, Screen.height - 8);
+            //webViewObject.SetMargins(5, 5, (int)(Screen.width * 0.6f), (int)(Screen.height * 0.6f));
+            webViewObject.SetMargins(Screen.width - 5, Screen.height - 5, -100, -100);
+            webViewObject.SetVisibility(showWebview);
 
-                // webViewObject.SetTextZoom(100);  // android only. cf. https://stackoverflow.com/questions/21647641/android-webview-set-font-size-system-default/47017410#47017410
+            // webViewObject.SetTextZoom(100);  // android only. cf. https://stackoverflow.com/questions/21647641/android-webview-set-font-size-system-default/47017410#47017410
 
-                // Use the port number determined by the bridge
-                var webViewURL = $"http://localhost:{port}/{appName}/index.html";
-                TimedLog("invoke LoadURL on " + webViewURL);
+            // Use the port number determined by the bridge
+            var webViewURL = $"http://localhost:{port}/{appName}/index.html";
+            TimedLog("invoke LoadURL on " + webViewURL);
 
-                webViewObject.LoadURL(webViewURL);
-            }
-            else
-            {
-                TimedLog($"ready for browser to load from http://localhost:{port}/{appName}/index.html");
-            }
+            webViewObject.LoadURL(webViewURL);
         }
+#else // running in Windows
+        if (!waitForUserLaunch) useNodeJS = true; // force node unless user explicitly wants an external browser
 #endif
+
+        if (!useNodeJS && waitForUserLaunch)
+        {
+            // cases (b), (g)
+            TimedLog($"ready for browser to load from http://localhost:{port}/{appName}/index.html");
+        }
+        
         if (useNodeJS)
         {
             if (!waitForUserLaunch)
             {
-                switch (Application.platform)
-                {
-                    case RuntimePlatform.OSXEditor:
-                    case RuntimePlatform.OSXPlayer:
-                        nodeExecName = pathToNode;
-                        break;
-                    case RuntimePlatform.WindowsEditor:
-                    case RuntimePlatform.WindowsPlayer:
-                        nodeExecName = "node.exe";
-                        break;
-                    default:
-                        throw new PlatformNotSupportedException("NodeJS is not supported");
-                }
-
+                // cases (c), (e), (i)
+                nodeExecPath = pathToNode;
+                
                 var job = new CroquetNodeProcess()
                 {
                     port = port
@@ -212,6 +216,7 @@ public class CroquetRunner : MonoBehaviour
             }
             else
             {
+                // cases (d), (f)
                 TimedLog($"ready to run 'node node-main.js {port}' in {appSourcePath}");
             }
         }

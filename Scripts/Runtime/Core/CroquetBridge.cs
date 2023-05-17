@@ -240,9 +240,13 @@ public class CroquetBridge : MonoBehaviour
         }
         
 #if UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
-        string pathToNode = appProperties.pathToNode;
+        string pathToNode = appProperties.pathToNode; // doesn't exist on Windows
+#elif UNITY_EDITOR_WIN
+        string pathToNode = CroquetBuilder.NodeExeInPackage;
+#elif UNITY_STANDALONE_WIN || UNITY_WSA
+        string pathToNode = CroquetBuilder.NodeExeInBuild;        
 #else
-        string pathToNode = "";
+        string pathToNode = ""; // not available
 #endif
 
         SetLoadingStage(0.25f, "Ready to connect bridge");
