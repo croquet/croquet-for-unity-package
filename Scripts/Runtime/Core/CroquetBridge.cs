@@ -56,7 +56,7 @@ public class CroquetBridge : MonoBehaviour
     public static CroquetBridge Instance { get; private set; }
     private CroquetRunner croquetRunner;
 
-    private CroquetBridgeExtension[] bridgeExtensions = new CroquetBridgeExtension[0];
+    private CroquetSystem[] croquetSystems = new CroquetSystem[0];
     
     public static void SendCroquet(params string[] strings)
     {
@@ -104,7 +104,7 @@ public class CroquetBridge : MonoBehaviour
         {
             loadingProgressDisplay = loadingObj.GetComponent<LoadingProgressDisplay>();
         }
-        bridgeExtensions = this.gameObject.GetComponents<CroquetBridgeExtension>();
+        croquetSystems = this.gameObject.GetComponents<CroquetSystem>();
         
         SetLogOptions("info,session");
         SetMeasureOptions("bundle,geom"); // @@ typically useful for development
@@ -112,10 +112,9 @@ public class CroquetBridge : MonoBehaviour
         
     }
 
-    public void RegisterBridgeExtension(CroquetBridgeExtension extension)
+    public void RegisterSystem(CroquetSystem system)
     {
-        Debug.Log("THIS");
-        bridgeExtensions.Append(extension);
+        croquetSystems.Append(system);
     }
     
     
@@ -517,7 +516,7 @@ public class CroquetBridge : MonoBehaviour
         string[] args = strings[1..];
         Log("verbose", command + ": " + String.Join(", ", args));
 
-        foreach (CroquetBridgeExtension extension in bridgeExtensions)
+        foreach (CroquetSystem extension in croquetSystems)
         {
             if (extension.KnownCommands.Contains(command))
             {
@@ -549,7 +548,7 @@ public class CroquetBridge : MonoBehaviour
     /// <param name="startIndex"></param>
     void ProcessCroquetMessage(string command, byte[] data, int startIndex)
     {
-        foreach (CroquetBridgeExtension extension in bridgeExtensions)
+        foreach (CroquetSystem extension in croquetSystems)
         {
             if (extension.KnownCommands.Contains(command))
             {

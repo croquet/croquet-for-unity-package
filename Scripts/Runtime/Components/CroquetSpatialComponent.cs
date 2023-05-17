@@ -4,8 +4,10 @@ using System.ComponentModel;
 using UnityEngine;
 
 [AddComponentMenu("Croquet/SpatialComponent")]
-public class CroquetSpatialComponent : MonoBehaviour
+public class CroquetSpatialComponent : CroquetComponent
 {
+    public override CroquetSystem croquetSystem { get; set; } = CroquetSpatialSystem.Instance;
+    
     [Header("Model Transform (read-only)")]
     public Vector3 position;
     public Quaternion rotation; // TODO:ARAN: TBD: V3 or Q?
@@ -24,5 +26,6 @@ public class CroquetSpatialComponent : MonoBehaviour
     public float scaleLerpFactor = 0.2f;
     
     //TODO: lerpCurve support
-    
+
+
 }

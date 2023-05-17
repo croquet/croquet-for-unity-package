@@ -3,10 +3,9 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class CroquetMaterialSystem : CroquetBridgeExtension
+public class CroquetMaterialSystem : CroquetSystem
 {
     public Dictionary<string, CroquetMaterialComponent> MaterialComponents = new();
-
     public static CroquetMaterialSystem Instance { get; private set; }
 
     private void Awake()
@@ -14,12 +13,12 @@ public class CroquetMaterialSystem : CroquetBridgeExtension
         // Create Singleton Accessor
         // If there is an instance, and it's not me, delete myself.
         if (Instance != null && Instance != this) 
-        { 
-            Destroy(this); 
+        {
+            Destroy(this);
         }
         else 
         { 
-            Instance = this; 
+            Instance = this;
         } 
     }
         
@@ -52,6 +51,6 @@ public class CroquetMaterialSystem : CroquetBridgeExtension
     {
         "setColor"
     };
-    
-    
+
+    protected override Dictionary<string, CroquetComponent> components { get; set; }
 }

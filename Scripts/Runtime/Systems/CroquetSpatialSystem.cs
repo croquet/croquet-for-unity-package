@@ -3,16 +3,16 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class CroquetSpatialSystem : CroquetBridgeExtension
+public class CroquetSpatialSystem : CroquetSystem
 {
-    public Dictionary<string, CroquetSpatialComponent> SpatialComponents = new();
-
     public override List<String> KnownCommands { get;  } = new()
     {
         "updateSpatial",
         "setParent",
         "unparent",
     };
+
+    protected override Dictionary<string, CroquetComponent> components { get; set; } = new Dictionary<string, CroquetComponent>();
 
     // Create Singleton Reference
     public static CroquetSpatialSystem Instance { get; private set; }
@@ -28,20 +28,9 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
         else 
         { 
             Instance = this; 
-        } 
-    }
-
-    public void Start()
-    {
-        // Scan scene for all Spatial Components
-        foreach (CroquetSpatialComponent spatialComponent in FindObjectsOfType<CroquetSpatialComponent>())
-        {
-            // Retrieve the necessary identifier
-            var id = spatialComponent.gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
-            SpatialComponents.Add(id, spatialComponent);
         }
     }
-    
+
     private void Update()
     {
         // Update the transform (position, rotation, scale) in the scene
@@ -72,11 +61,11 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
     /// </summary>
     void UpdateTransforms()
     {
-        foreach (KeyValuePair<string, CroquetSpatialComponent> kvp in SpatialComponents)
+        foreach (KeyValuePair<string, CroquetComponent> kvp in components)
         {
             string id = kvp.Key;
-            CroquetSpatialComponent spatialComponent = kvp.Value;
-            
+            CroquetSpatialComponent spatialComponent = kvp.Value as CroquetSpatialComponent;
+
             if (Vector3.Distance(spatialComponent.scale,spatialComponent.transform.localScale) > spatialComponent.scaleDeltaEpsilon)
             {
                 spatialComponent.transform.localScale = Vector3.Lerp(spatialComponent.transform.localScale, spatialComponent.scale, spatialComponent.scaleLerpFactor);
@@ -100,6 +89,7 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
     /// <returns></returns>
     void UpdateSpatial(byte[] rawData, int startPos)
     {
+        
         const uint SCALE = 32;
         const uint SCALE_SNAP = 16;
         const uint ROT = 8;
@@ -119,7 +109,9 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
             bufferPos += 4;
             string id = (encodedId >> 6).ToString();
             
-            Transform trans = SpatialComponents[id].transform;
+            CroquetSpatialComponent spatialComponent = components[id] as CroquetSpatialComponent;
+            
+            Transform trans = components[id].transform;
             if ((encodedId & SCALE) != 0)
             {
                 Vector3 updatedScale = Vector3FromBuffer(rawData, bufferPos);
@@ -129,10 +121,10 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
                     // immediately snap scale
                     trans.localScale = updatedScale;
                 }
-                else
-                {
-                    SpatialComponents[id].scale = updatedScale;
-                }
+                
+                // update the components data regardless
+                spatialComponent.scale = updatedScale;
+                
                 // Log("verbose", "scale: " + s.ToString());
             }
             if ((encodedId & ROT) != 0)
@@ -143,10 +135,8 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
                 {
                     trans.localRotation = updatedQuatRot;
                 }
-                else
-                {
-                    SpatialComponents[id].rotation = updatedQuatRot;
-                }
+                // update the components data regardless
+                spatialComponent.rotation = updatedQuatRot;
             }
             if ((encodedId & POS) != 0)
             {
@@ -156,10 +146,8 @@ public class CroquetSpatialSystem : CroquetBridgeExtension
                 {
                     trans.localPosition = updatedPosition;
                 }
-                else
-                {
-                    SpatialComponents[id].position = updatedPosition;
-                }
+                // update the components data regardless
+                spatialComponent.position = updatedPosition;
                 // Log("verbose", "pos: " + p.ToString());
             }
             else Debug.Log($"attempt to update absent object {id}");

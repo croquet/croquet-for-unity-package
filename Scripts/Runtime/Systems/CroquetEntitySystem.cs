@@ -11,13 +11,10 @@ using UnityEngine.ResourceManagement.ResourceLocations;
 /// Handles Creation and Destruction of Objects.
 /// Maintains the mapping between the model and the view objects.
 /// </summary>
-public class CroquetEntitySystem : CroquetBridgeExtension
+public class CroquetEntitySystem : CroquetSystem
 {
-    Dictionary<string, GameObject> croquetObjects = new Dictionary<string, GameObject>();
-
     private Dictionary<string, GameObject> addressableAssets;
     private bool addressablesReady = false; // make public read or emit event to inform other systems that the assets are loaded
-
     
     // Create Singleton Reference
     public static CroquetEntitySystem Instance { get; private set; }
@@ -28,6 +25,9 @@ public class CroquetEntitySystem : CroquetBridgeExtension
         "destroyObject"
     };
 
+    protected override Dictionary<string, CroquetComponent> components { get; set; } =
+        new Dictionary<string, CroquetComponent>();
+
     /// <summary>
     /// Find GameObject with a specific Croquet ID
     /// </summary>
@@ -35,8 +35,12 @@ public class CroquetEntitySystem : CroquetBridgeExtension
     /// <returns></returns>
     public GameObject FindObject(string id)
     {
-        GameObject obj;
-        if (croquetObjects.TryGetValue(id, out obj)) return obj;
+        CroquetComponent croquetComponent;
+
+        if (components.TryGetValue(id, out croquetComponent))
+        {
+            return croquetComponent.gameObject;
+        }
         Debug.Log($"Failed to find object {id}");
         return null;
     }
@@ -59,7 +63,7 @@ public class CroquetEntitySystem : CroquetBridgeExtension
     
     private void Start()
     {
-        CroquetBridge.Instance.RegisterBridgeExtension(this);
+        CroquetBridge.Instance.RegisterSystem(this);
         StartCoroutine(LoadAddressableAssetsWithLabel(CroquetBridge.Instance.appName));
     }
     
@@ -144,7 +148,6 @@ public class CroquetEntitySystem : CroquetBridgeExtension
             }
         }
         
-
         CroquetEntityComponent entity = gameObjectToMake.GetComponent<CroquetEntityComponent>();
         entity.croquetGameHandle = spec.id;
         if (spec.cN != "") entity.croquetActorId = spec.cN;
@@ -176,7 +179,7 @@ public class CroquetEntitySystem : CroquetBridgeExtension
 
         gameObjectToMake.SetActive(!spec.wTA);
 
-        croquetObjects[spec.id] = gameObjectToMake;
+        components[spec.id] = entity;
 
         gameObjectToMake.transform.localScale = new Vector3(spec.s[0], spec.s[1], spec.s[2]);
         // normalise the quaternion because it's potentially being sent with reduced precision
@@ -199,14 +202,14 @@ public class CroquetEntitySystem : CroquetBridgeExtension
         //     camera.transform.parent = null;
         // }
         
-        if (croquetObjects.ContainsKey(id))
+        if (components.ContainsKey(id))
         {
-            GameObject obj = croquetObjects[id];
+            GameObject obj = components[id].gameObject;
             
             //TODO: CALL ALL SYSTEMS ONDESTROY for this ID
             
             Destroy(obj);
-            croquetObjects.Remove(id);
+            components.Remove(id);
         }
         else
         {
