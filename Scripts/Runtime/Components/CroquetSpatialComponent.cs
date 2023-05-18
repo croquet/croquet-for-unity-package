@@ -9,9 +9,9 @@ public class CroquetSpatialComponent : CroquetComponent
     public override CroquetSystem croquetSystem { get; set; } = CroquetSpatialSystem.Instance;
     
     [Header("Model Transform (read-only)")]
-    public Vector3 position;
-    public Quaternion rotation; // TODO:ARAN: TBD: V3 or Q?
-    public Vector3 scale;
+    public Vector3 position = Vector3.zero;
+    public Quaternion rotation = Quaternion.identity ; 
+    public Vector3 scale = Vector3.one;
     
     [Header("Options")]
     public bool initializeWithSceneTransform = false;

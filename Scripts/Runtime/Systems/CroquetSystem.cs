@@ -18,8 +18,12 @@ public abstract class CroquetSystem : MonoBehaviour
     public virtual void RegisterComponent(CroquetComponent component)
     {
         // Retrieve the necessary identifier
-        var gameHandle = component.gameObject.GetComponent<CroquetEntityComponent>().croquetGameHandle;
-        components.Add(gameHandle, component);
+        string gameHandle = component.gameObject.GetComponent<CroquetEntityComponent>().croquetGameHandle;
+        
+        if (component.GetType() != typeof(CroquetEntityComponent))
+        {
+            components.Add(gameHandle, component);
+        }
     }
     
     public virtual void ProcessCommand(string command, string[] args)

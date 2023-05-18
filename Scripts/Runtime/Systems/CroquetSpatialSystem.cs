@@ -89,7 +89,6 @@ public class CroquetSpatialSystem : CroquetSystem
     /// <returns></returns>
     void UpdateSpatial(byte[] rawData, int startPos)
     {
-        
         const uint SCALE = 32;
         const uint SCALE_SNAP = 16;
         const uint ROT = 8;

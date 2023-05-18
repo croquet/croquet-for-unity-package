@@ -4,6 +4,8 @@ using UnityEngine;
 
 public class CroquetCameraSystem : MonoBehaviour
 {
+    // TODO: Something wicked this way comes
+    
     //else if (command == "grabCamera") GrabCamera(args);// OUT:CUSTOM CAM
     //else if (command == "releaseCamera") ReleaseCamera(args);// OUT:CUSTOM CAM
     

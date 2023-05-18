@@ -147,9 +147,10 @@ public class CroquetEntitySystem : CroquetSystem
                 gameObjectToMake = CreateCroquetPrimitive(PrimitiveType.Cube, Color.magenta);
             }
         }
-        
+
         CroquetEntityComponent entity = gameObjectToMake.GetComponent<CroquetEntityComponent>();
         entity.croquetGameHandle = spec.id;
+        components.Add(spec.id, entity);
         if (spec.cN != "") entity.croquetActorId = spec.cN;
 
         if (spec.cs != "")
@@ -181,10 +182,10 @@ public class CroquetEntitySystem : CroquetSystem
 
         components[spec.id] = entity;
 
-        gameObjectToMake.transform.localScale = new Vector3(spec.s[0], spec.s[1], spec.s[2]);
-        // normalise the quaternion because it's potentially being sent with reduced precision
-        gameObjectToMake.transform.localRotation = Quaternion.Normalize(new Quaternion(spec.r[0], spec.r[1], spec.r[2], spec.r[3]));
-        gameObjectToMake.transform.localPosition = new Vector3(spec.t[0], spec.t[1], spec.t[2]);
+        // gameObjectToMake.transform.localScale = new Vector3(spec.s[0], spec.s[1], spec.s[2]);
+        // // normalise the quaternion because it's potentially being sent with reduced precision
+        // gameObjectToMake.transform.localRotation = Quaternion.Normalize(new Quaternion(spec.r[0], spec.r[1], spec.r[2], spec.r[3]));
+        // gameObjectToMake.transform.localPosition = new Vector3(spec.t[0], spec.t[1], spec.t[2]);
 
         if (spec.cC)
         {
