@@ -143,6 +143,9 @@ public class CroquetEntitySystem : CroquetSystem
         if (command.Equals("makeObject"))
         {
             MakeObject(args);
+        } else if (command.Equals("destroyObject"))
+        {
+            DestroyObject(args[0]);
         }
     }
     
@@ -231,20 +234,25 @@ public class CroquetEntitySystem : CroquetSystem
     
     void DestroyObject(string croquetHandle)
     {
-        Debug.Log( "Destroying object " + croquetHandle.ToString());
-        // if (cameraOwnerId == id)
-        // {
-        //     cameraOwnerId = "";
-        //     GameObject camera = GameObject.FindWithTag("MainCamera");
-        //     camera.transform.parent = null;
-        // }
+        Debug.Log( "Destroying Object " + croquetHandle.ToString());
 
         if (CroquetHandleToInstanceID.ContainsKey(croquetHandle))
         {
             int instanceID = CroquetHandleToInstanceID[croquetHandle];
-            Destroy(components[instanceID].gameObject);
-            components.Remove(instanceID);
+            //components.Remove(instanceID);
+            
+            // INFORM OTHER COMPONENT'S SYSTEMS THEY ARE TO BE UNREGISTERED
+            GameObject go = GetGameObjectByCroquetHandle(croquetHandle);
+            CroquetComponent[] componentsToUnregister  = go.GetComponents<CroquetComponent>();
+            foreach (var componentToUnregister in componentsToUnregister)
+            {
+                CroquetSystem system = componentToUnregister.croquetSystem;
+                system.UnregisterComponent(componentToUnregister); //crosses fingers
+            }
+            
             DisassociateCroquetHandleToInstanceID(croquetHandle);
+
+            Destroy(go);
         }
         else
         {
@@ -252,6 +260,8 @@ public class CroquetEntitySystem : CroquetSystem
             // creation/destruction timing in worldcore.  not necessarily a problem.
             Debug.Log($"attempt to destroy absent object {croquetHandle}");
         }
+        
+        
     }
 
     GameObject CreateCroquetPrimitive(PrimitiveType type, Color color)

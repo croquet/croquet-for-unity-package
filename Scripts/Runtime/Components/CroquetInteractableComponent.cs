@@ -5,6 +5,10 @@ using UnityEngine;
 public class CroquetInteractableComponent : CroquetComponent
 {
     public override CroquetSystem croquetSystem { get; set; } = CroquetInteractableSystem.Instance;
-    
-    public bool clickable = true;
+
+    public bool interactable = false;
+
+    public string[] interactableLayers;
+
+
 }

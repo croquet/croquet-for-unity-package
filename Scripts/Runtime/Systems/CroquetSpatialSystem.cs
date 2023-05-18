@@ -133,7 +133,6 @@ public class CroquetSpatialSystem : CroquetSystem
                 Debug.Log($"attempt to update absent object {croquetHandle} : {e}");
                 continue;
             }
-            
 
             if ((encodedId & SCALE) != 0)
             {

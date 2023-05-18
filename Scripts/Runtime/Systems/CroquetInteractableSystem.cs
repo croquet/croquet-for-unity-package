@@ -6,17 +6,19 @@ using UnityEngine.InputSystem;
 using UnityEngine.EventSystems;
 
 
-public class CroquetInteractableSystem : CroquetSystem, IPointerClickHandler
+public class CroquetInteractableSystem : CroquetSystem
 {
     public bool SendPointerHitEvents = true;
-    public float PointerHitDistance = 10.0f;
+    public float PointerHitDistance = 50.0f;
     public Camera userCamera;
 
     public override List<string> KnownCommands { get; } = new()
     {
-        "makeClickable",
+        "makeInteractable",
     };
-    protected override Dictionary<int, CroquetComponent> components { get; set; }
+
+    protected override Dictionary<int, CroquetComponent> components { get; set; } =
+        new Dictionary<int, CroquetComponent>();
     
     // Create Singleton Reference
     public static CroquetInteractableSystem Instance { get; private set; }
@@ -35,20 +37,21 @@ public class CroquetInteractableSystem : CroquetSystem, IPointerClickHandler
         }
     }
 
-    public override void ProcessCommand(string command, string[] args)
+    private void Update()
     {
-        //else if (command == "makeClickable") MakeClickable(args); 
-    }
-
-
-    public void OnPointerClick(PointerEventData eventData)
-    {
-        if (SendPointerHitEvents)
+        if (Input.GetMouseButtonDown(0))
         {
-            SendPointerHit();
+            if (SendPointerHitEvents)
+            {
+                SendPointerHit();
+            }
         }
     }
 
+    public override void ProcessCommand(string command, string[] args)
+    {
+        if (command == "makeInteractable") MakeInteractable(args);
+    }
 
     void SendPointerHit()
     {
@@ -62,7 +65,7 @@ public class CroquetInteractableSystem : CroquetSystem, IPointerClickHandler
         foreach (RaycastHit hit in hits)
         {
             // for each Unity hit, only register a click if the hit object has
-            // a CroquetGameObject component and has been registered as clickable.
+            // a CroquetGameObject component and has been registered as interactable.
             // create a list with each clicked object handle, click location,
             // and click layers that the object has been registered with (if any).
             Transform objectHit = hit.transform;
@@ -72,7 +75,7 @@ public class CroquetInteractableSystem : CroquetSystem, IPointerClickHandler
                 CroquetEntityComponent entity = objectHit.GetComponent<CroquetEntityComponent>();
                 if (interactable)
                 {
-                    if (interactable.clickable)
+                    if (interactable.interactable)
                     {
                         // collect id, hit.x, hit.y, hit.z[, layer1, layer2 etc]
                         List<string> oneHit = new List<string>();
@@ -90,6 +93,7 @@ public class CroquetInteractableSystem : CroquetSystem, IPointerClickHandler
                 }
 
                 objectHit = objectHit.parent;
+                
                 if (!objectHit) break;
             }
         }
@@ -104,18 +108,23 @@ public class CroquetInteractableSystem : CroquetSystem, IPointerClickHandler
         }
     }
     
-    private void MakeClickable(string[] strings)
+    private void MakeInteractable(string[] args)
     {
-        // string id = strings[0];
-        // string layers = strings[1];
-        // if (croquetObjects.ContainsKey(id))
-        // {
-        //     GameObject obj = croquetObjects[id];
-        //     CroquetGameObject cgo = obj.GetComponent<CroquetGameObject>();
-        //     cgo.clickable = true;
-        //     if (layers != "") cgo.clickLayers = layers.Split(',');
-        //     // Debug.Log($"hittable object {cgo.croquetActorId} has handle {cgo.croquetHandle}");
-        // }
+        string croquetHandle = args[0];
+        string layers = args[1];
+
+        GameObject go = CroquetEntitySystem.Instance.GetGameObjectByCroquetHandle(croquetHandle);
+        if (go != null)
+        {
+            CroquetInteractableComponent component = components[go.GetInstanceID()] as CroquetInteractableComponent;
+            component.interactable = true;
+            
+            if (layers != "")
+            {
+                component.interactableLayers = layers.Split(",");
+            }
+        }
+
     }
 
 }

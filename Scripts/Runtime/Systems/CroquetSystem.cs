@@ -16,7 +16,7 @@ public abstract class CroquetSystem : MonoBehaviour
     protected abstract Dictionary<int, CroquetComponent> components { get; set; }
     
     public virtual void RegisterComponent(CroquetComponent component)
-    {
+    {   
         components.Add(component.gameObject.GetInstanceID(), component);
     }
     
@@ -37,4 +37,7 @@ public abstract class CroquetSystem : MonoBehaviour
 
     //TODO: implement
     //public abstract void OnSessionDisconnect();
+    
+    
+    
 }
