@@ -160,15 +160,24 @@ public class CroquetEntitySystem : CroquetSystem
             {
                 try
                 {
-                    Type packageType = Type.GetType(compName);
-                    if (packageType != null) gameObjectToMake.AddComponent(packageType);
-                    else
+                    Type typeToAdd = Type.GetType(compName);
+                    if (typeToAdd == null)
                     {
                         string assemblyQualifiedName =
                             System.Reflection.Assembly.CreateQualifiedName("Assembly-CSharp", compName);
-                        Type customType = Type.GetType(assemblyQualifiedName);
-                        if (customType != null) gameObjectToMake.AddComponent(customType);
-                        else Debug.LogError($"Unable to find component {compName} in package or main assembly");
+                        typeToAdd = Type.GetType(assemblyQualifiedName);
+                    }
+                    if (typeToAdd == null)
+                    {
+                        // blew it
+                        Debug.LogError($"Unable to find component {compName} in package or main assembly");
+                    }
+                    else
+                    {
+                        if (gameObjectToMake.GetComponent(typeToAdd) == null)
+                        {
+                            gameObjectToMake.AddComponent(typeToAdd);
+                        }
                     }
                 }
                 catch (Exception e)
