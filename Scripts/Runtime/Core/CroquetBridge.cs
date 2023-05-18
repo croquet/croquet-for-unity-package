@@ -702,42 +702,6 @@ public class CroquetBridge : MonoBehaviour
             SendToCroquet(cmdAndArgs);
         }
     }
-    
-    // app-specific additions
-    
-    // OUT: Material System
-    // void SetColor(string[] strings)
-    // {
-    //     // strings[0] is the object id
-    //     // strings[1] is a comma-separated list of rgb or rgba 0..1 values
-    //     string id = strings[0];
-    //     // Debug.Log("setColor " + strings[0] + " to " + strings[1]);
-    //     if (croquetObjects.ContainsKey(id))
-    //     {
-    //         GameObject obj = croquetObjects[id];
-    //         Material material = obj.GetComponentInChildren<Renderer>().material;
-    //         
-    //         string[] numStrs = strings[1].Split(",");
-    //         float r = float.Parse(numStrs[0]);
-    //         float g = float.Parse(numStrs[1]);
-    //         float b = float.Parse(numStrs[2]);
-    //         float a = numStrs.Length == 4 ? float.Parse(numStrs[3]) : 1f;
-    //         if (a != 1f)
-    //         {
-    //             // sorcery from https://forum.unity.com/threads/standard-material-shader-ignoring-setfloat-property-_mode.344557/
-    //             material.SetOverrideTag("RenderType", "Transparent");
-    //             material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.One);
-    //             material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-    //             material.SetInt("_ZWrite", 0);
-    //             material.DisableKeyword("_ALPHATEST_ON");
-    //             material.DisableKeyword("_ALPHABLEND_ON");
-    //             material.EnableKeyword("_ALPHAPREMULTIPLY_ON");
-    //             material.renderQueue = 3000;
-    //         }
-    //         Color color = new Color(r, g, b, a);
-    //         material.SetColor("_Color", color);
-    //     }
-    // }
 
 }
 

@@ -107,10 +107,35 @@ public class CroquetSpatialSystem : CroquetSystem
             UInt32 encodedId = BitConverter.ToUInt32(rawData, bufferPos);
             bufferPos += 4;
             string id = (encodedId >> 6).ToString();
+
+
+            CroquetSpatialComponent spatialComponent;
+            Transform trans;
+            try
+            {
+                spatialComponent = components[id] as CroquetSpatialComponent;
+                trans = spatialComponent.transform;
+            }
+            catch (Exception e)
+            {
+                // SKIP TO THE NEXT OBJECTS BUFFER POSITION
+                if ((encodedId & SCALE) != 0)
+                {
+                    bufferPos += 12;
+                }
+                if ((encodedId & ROT) != 0)
+                {
+                    bufferPos += 16;
+                }
+                if ((encodedId & POS) != 0)
+                {
+                    bufferPos += 12;
+                }
+                Debug.Log($"attempt to update absent object {id} : {e}");
+                continue;
+            }
             
-            CroquetSpatialComponent spatialComponent = components[id] as CroquetSpatialComponent;
-            
-            Transform trans = components[id].transform;
+
             if ((encodedId & SCALE) != 0)
             {
                 Vector3 updatedScale = Vector3FromBuffer(rawData, bufferPos);
@@ -149,7 +174,6 @@ public class CroquetSpatialSystem : CroquetSystem
                 spatialComponent.position = updatedPosition;
                 // Log("verbose", "pos: " + p.ToString());
             }
-            else Debug.Log($"attempt to update absent object {id}");
         }
         return;
     }

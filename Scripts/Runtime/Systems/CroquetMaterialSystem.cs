@@ -5,7 +5,13 @@ using UnityEngine;
 
 public class CroquetMaterialSystem : CroquetSystem
 {
-    public Dictionary<string, CroquetMaterialComponent> MaterialComponents = new();
+    public override List<string> KnownCommands { get; } = new List<string>()
+    {
+        "setColor"
+    };
+
+    protected override Dictionary<string, CroquetComponent> components { get; set; } = new Dictionary<string, CroquetComponent>();
+    
     public static CroquetMaterialSystem Instance { get; private set; }
 
     private void Awake()
@@ -29,12 +35,8 @@ public class CroquetMaterialSystem : CroquetSystem
         {
             // Retrieve the necessary identifier
             var id = materialComponent.gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
-            MaterialComponents.Add(id, materialComponent);
+            components.Add(id, materialComponent);
         }
-    }
-
-    private void Update()
-    {
     }
 
     public override void ProcessCommand(string command, string[] args)
@@ -44,13 +46,9 @@ public class CroquetMaterialSystem : CroquetSystem
 
     private void SetColor(string[] args)
     {
-        
+        string id = args[0];
+        string[] rgb = args[1].Split(",");
+        Color colorToSet = new Color(float.Parse(rgb[0]), float.Parse(rgb[1]), float.Parse(rgb[2]));
+        components[id].gameObject.GetComponentInChildren<MeshRenderer>().materials[0].color = colorToSet;
     }
-    
-    public override List<string> KnownCommands { get; } = new List<string>()
-    {
-        "setColor"
-    };
-
-    protected override Dictionary<string, CroquetComponent> components { get; set; }
 }

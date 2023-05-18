@@ -133,7 +133,7 @@ public class CroquetEntitySystem : CroquetSystem
             else if (spec.type == "primitiveCylinder") primType = PrimitiveType.Cylinder;
             else if (spec.type == "primitivePlane") primType = PrimitiveType.Plane;
 
-            gameObjectToMake = CreateCroquetPrimitive(primType, Color.grey);
+            gameObjectToMake = CreateCroquetPrimitive(primType, Color.blue);
         }
         else
         {
@@ -240,9 +240,4 @@ public class ObjectSpec
     public bool wTA; // waitToActivate:  whether to make visible immediately, or only on first posn update
     public string type;
     public string cs; // comma-separated list of extra components
-    public float[] c; // color;
-    public float a; // alpha;
-    public float[] s; // scale;
-    public float[] r; // rotation;
-    public float[] t; // translation;
 }
