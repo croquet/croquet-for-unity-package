@@ -13,17 +13,16 @@ public abstract class CroquetSystem : MonoBehaviour
     /// <summary>
     /// Components that this system will update.
     /// </summary>
-    protected abstract Dictionary<string, CroquetComponent> components { get; set; }
+    protected abstract Dictionary<int, CroquetComponent> components { get; set; }
     
     public virtual void RegisterComponent(CroquetComponent component)
     {
-        // Retrieve the necessary identifier
-        string gameHandle = component.gameObject.GetComponent<CroquetEntityComponent>().croquetGameHandle;
-        
-        if (component.GetType() != typeof(CroquetEntityComponent))
-        {
-            components.Add(gameHandle, component);
-        }
+        components.Add(component.gameObject.GetInstanceID(), component);
+    }
+    
+    public virtual void UnregisterComponent(CroquetComponent component)
+    {
+        components.Remove(component.gameObject.GetInstanceID());
     }
     
     public virtual void ProcessCommand(string command, string[] args)

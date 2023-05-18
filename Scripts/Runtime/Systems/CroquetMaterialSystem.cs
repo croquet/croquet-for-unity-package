@@ -10,7 +10,7 @@ public class CroquetMaterialSystem : CroquetSystem
         "setColor"
     };
 
-    protected override Dictionary<string, CroquetComponent> components { get; set; } = new Dictionary<string, CroquetComponent>();
+    protected override Dictionary<int, CroquetComponent> components { get; set; } = new Dictionary<int, CroquetComponent>();
     
     public static CroquetMaterialSystem Instance { get; private set; }
 
@@ -30,13 +30,12 @@ public class CroquetMaterialSystem : CroquetSystem
         
     public void Start()
     {
-        // Scan scene for all Spatial Components
-        foreach (CroquetMaterialComponent materialComponent in FindObjectsOfType<CroquetMaterialComponent>())
-        {
-            // Retrieve the necessary identifier
-            var id = materialComponent.gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
-            components.Add(id, materialComponent);
-        }
+    //     // Scan scene for all Material Components
+    //     foreach (CroquetMaterialComponent materialComponent in FindObjectsOfType<CroquetMaterialComponent>())
+    //     {
+    //         // Retrieve the necessary identifier
+    //         components.Add(id, materialComponent);
+    //     }
     }
 
     public override void ProcessCommand(string command, string[] args)
@@ -46,9 +45,13 @@ public class CroquetMaterialSystem : CroquetSystem
 
     private void SetColor(string[] args)
     {
-        string id = args[0];
+        string croquetHandle = args[0];
         string[] rgb = args[1].Split(",");
         Color colorToSet = new Color(float.Parse(rgb[0]), float.Parse(rgb[1]), float.Parse(rgb[2]));
-        components[id].gameObject.GetComponentInChildren<MeshRenderer>().materials[0].color = colorToSet;
+        GameObject go = CroquetEntitySystem.Instance.GetGameObjectByCroquetHandle(croquetHandle);
+        if (go != null)
+        {
+            go.GetComponentInChildren<MeshRenderer>().materials[0].color = colorToSet;
+        }
     }
 }

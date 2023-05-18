@@ -13,6 +13,7 @@ using UnityEngine.ResourceManagement.ResourceLocations;
 /// </summary>
 public class CroquetEntitySystem : CroquetSystem
 {
+    // manages preloading the addressableAssets
     private Dictionary<string, GameObject> addressableAssets;
     private bool addressablesReady = false; // make public read or emit event to inform other systems that the assets are loaded
     
@@ -24,36 +25,64 @@ public class CroquetEntitySystem : CroquetSystem
         "makeObject",
         "destroyObject"
     };
+    
+    protected override Dictionary<int, CroquetComponent> components { get; set; } =
+        new Dictionary<int, CroquetComponent>();
 
-    protected override Dictionary<string, CroquetComponent> components { get; set; } =
-        new Dictionary<string, CroquetComponent>();
+    private Dictionary<string, int> CroquetHandleToInstanceID = new Dictionary<string, int>();
 
+    private void AssociateCroquetHandleToInstanceID(string croquetHandle, int id)
+    {
+        CroquetHandleToInstanceID.Add(croquetHandle, id);
+    }
+    
+    private void DisassociateCroquetHandleToInstanceID(string croquetHandle)
+    {
+        CroquetHandleToInstanceID.Remove(croquetHandle);
+    }
+    
     /// <summary>
-    /// Find GameObject with a specific Croquet ID
+    /// Get GameObject with a specific Croquet Handle
     /// </summary>
     /// <param name="id"></param>
     /// <returns></returns>
-    public GameObject FindObject(string id)
+    public GameObject GetGameObjectByCroquetHandle(string croquetHandle)
     {
         CroquetComponent croquetComponent;
 
-        if (components.TryGetValue(id, out croquetComponent))
+        if (CroquetHandleToInstanceID.ContainsKey(croquetHandle))
         {
-            return croquetComponent.gameObject;
+            int instanceID = CroquetHandleToInstanceID[croquetHandle];
+            if (components.TryGetValue(instanceID, out croquetComponent))
+            {
+                return croquetComponent.gameObject;
+            }
         }
-        Debug.Log($"Failed to find object {id}");
+
+        Debug.Log($"Failed to find object {croquetHandle}");
         return null;
     }
-    
+
+    public static int GetInstanceIDByCroquetHandle(string croquetHandle)
+    {
+        GameObject go = Instance.GetGameObjectByCroquetHandle(croquetHandle);
+        if (go != null)
+        {
+            return go.GetInstanceID();
+        }
+
+        return 0; // TODO: remove sentinel in favor of unwrapping optional
+    }
+
     private void Awake()
     {
         // Create Singleton Accessor
         // If there is an instance, and it's not me, delete myself.
         if (Instance != null && Instance != this) 
         { 
-            Destroy(this); 
+            Destroy(this);
         }
-        else 
+        else
         { 
             Instance = this; 
         }
@@ -99,15 +128,14 @@ public class CroquetEntitySystem : CroquetSystem
                     Debug.Log($"Addressable Loaded: {go.name}");
                     addressableAssets.Add(go.name.ToLower(), go); // @@ remove case-sensitivity
                 }
-
-                addressablesReady = true;
             };
         }
         else
         {
             Debug.Log($"No addressable assets are tagged '{label}'");
-            addressablesReady = true;
         }
+
+        addressablesReady = true;
     }
 
     public override void ProcessCommand(string command, string[] args)
@@ -149,8 +177,9 @@ public class CroquetEntitySystem : CroquetSystem
         }
 
         CroquetEntityComponent entity = gameObjectToMake.GetComponent<CroquetEntityComponent>();
-        entity.croquetGameHandle = spec.id;
-        components.Add(spec.id, entity);
+        entity.croquetHandle = spec.id;
+        int instanceID = gameObjectToMake.GetInstanceID();
+        AssociateCroquetHandleToInstanceID(spec.id, instanceID);
         if (spec.cN != "") entity.croquetActorId = spec.cN;
 
         if (spec.cs != "")
@@ -189,8 +218,6 @@ public class CroquetEntitySystem : CroquetSystem
 
         gameObjectToMake.SetActive(!spec.wTA);
 
-        components[spec.id] = entity;
-
         // gameObjectToMake.transform.localScale = new Vector3(spec.s[0], spec.s[1], spec.s[2]);
         // // normalise the quaternion because it's potentially being sent with reduced precision
         // gameObjectToMake.transform.localRotation = Quaternion.Normalize(new Quaternion(spec.r[0], spec.r[1], spec.r[2], spec.r[3]));
@@ -202,30 +229,28 @@ public class CroquetEntitySystem : CroquetSystem
         }
     }
     
-    void DestroyObject(string id)
+    void DestroyObject(string croquetHandle)
     {
-        Debug.Log( "destroying object " + id.ToString());
+        Debug.Log( "Destroying object " + croquetHandle.ToString());
         // if (cameraOwnerId == id)
         // {
         //     cameraOwnerId = "";
         //     GameObject camera = GameObject.FindWithTag("MainCamera");
         //     camera.transform.parent = null;
         // }
-        
-        if (components.ContainsKey(id))
+
+        if (CroquetHandleToInstanceID.ContainsKey(croquetHandle))
         {
-            GameObject obj = components[id].gameObject;
-            
-            //TODO: CALL ALL SYSTEMS ONDESTROY for this ID
-            
-            Destroy(obj);
-            components.Remove(id);
+            int instanceID = CroquetHandleToInstanceID[croquetHandle];
+            Destroy(components[instanceID].gameObject);
+            components.Remove(instanceID);
+            DisassociateCroquetHandleToInstanceID(croquetHandle);
         }
         else
         {
             // asking to destroy a pawn for which there's no view can happen just because of
             // creation/destruction timing in worldcore.  not necessarily a problem.
-            Debug.Log($"attempt to destroy absent object {id}");
+            Debug.Log($"attempt to destroy absent object {croquetHandle}");
         }
     }
 

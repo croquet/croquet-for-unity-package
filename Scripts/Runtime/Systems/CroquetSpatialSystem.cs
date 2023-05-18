@@ -12,7 +12,7 @@ public class CroquetSpatialSystem : CroquetSystem
         "unparent",
     };
 
-    protected override Dictionary<string, CroquetComponent> components { get; set; } = new Dictionary<string, CroquetComponent>();
+    protected override Dictionary<int, CroquetComponent> components { get; set; } = new Dictionary<int, CroquetComponent>();
 
     // Create Singleton Reference
     public static CroquetSpatialSystem Instance { get; private set; }
@@ -39,7 +39,7 @@ public class CroquetSpatialSystem : CroquetSystem
 
     void Unparent(string[] args)
     {
-        GameObject child = CroquetEntitySystem.Instance.FindObject(args[0]);
+        GameObject child = CroquetEntitySystem.Instance.GetGameObjectByCroquetHandle(args[0]);
         if (child)
         {
             child.transform.SetParent(null);
@@ -48,8 +48,8 @@ public class CroquetSpatialSystem : CroquetSystem
     
     void SetParent(string[] args)
     {
-        GameObject child = CroquetEntitySystem.Instance.FindObject(args[0]);
-        GameObject parent = CroquetEntitySystem.Instance.FindObject(args[1]);
+        GameObject child = CroquetEntitySystem.Instance.GetGameObjectByCroquetHandle(args[0]);
+        GameObject parent = CroquetEntitySystem.Instance.GetGameObjectByCroquetHandle(args[1]);
         if (parent && child)
         {
             child.transform.SetParent(parent.transform, false); // false => ignore child's existing world position
@@ -61,11 +61,10 @@ public class CroquetSpatialSystem : CroquetSystem
     /// </summary>
     void UpdateTransforms()
     {
-        foreach (KeyValuePair<string, CroquetComponent> kvp in components)
+        foreach (KeyValuePair<int, CroquetComponent> kvp in components)
         {
-            string id = kvp.Key;
             CroquetSpatialComponent spatialComponent = kvp.Value as CroquetSpatialComponent;
-
+            
             if (Vector3.Distance(spatialComponent.scale,spatialComponent.transform.localScale) > spatialComponent.scaleDeltaEpsilon)
             {
                 spatialComponent.transform.localScale = Vector3.Lerp(spatialComponent.transform.localScale, spatialComponent.scale, spatialComponent.scaleLerpFactor);
@@ -106,14 +105,14 @@ public class CroquetSpatialSystem : CroquetSystem
             // would need some kind of id recycling so we don't run out.
             UInt32 encodedId = BitConverter.ToUInt32(rawData, bufferPos);
             bufferPos += 4;
-            string id = (encodedId >> 6).ToString();
-
+            string croquetHandle = (encodedId >> 6).ToString();
+            int instanceID = CroquetEntitySystem.GetInstanceIDByCroquetHandle(croquetHandle);
 
             CroquetSpatialComponent spatialComponent;
             Transform trans;
             try
             {
-                spatialComponent = components[id] as CroquetSpatialComponent;
+                spatialComponent = components[instanceID] as CroquetSpatialComponent;
                 trans = spatialComponent.transform;
             }
             catch (Exception e)
@@ -131,7 +130,7 @@ public class CroquetSpatialSystem : CroquetSystem
                 {
                     bufferPos += 12;
                 }
-                Debug.Log($"attempt to update absent object {id} : {e}");
+                Debug.Log($"attempt to update absent object {croquetHandle} : {e}");
                 continue;
             }
             

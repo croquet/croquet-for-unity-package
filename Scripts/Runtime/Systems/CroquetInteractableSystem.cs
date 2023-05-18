@@ -16,7 +16,7 @@ public class CroquetInteractableSystem : CroquetSystem, IPointerClickHandler
     {
         "makeClickable",
     };
-    protected override Dictionary<string, CroquetComponent> components { get; set; }
+    protected override Dictionary<int, CroquetComponent> components { get; set; }
     
     // Create Singleton Reference
     public static CroquetInteractableSystem Instance { get; private set; }
@@ -76,7 +76,7 @@ public class CroquetInteractableSystem : CroquetSystem, IPointerClickHandler
                     {
                         // collect id, hit.x, hit.y, hit.z[, layer1, layer2 etc]
                         List<string> oneHit = new List<string>();
-                        oneHit.Add(entity.croquetGameHandle);
+                        oneHit.Add(entity.croquetHandle);
                         Vector3 xyz = hit.point;
                         oneHit.Add(xyz.x.ToString());
                         oneHit.Add(xyz.y.ToString());
@@ -114,7 +114,7 @@ public class CroquetInteractableSystem : CroquetSystem, IPointerClickHandler
         //     CroquetGameObject cgo = obj.GetComponent<CroquetGameObject>();
         //     cgo.clickable = true;
         //     if (layers != "") cgo.clickLayers = layers.Split(',');
-        //     // Debug.Log($"hittable object {cgo.croquetActorId} has handle {cgo.croquetGameHandle}");
+        //     // Debug.Log($"hittable object {cgo.croquetActorId} has handle {cgo.croquetHandle}");
         // }
     }
 
