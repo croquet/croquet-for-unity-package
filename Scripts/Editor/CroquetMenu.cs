@@ -55,7 +55,7 @@ public static class SceneAndPlayWatcher
 
     private static void HandleSceneChange(Scene current, Scene next)
     {
-        CroquetBuilder.CacheSceneBridgeComponent(next);
+        CroquetBuilder.CacheSceneComponents(next);
     }
 }
 

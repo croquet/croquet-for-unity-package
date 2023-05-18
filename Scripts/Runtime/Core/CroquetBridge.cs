@@ -231,12 +231,6 @@ public class CroquetBridge : MonoBehaviour
         ws.OnGet += OnGetHandler;
 
         Log("session", $"started HTTP/WS Server on port {port}");
-
-        if (Application.platform == RuntimePlatform.WindowsEditor
-            || Application.platform == RuntimePlatform.WindowsPlayer)
-        {
-            useNodeJS = true;
-        }
         
 #if UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
         string pathToNode = appProperties.pathToNode; // doesn't exist on Windows
