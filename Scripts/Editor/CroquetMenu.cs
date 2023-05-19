@@ -11,10 +11,12 @@ class CroquetBuildPreprocess : IPreprocessBuildWithReport
     public int callbackOrder { get { return 0; } }
     public void OnPreprocessBuild(BuildReport report)
     {
+        // for Windows standalone, we temporarily place a copy of node.exe
+        // in the StreamingAssets folder for inclusion in the build.
         BuildTarget target = report.summary.platform;
         if (target == BuildTarget.StandaloneWindows || target == BuildTarget.StandaloneWindows64)
         {
-            string src = CroquetBuilder.PathToNodeExe;
+            string src = CroquetBuilder.NodeExeInPackage;
             string dest = "Assets/StreamingAssets/croquet-bridge/node/node.exe";
             FileUtil.CopyFileOrDirectory(src, dest);
         }
@@ -53,7 +55,7 @@ public static class SceneAndPlayWatcher
 
     private static void HandleSceneChange(Scene current, Scene next)
     {
-        CroquetBuilder.CacheSceneBridgeComponent(next);
+        CroquetBuilder.CacheSceneComponents(next);
     }
 }
 
@@ -62,6 +64,7 @@ class CroquetBuildPostprocess : IPostprocessBuildWithReport
     public int callbackOrder { get { return 0; } }
     public void OnPostprocessBuild(BuildReport report)
     {
+        // if we temporarily copied node.exe (see above), remove it again
         BuildTarget target = report.summary.platform;
         if (target == BuildTarget.StandaloneWindows || target == BuildTarget.StandaloneWindows64)
         {
@@ -172,7 +175,7 @@ public class CroquetMenu
     [MenuItem(CopyJSItem, false, 200)]
     private static void CopyJS()
     {
-        string src = CroquetBuilder.PathToJSZip;
+        string src = CroquetBuilder.JSZipInPackage;
         string dest = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "..", "..", "croquet.zip"));
 
         Debug.Log($"copying from {src} to {dest}");

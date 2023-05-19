@@ -22,6 +22,7 @@ public class CroquetBuilder
     public static Process oneTimeBuildProcess;
     private static string sceneName;
     private static CroquetBridge sceneBridgeComponent;
+    private static CroquetRunner sceneRunnerComponent;
     private static string sceneAppName;
     
     private const string ID_PROP = "JS Builder Id";
@@ -35,9 +36,10 @@ public class CroquetBuilder
         set { EditorPrefs.SetBool(BUILD_ON_PLAY, value); }
     }
 
-    public static void CacheSceneBridgeComponent(Scene scene)
+    public static void CacheSceneComponents(Scene scene)
     {
         CroquetBridge bridgeComp = null;
+        CroquetRunner runnerComp = null;
         GameObject[] roots = scene.GetRootGameObjects();
         // we assume that the bridge has the tag Bridge (presumably faster than trying
         // GetComponent() on every object)
@@ -47,14 +49,18 @@ public class CroquetBuilder
         if (bridge != null)
         {
             bridgeComp = bridge.GetComponent<CroquetBridge>();
+            runnerComp = bridge.GetComponent<CroquetRunner>();
         }
 
         sceneName = scene.name;
         sceneBridgeComponent = bridgeComp;
+        sceneRunnerComponent = runnerComp;
     }
 
-    public static string PathToJSZip = Path.GetFullPath("Packages/com.croquet.multiplayer/.SAMPLE.JS.SOURCE/croquet.zip");
-    public static string PathToNodeExe = Path.GetFullPath("Packages/com.croquet.multiplayer/multiplayer/Croquet/NodeJS/node.exe");
+    public static string JSZipInPackage = Path.GetFullPath("Packages/com.croquet.multiplayer/.SAMPLE.JS.SOURCE/croquet.zip");
+    public static string NodeExeInPackage = Path.GetFullPath("Packages/com.croquet.multiplayer/NodeJS/node.exe");
+    public static string NodeExeInBuild =
+        Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "croquet-bridge", "node", "node.exe"));
 
     public struct JSBuildDetails
     {
@@ -77,15 +83,29 @@ public class CroquetBuilder
         {
             // look in the scene for an object with a CroquetBridge component,
             // and if found cache its build details
-            CacheSceneBridgeComponent(activeScene);
+            CacheSceneComponents(activeScene);
         }
 
-        if (sceneBridgeComponent)
+        if (sceneBridgeComponent != null)
         {
+            // on Mac, we rely on the user pointing us to an installed NodeJS
+            // executable using the settings object.  this is used for running
+            // all JS build steps, and can also drive a scene if the user selects
+            // the "Use Node JS" option.  it *cannot* be bundled into a build.
+            
+            // for Windows, we include a version of node.exe in the package.
+            // it can be used for JS building, for running scenes in the editor, 
+            // and for inclusion in a Windows standalone build.
 #if UNITY_EDITOR_OSX
             string pathToNode = sceneBridgeComponent.appProperties.pathToNode;
 #else
-            string pathToNode = "";
+            // assume we're in a Windows editor
+            string pathToNode = NodeExeInPackage;
+            if (!sceneRunnerComponent.waitForUserLaunch && !sceneBridgeComponent.useNodeJS)
+            {
+                Debug.Log("Switching to Node JS for non-user-launched Croquet");
+                sceneBridgeComponent.useNodeJS = true;
+            }
 #endif
             return new JSBuildDetails(sceneBridgeComponent.appName, sceneBridgeComponent.useNodeJS, pathToNode);
         }
@@ -112,25 +132,23 @@ public class CroquetBuilder
             return;
         }
 
-        string croquetRoot = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, $"../../../croquet/"));
+        string croquetRoot = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "..", "..", "croquet"));
         string builderPath = Path.Combine(croquetRoot, "build-tools");
     
         string nodeExecPath;
         string executable;
         string arguments = "";
-        string target = "";
+        string target = details.useNodeJS ? "node" : "web";
         string logFile = "";
         switch (Application.platform)
         {
             case RuntimePlatform.OSXEditor:
                 nodeExecPath = details.nodeExecutable;
                 executable = Path.Combine(builderPath, "runwebpack.sh");
-                target = details.useNodeJS ? "node" : "web";
                 break;
             case RuntimePlatform.WindowsEditor:
-                nodeExecPath = "\"" + PathToNodeExe + "\"";
+                nodeExecPath = "\"" + details.nodeExecutable + "\"";
                 executable = "powershell.exe";
-                target = "node"; // actually not used
                 arguments = $"-NoProfile -file \"runwebpack.ps1\" ";
                 break;
             default:
@@ -303,6 +321,10 @@ public class CroquetBuilder
     
     public static void EnteringPlayMode()
     {
+        // get build details, just to run the check that on Windows forces
+        // useNodeJS to true unless CroquetRunner is set to wait for user launch
+        GetSceneBuildDetails();
+
         // rebuild-on-Play is only available if a watcher *isn't* running
         string logFile = EditorPrefs.GetString(LOG_PROP, "");
         if (logFile == "" && BuildOnPlayEnabled)
