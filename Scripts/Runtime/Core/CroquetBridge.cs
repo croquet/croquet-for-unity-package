@@ -22,6 +22,7 @@ public class CroquetBridge : MonoBehaviour
     public string appName;
     public bool useNodeJS;
     public bool croquetSessionReady = false;
+    public string croquetViewId;
     
     public bool showRigidbodyStateHighlight = false;
 
@@ -522,7 +523,7 @@ public class CroquetBridge : MonoBehaviour
         else if (command == "setLogOptions") SetLogOptions(args[0]);  //OUT:LOGGER
         else if (command == "setMeasureOptions") SetMeasureOptions(args[0]);//OUT:METRICS
         else if (command == "joinProgress") HandleJoinProgress(args[0]);
-        else if (command == "croquetSessionReady") HandleSessionReady();
+        else if (command == "croquetSessionReady") HandleSessionReady(args);
         else if (command == "croquetSessionDisconnected") HandleSessionDisconnected();
         else
         {
@@ -581,10 +582,11 @@ public class CroquetBridge : MonoBehaviour
         SetLoadingProgress(float.Parse(ratio));
     }
 
-    void HandleSessionReady()
+    void HandleSessionReady(string[] args)
     {
         Log("session", "Croquet session ready");
         croquetSessionReady = true;
+        croquetViewId = args[0];
     }
 
     // TODO: All systems should get this event and respond accordingly

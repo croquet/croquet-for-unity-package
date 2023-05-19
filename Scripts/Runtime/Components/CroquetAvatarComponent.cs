@@ -1,8 +1,10 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
-public class CroquetAvatarComponent : MonoBehaviour
+[AddComponentMenu("Croquet/AvatarComponent")]
+public class CroquetAvatarComponent : CroquetComponent
 {
- 
+    public override CroquetSystem croquetSystem { get; set; } = CroquetAvatarSystem.Instance;
+
+    public bool isActiveAvatar;
+
 }

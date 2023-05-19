@@ -106,6 +106,7 @@ public class CroquetSpatialSystem : CroquetSystem
             UInt32 encodedId = BitConverter.ToUInt32(rawData, bufferPos);
             bufferPos += 4;
             string croquetHandle = (encodedId >> 6).ToString();
+
             int instanceID = CroquetEntitySystem.GetInstanceIDByCroquetHandle(croquetHandle);
 
             CroquetSpatialComponent spatialComponent;
@@ -117,7 +118,7 @@ public class CroquetSpatialSystem : CroquetSystem
             }
             catch (Exception e)
             {
-                // SKIP TO THE NEXT OBJECTS BUFFER POSITION
+                // object not found.  skip through the buffer to the next object's record.
                 if ((encodedId & SCALE) != 0)
                 {
                     bufferPos += 12;
@@ -146,8 +147,7 @@ public class CroquetSpatialSystem : CroquetSystem
                 
                 // update the components data regardless
                 spatialComponent.scale = updatedScale;
-                
-                // Log("verbose", "scale: " + s.ToString());
+                // Log("verbose", "scale: " + updatedScale.ToString());
             }
             if ((encodedId & ROT) != 0)
             {
@@ -159,6 +159,7 @@ public class CroquetSpatialSystem : CroquetSystem
                 }
                 // update the components data regardless
                 spatialComponent.rotation = updatedQuatRot;
+                // Log("verbose", "rot: " + updatedQuatRot.ToString());
             }
             if ((encodedId & POS) != 0)
             {
@@ -168,14 +169,68 @@ public class CroquetSpatialSystem : CroquetSystem
                 {
                     trans.localPosition = updatedPosition;
                 }
-                // update the components data regardless
+                // update the component's data regardless
                 spatialComponent.position = updatedPosition;
-                // Log("verbose", "pos: " + p.ToString());
+                // Log("verbose", "pos: " + updatedPosition.ToString());
             }
         }
-        return;
     }
-    
+
+    public void SnapObjectTo(string croquetHandle, Vector3? position = null, Quaternion? rotation = null, Vector3? scale = null)
+    {
+        int instanceID = CroquetEntitySystem.GetInstanceIDByCroquetHandle(croquetHandle);
+        if (instanceID == 0) return;
+        
+        CroquetSpatialComponent spatialComponent = components[instanceID] as CroquetSpatialComponent;
+        Transform trans = spatialComponent.transform;
+
+        if (position != null)
+        {
+            trans.localPosition = position.Value;
+            spatialComponent.position = position.Value;
+        }
+
+        if (rotation != null)
+        {
+            trans.localRotation = rotation.Value;
+            spatialComponent.rotation = rotation.Value;
+        }
+
+        if (scale != null)
+        {
+            trans.localScale = scale.Value;
+            spatialComponent.scale = scale.Value;
+        }
+    }
+
+    public void SnapObjectInCroquet(string croquetHandle, Vector3? position = null, Quaternion? rotation = null,
+        Vector3? scale = null)
+    {
+        List<string> argList = new List<string>();
+        argList.Add("objectMoved");
+        argList.Add(croquetHandle);
+        
+        if (position != null)
+        {
+            argList.Add("p");
+            argList.Add(string.Join<float>(",", new[] { position.Value.x, position.Value.y, position.Value.z }));
+        }
+
+        if (rotation != null)
+        {
+            argList.Add("r");
+            argList.Add(string.Join<float>(",", new[] { rotation.Value.x, rotation.Value.y, rotation.Value.z, rotation.Value.w }));
+        }
+
+        if (scale != null)
+        {
+            argList.Add("p");
+            argList.Add(string.Join<float>(",", new[] { scale.Value.x, scale.Value.y, scale.Value.z }));
+        }
+
+        CroquetBridge.SendCroquet(argList.ToArray());
+    }
+
     public override void ProcessCommand(string command, string[] args)
     {
         if (command.Equals("setParent"))

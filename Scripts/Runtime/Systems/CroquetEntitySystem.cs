@@ -152,7 +152,7 @@ public class CroquetEntitySystem : CroquetSystem
     void MakeObject(string[] args)
     {
         ObjectSpec spec = JsonUtility.FromJson<ObjectSpec>(args[0]);
-        Debug.Log($"making object {spec.id}");
+        // Debug.Log($"making object {spec.cH}");
 
         // try to find a prefab with the given name
         GameObject gameObjectToMake;
@@ -180,9 +180,10 @@ public class CroquetEntitySystem : CroquetSystem
         }
 
         CroquetEntityComponent entity = gameObjectToMake.GetComponent<CroquetEntityComponent>();
-        entity.croquetHandle = spec.id;
+        entity.croquetHandle = spec.cH;
         int instanceID = gameObjectToMake.GetInstanceID();
-        AssociateCroquetHandleToInstanceID(spec.id, instanceID);
+        AssociateCroquetHandleToInstanceID(spec.cH, instanceID);
+        
         if (spec.cN != "") entity.croquetActorId = spec.cN;
 
         if (spec.cs != "")
@@ -220,21 +221,16 @@ public class CroquetEntitySystem : CroquetSystem
         }
 
         gameObjectToMake.SetActive(!spec.wTA);
-
-        // gameObjectToMake.transform.localScale = new Vector3(spec.s[0], spec.s[1], spec.s[2]);
-        // // normalise the quaternion because it's potentially being sent with reduced precision
-        // gameObjectToMake.transform.localRotation = Quaternion.Normalize(new Quaternion(spec.r[0], spec.r[1], spec.r[2], spec.r[3]));
-        // gameObjectToMake.transform.localPosition = new Vector3(spec.t[0], spec.t[1], spec.t[2]);
-
+        
         if (spec.cC)
         {
-            CroquetBridge.Instance.SendToCroquet("objectCreated", spec.id.ToString(), DateTimeOffset.Now.ToUnixTimeMilliseconds().ToString());
+            CroquetBridge.Instance.SendToCroquet("objectCreated", spec.cH, DateTimeOffset.Now.ToUnixTimeMilliseconds().ToString());
         }
     }
     
     void DestroyObject(string croquetHandle)
     {
-        Debug.Log( "Destroying Object " + croquetHandle.ToString());
+        // Debug.Log( "Destroying Object " + croquetHandle.ToString());
 
         if (CroquetHandleToInstanceID.ContainsKey(croquetHandle))
         {
@@ -278,7 +274,7 @@ public class CroquetEntitySystem : CroquetSystem
 [System.Serializable]
 public class ObjectSpec
 {
-    public string id; // currently an integer, but no point converting all the time
+    public string cH; // croquet handle: currently an integer, but no point converting all the time
     public string cN; // Croquet name (generally, the model id)
     public bool cC; // confirmCreation: whether Croquet is waiting for a confirmCreation message for this 
     public bool wTA; // waitToActivate:  whether to make visible immediately, or only on first posn update
