@@ -1,5 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using JetBrains.Annotations;
 using UnityEngine;
 
 public class CroquetAvatarSystem : CroquetSystem
@@ -15,7 +17,7 @@ public class CroquetAvatarSystem : CroquetSystem
     
     // Create Singleton Reference
     public static CroquetAvatarSystem Instance { get; private set; }
-
+    
     private void Awake()
     {
         // Create Singleton Accessor
@@ -64,4 +66,20 @@ public class CroquetAvatarSystem : CroquetSystem
         }
     }
 
+    [CanBeNull]
+    public CroquetAvatarComponent GetActiveAvatarComponent()
+    {
+        // TODO: (Critical) We probably need to switch the base class to use generics
+        foreach (var kvp in components)
+        {
+            CroquetAvatarComponent c = kvp.Value as CroquetAvatarComponent;
+            if (c != null)
+            {
+                if (c.isActiveAvatar)
+                    return c;
+            }
+        }
+        
+        return null;
+    }
 }
