@@ -362,8 +362,7 @@ public class CroquetBridge : MonoBehaviour
         SendToCroquet(strings);
         SendDeferredMessages();
     }
-
-    // TODO: OUT Utility
+    
     public string PackCroquetMessage(string[] strings)
     {
         return String.Join('\x01', strings);
@@ -528,7 +527,7 @@ public class CroquetBridge : MonoBehaviour
         else
         {
             // not a known command; maybe just text for logging
-            Log("info", "[Croquet] " + msg);
+            Log("info", "Unhandled Command From Croquet: " + msg);
         }
 
         inMessageCount++;
@@ -552,22 +551,6 @@ public class CroquetBridge : MonoBehaviour
         }
     }
 
-    // TODO: COMMENTED OUT BECAUSE CAMERA?
-    // void SetReservedIds(string packedIds)
-    // {
-    //     // argument is a comma-separated list of strings, in pairs defining alias and id
-    //     // e.g., "camera,1,otherThing,2"
-    //     string[] strings = packedIds.Split(',');
-    //     for (int i = 0; i < strings.Length; i += 2)
-    //     {
-    //         // Debug.Log($"id {strings[i+1]} reserved for {strings[i]}");
-    //         reservedIds[strings[i]] = strings[i + 1];
-    //     }
-    //
-    //     string cameraId = reservedIds["camera"];
-    //     croquetObjects[cameraId] = GameObject.FindWithTag("MainCamera");
-    // }
-
     // TODO: Commented out because avatar
     // void RegisterAsAvatar(string id)
     // {
@@ -587,8 +570,6 @@ public class CroquetBridge : MonoBehaviour
     //     localAvatarId = "";
     // }
 
- 
-    
     void HandleCroquetPing(string time)
     {
         Log("diagnostics", "PING");
