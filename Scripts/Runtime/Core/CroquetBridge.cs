@@ -107,8 +107,8 @@ public class CroquetBridge : MonoBehaviour
         }
         croquetSystems = this.gameObject.GetComponents<CroquetSystem>();
         
-        SetLogOptions("info,session");
-        SetMeasureOptions("bundle,geom"); // @@ typically useful for development
+        SetCSharpLogOptions("info,session");
+        SetCSharpMeasureOptions("bundle,geom"); // @@ typically useful for development
         stopWatch.Start();
         
     }
@@ -149,6 +149,12 @@ public class CroquetBridge : MonoBehaviour
             clientSock = Context.WebSocket;
 
             Instance.Log("session", "server socket opened");
+
+            // if not running externally, set JS warnings and errors to be logged here
+            if (!Instance.croquetRunner.waitForUserLaunch)
+            {
+                Instance.SetJSLogForwarding("warn,error");
+            }
 
             string apiKey = Instance.appProperties.apiKey;
             string appId = Instance.appProperties.appPrefix + "." + Instance.appName;
@@ -518,10 +524,11 @@ public class CroquetBridge : MonoBehaviour
                 return;
             }
         }
-        
-        if (command == "croquetPing") HandleCroquetPing(args[0]);
-        else if (command == "setLogOptions") SetLogOptions(args[0]);  //OUT:LOGGER
-        else if (command == "setMeasureOptions") SetMeasureOptions(args[0]);//OUT:METRICS
+
+        if (command == "logFromJS") HandleLogFromJS(args);
+        else if (command == "croquetPing") HandleCroquetPing(args[0]);
+        else if (command == "setLogOptions") SetCSharpLogOptions(args[0]);  //OUT:LOGGER
+        else if (command == "setMeasureOptions") SetCSharpMeasureOptions(args[0]);//OUT:METRICS
         else if (command == "joinProgress") HandleJoinProgress(args[0]);
         else if (command == "croquetSessionReady") HandleSessionReady(args);
         else if (command == "croquetSessionDisconnected") HandleSessionDisconnected();
@@ -577,6 +584,26 @@ public class CroquetBridge : MonoBehaviour
         SendToCroquet("unityPong", time);
     }
 
+    void HandleLogFromJS(string[] args)
+    {
+        // args[0] is log type (log,warn,error)
+        // args[1] is a best-effort single-string concatenation of whatever values were logged
+        string type = args[0];
+        string logText = args[1];
+        switch (type)
+        {
+            case "log":
+                Debug.Log("JS log: " + logText);
+                break;
+            case "warn":
+                Debug.LogWarning("JS warning: " + logText);
+                break;
+            case "error":
+                Debug.LogError("JS error: " + logText);
+                break;
+        }
+    }
+
     void HandleJoinProgress(string ratio)
     {
         SetLoadingProgress(float.Parse(ratio));
@@ -609,8 +636,9 @@ public class CroquetBridge : MonoBehaviour
     }
 
     // OUT: Logger Util
-    void SetLogOptions(string options)
+    void SetCSharpLogOptions(string options)
     {
+        // logs that the Croquet side wants the C# side to send.
         // arg is a comma-separated list of the log categories to show
         string[] wanted = options.Split(',');
         foreach (string cat in logCategories)
@@ -623,7 +651,7 @@ public class CroquetBridge : MonoBehaviour
     }
 
     // OUT: Metrics system util
-    void SetMeasureOptions(string options)
+    void SetCSharpMeasureOptions(string options)
     {
         // arg is a comma-separated list of the measure categories to send
         string[] wanted = options.Split(',');
@@ -631,6 +659,14 @@ public class CroquetBridge : MonoBehaviour
         {
             measureOptions[cat] = wanted.Contains(cat);
         }
+    }
+
+    void SetJSLogForwarding(string optionString)
+    {
+        // arg is a comma-separated list of the log types (log,warn,error) that we want
+        // the JS side to send for logging here
+        string[] cmdAndArgs = { "setJSLogForwarding", optionString };
+        SendToCroquet(cmdAndArgs);
     }
     
     void SetLoadingStage(float ratio, string msg)
