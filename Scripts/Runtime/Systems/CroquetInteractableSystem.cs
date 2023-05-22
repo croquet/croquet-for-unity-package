@@ -84,7 +84,7 @@ public class CroquetInteractableSystem : CroquetSystem
                         oneHit.Add(xyz.x.ToString());
                         oneHit.Add(xyz.y.ToString());
                         oneHit.Add(xyz.z.ToString());
-                        //oneHit.AddRange(interactable.clickLayers);
+                        oneHit.AddRange(interactable.interactableLayers);
 
                         clickDetails.Add(String.Join(',', oneHit.ToArray()));
                     }
