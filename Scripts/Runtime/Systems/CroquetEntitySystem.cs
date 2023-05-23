@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine.AddressableAssets;
 
 using UnityEngine;
@@ -151,7 +152,7 @@ public class CroquetEntitySystem : CroquetSystem
         }
         else if (command.Equals("tearDownSession"))
         {
-
+            TearDownSession();
         }
     }
     
@@ -262,10 +263,24 @@ public class CroquetEntitySystem : CroquetSystem
             // creation/destruction timing in worldcore.  not necessarily a problem.
             Debug.Log($"attempt to destroy absent object {croquetHandle}");
         }
-        
-        
     }
 
+    void TearDownSession()
+    {
+        // destroy everything in the scene for the purposes of rebuilding when the
+        // connection is reestablished.
+        
+        List<CroquetComponent> componentsToDelete = components.Values.ToList();
+        foreach (CroquetComponent component in componentsToDelete)
+        {
+            CroquetEntityComponent entityComponent = component as CroquetEntityComponent;
+            if (entityComponent != null)
+            {
+                DestroyObject(entityComponent.croquetHandle);
+            }
+        }
+    }
+    
     GameObject CreateCroquetPrimitive(PrimitiveType type, Color color)
     {
         GameObject go = new GameObject();
