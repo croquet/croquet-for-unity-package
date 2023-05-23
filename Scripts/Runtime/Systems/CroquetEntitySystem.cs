@@ -23,7 +23,8 @@ public class CroquetEntitySystem : CroquetSystem
     public override List<string> KnownCommands { get; } = new List<string>()
     {
         "makeObject",
-        "destroyObject"
+        "destroyObject",
+        "tearDownSession"
     };
     
     protected override Dictionary<int, CroquetComponent> components { get; set; } =
@@ -146,6 +147,9 @@ public class CroquetEntitySystem : CroquetSystem
         } else if (command.Equals("destroyObject"))
         {
             DestroyObject(args[0]);
+        } else if (command.Equals("tearDownSession"))
+        {
+            
         }
     }
     
@@ -270,6 +274,8 @@ public class CroquetEntitySystem : CroquetSystem
         return go;
     }
 }
+
+
 
 [System.Serializable]
 public class ObjectSpec
