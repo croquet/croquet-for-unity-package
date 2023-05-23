@@ -7,7 +7,10 @@ $NODE=$args[0]
 $APPNAME=$args[1]
 $TARGET=$args[2]
 
-if (!(Test-Path ..\node_modules\webpack)) {
+# node_modules in the parent directory of the whole Unity project
+NODE_MODULES=..\..\..\..\node_modules
+
+if (!(Test-Path $NODE_MODULES\webpack)) {
   Write-Warning "Cannot find webpack.  Did you do 'npm install'?"
   Exit
 }
@@ -15,7 +18,7 @@ if (!(Test-Path ..\node_modules\webpack)) {
 get-content sources\index-node.generic.js | % { $_ -replace '__APP_SOURCE__' , "../../$APPNAME" } | set-content sources\index-node.tmp.js
 get-content sources\index.generic.js | % { $_ -replace '__APP_SOURCE__' , "../../$APPNAME" } | set-content sources\index.tmp.js
 
-& "$NODE" ..\node_modules\webpack\bin\webpack.js --config webpack.config.js --mode development --env appName="$APPNAME" --env buildTarget="$TARGET" --no-color
+& "$NODE" $NODE_MODULES\webpack\bin\webpack.js --config webpack.config.js --mode development --env appName="$APPNAME" --env buildTarget="$TARGET" --no-color
 
 # this output will be read by CroquetBuilder, to keep a record of the webpack process id
 echo "webpack-exit=$LASTEXITCODE"
