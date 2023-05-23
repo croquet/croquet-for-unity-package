@@ -128,12 +128,17 @@ public class CroquetBuilder
 
         if (Application.platform == RuntimePlatform.OSXEditor && details.nodeExecutable == "")
         {
-            Debug.LogError("Cannot build without a path to node in the Settings object");
+            Debug.LogError("Cannot build without a path to Node in the Settings object");
             return;
         }
 
         string builderPath = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS", "build-tools"));
-    
+        if (!Directory.Exists(builderPath))
+        {
+            Debug.LogError("Cannot find JS build tools. Did you copy them using the Croquet menu? You must then run 'npm install' in the Unity project's parent directory.");
+            return;
+        }
+
         string nodeExecPath;
         string executable;
         string arguments = "";
