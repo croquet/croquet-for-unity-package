@@ -86,7 +86,7 @@ public class CroquetMenu
     private const string StopperItemHere = "Croquet/Stop JS Watcher (this scene)";
     private const string StopperItemOther = "Croquet/Stop JS Watcher (other scene)";
 
-    private const string CopyJSItem = "Croquet/Copy JS Sample Zip";
+    private const string CopyJSItem = "Croquet/Copy JS Build Tools";
 
     [MenuItem(BuildNowItem, false, 100)]
     private static void BuildNow()
@@ -175,10 +175,25 @@ public class CroquetMenu
     [MenuItem(CopyJSItem, false, 200)]
     private static void CopyJS()
     {
-        string src = CroquetBuilder.JSZipInPackage;
-        string dest = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "..", "..", "croquet.zip"));
+        string toolsRoot = CroquetBuilder.CroquetBuildToolsInPackage;
+        string unityParentFolder = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "..", ".."));
+        string jsFolder = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS"));
 
-        Debug.Log($"copying from {src} to {dest}");
-        FileUtil.CopyFileOrDirectory(src, dest);
+        // package.json and .eslintrc to parent of the entire Unity project
+        string[] files = new string[] { "package.json", ".eslintrc.json" };
+        foreach (var file in files)
+        {
+            string fsrc = Path.GetFullPath(Path.Combine(toolsRoot, file));
+            string fdest = Path.GetFullPath(Path.Combine(unityParentFolder, file));
+            Debug.Log($"replacing {fdest} with {fsrc}");
+            FileUtil.ReplaceFile(fsrc, fdest);
+        }
+
+        // build-tools to Assets/CroquetJS/
+        string dir = "build-tools";
+        string dsrc = Path.GetFullPath(Path.Combine(toolsRoot, dir));
+        string ddest = Path.GetFullPath(Path.Combine(jsFolder, dir));
+        Debug.Log($"replacing {ddest} with {dsrc}");
+        FileUtil.ReplaceDirectory(dsrc, ddest);
     }
 }

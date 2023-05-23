@@ -57,8 +57,8 @@ public class CroquetBuilder
         sceneRunnerComponent = runnerComp;
     }
 
-    public static string JSZipInPackage = Path.GetFullPath("Packages/com.croquet.multiplayer/.SAMPLE.JS.SOURCE/croquet.zip");
-    public static string NodeExeInPackage = Path.GetFullPath("Packages/com.croquet.multiplayer/NodeJS/node.exe");
+    public static string CroquetBuildToolsInPackage = Path.GetFullPath("Packages/com.croquet.multiplayer/.JSTools");
+    public static string NodeExeInPackage = Path.GetFullPath("Packages/com.croquet.multiplayer/.JSTools/NodeJS/node.exe");
     public static string NodeExeInBuild =
         Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "croquet-bridge", "node", "node.exe"));
 
@@ -132,8 +132,7 @@ public class CroquetBuilder
             return;
         }
 
-        string croquetRoot = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "..", "..", "croquet"));
-        string builderPath = Path.Combine(croquetRoot, "build-tools");
+        string builderPath = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS", "build-tools"));
     
         string nodeExecPath;
         string executable;
