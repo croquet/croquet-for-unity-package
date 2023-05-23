@@ -88,12 +88,12 @@ public class CroquetSpatialSystem : CroquetSystem
     /// <returns></returns>
     void UpdateSpatial(byte[] rawData, int startPos)
     {
-        const uint SCALE = 32;
-        const uint SCALE_SNAP = 16;
-        const uint ROT = 8;
-        const uint ROT_SNAP = 4;
-        const uint POS = 2;
-        const uint POS_SNAP = 1;
+        const uint SCALE =      0b100000;
+        const uint SCALE_SNAP = 0b010000;
+        const uint ROT =        0b001000;
+        const uint ROT_SNAP =   0b000100;
+        const uint POS =        0b000010;
+        const uint POS_SNAP =   0b000001;
         
         int bufferPos = startPos; // byte index through the buffer
         while (bufferPos < rawData.Length)
