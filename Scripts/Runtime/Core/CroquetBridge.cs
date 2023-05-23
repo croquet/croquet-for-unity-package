@@ -21,7 +21,7 @@ public class CroquetBridge : MonoBehaviour
     public CroquetSettings appProperties;
     public string appName;
     public bool useNodeJS;
-    public bool croquetSessionReady = false;
+    public bool croquetSessionRunning = false;
     public string croquetViewId;
     
     public bool showRigidbodyStateHighlight = false;
@@ -46,10 +46,6 @@ public class CroquetBridge : MonoBehaviour
     List<string> deferredMessages = new List<string>();
     static float messageThrottle = 0.05f; // 50ms
     float lastMessageSend = 0; // realtimeSinceStartup
-
-    private Dictionary<string, string> reservedIds = new Dictionary<string, string>();
-    public string localAvatarId = "";
-    public string cameraOwnerId = "";
 
     LoadingProgressDisplay loadingProgressDisplay;
     public bool loadingInProgress = true;
@@ -417,7 +413,7 @@ public class CroquetBridge : MonoBehaviour
 
         long duration = DateTimeOffset.Now.ToUnixTimeMilliseconds() - start;
         if (duration == 0) duration++;
-        if (croquetSessionReady) Measure("update", start.ToString(), duration.ToString());
+        if (croquetSessionRunning) Measure("update", start.ToString(), duration.ToString());
 
         float now = Time.realtimeSinceStartup;
         if (now - lastMessageDiagnostics > 1f)
@@ -516,12 +512,14 @@ public class CroquetBridge : MonoBehaviour
         string[] args = strings[1..];
         Log("verbose", command + ": " + String.Join(", ", args));
 
+        bool messageWasProcessed = false;
+        
         foreach (CroquetSystem extension in croquetSystems)
         {
             if (extension.KnownCommands.Contains(command))
             {
                 extension.ProcessCommand(command, args);
-                return;
+                messageWasProcessed = true;
             }
         }
 
@@ -530,9 +528,9 @@ public class CroquetBridge : MonoBehaviour
         else if (command == "setLogOptions") SetCSharpLogOptions(args[0]);  //OUT:LOGGER
         else if (command == "setMeasureOptions") SetCSharpMeasureOptions(args[0]);//OUT:METRICS
         else if (command == "joinProgress") HandleJoinProgress(args[0]);
-        else if (command == "croquetSessionReady") HandleSessionReady(args);
-        else if (command == "croquetSessionDisconnected") HandleSessionDisconnected();
-        else
+        else if (command == "croquetSessionRunning") HandleSessionRunning(args);
+        else if (command == "tearDownSession") TearDownSession();
+        else if (!messageWasProcessed)
         {
             // not a known command; maybe just text for logging
             Log("info", "Unhandled Command From Croquet: " + msg);
@@ -609,30 +607,17 @@ public class CroquetBridge : MonoBehaviour
         SetLoadingProgress(float.Parse(ratio));
     }
 
-    void HandleSessionReady(string[] args)
+    void HandleSessionRunning(string[] args)
     {
-        Log("session", "Croquet session ready");
-        croquetSessionReady = true;
+        Log("session", "Croquet session running!");
+        croquetSessionRunning = true;
         croquetViewId = args[0];
     }
 
-    // TODO: All systems should get this event and respond accordingly
-    void HandleSessionDisconnected()
+    void TearDownSession()
     {
-        // Log("session", "Croquet session disconnected");
-        // croquetSessionReady = false;
-        //
-        // string[] allIds = croquetObjects.Keys.ToArray();
-        // foreach (string id in allIds)
-        // {
-        //     // @@ for now, we assume that everything not listed in
-        //     // the reservedIds dictionary (e.g., the camera) can
-        //     // be destroyed
-        //     if (!reservedIds.ContainsValue(id)) DestroyObject(id);
-        // }
-        //
-        // croquetObjects.Clear();
-        // reservedIds.Clear();
+        Log("session", "Croquet session teardown now happening!");
+        croquetSessionRunning = false;
     }
 
     // OUT: Logger Util
