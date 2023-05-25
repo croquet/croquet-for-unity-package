@@ -14,6 +14,11 @@ public class CroquetSpatialSystem : CroquetSystem
 
     protected override Dictionary<int, CroquetComponent> components { get; set; } = new Dictionary<int, CroquetComponent>();
 
+    public Dictionary<int, CroquetComponent> GetComponents()
+    {
+        return components;
+    }
+    
     // Create Singleton Reference
     public static CroquetSpatialSystem Instance { get; private set; }
 
@@ -79,7 +84,7 @@ public class CroquetSpatialSystem : CroquetSystem
             }
         }
     }
-    
+
     /// <summary>
     /// Processing messages from Croquet to update the spatial component
     /// </summary>
@@ -88,12 +93,12 @@ public class CroquetSpatialSystem : CroquetSystem
     /// <returns></returns>
     void UpdateSpatial(byte[] rawData, int startPos)
     {
-        const uint SCALE = 32;
-        const uint SCALE_SNAP = 16;
-        const uint ROT = 8;
-        const uint ROT_SNAP = 4;
-        const uint POS = 2;
-        const uint POS_SNAP = 1;
+        const uint SCALE =      0b100000;
+        const uint SCALE_SNAP = 0b010000;
+        const uint ROT =        0b001000;
+        const uint ROT_SNAP =   0b000100;
+        const uint POS =        0b000010;
+        const uint POS_SNAP =   0b000001;
         
         int bufferPos = startPos; // byte index through the buffer
         while (bufferPos < rawData.Length)
@@ -135,6 +140,8 @@ public class CroquetSpatialSystem : CroquetSystem
                 continue;
             }
 
+            spatialComponent.hasBeenMoved = true;
+
             if ((encodedId & SCALE) != 0)
             {
                 Vector3 updatedScale = Vector3FromBuffer(rawData, bufferPos);
@@ -174,6 +181,17 @@ public class CroquetSpatialSystem : CroquetSystem
                 // Log("verbose", "pos: " + updatedPosition.ToString());
             }
         }
+    }
+
+    public bool hasObjectMoved(int instanceID)
+    {
+        return (components[instanceID] as CroquetSpatialComponent).hasBeenMoved;
+    }
+    
+    public bool hasObjectMoved(string croquetHandle)
+    {
+        int instanceID = CroquetEntitySystem.GetInstanceIDByCroquetHandle(croquetHandle);
+        return (components[instanceID] as CroquetSpatialComponent).hasBeenMoved;
     }
 
     public void SnapObjectTo(string croquetHandle, Vector3? position = null, Quaternion? rotation = null, Vector3? scale = null)

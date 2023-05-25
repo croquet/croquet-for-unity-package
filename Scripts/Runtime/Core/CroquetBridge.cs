@@ -1,18 +1,12 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Linq;
 using System.Text;
-using Unity.VisualScripting;
 using UnityEditor;
 using UnityEngine;
 using WebSocketSharp;
 using WebSocketSharp.Server;
-using UnityEngine.Networking;
-using UnityEngine.InputSystem;
-using UnityEngine.ResourceManagement.AsyncOperations;
-using UnityEngine.ResourceManagement.ResourceLocations;
 using WebSocketSharp.Net;
 
 
@@ -24,8 +18,6 @@ public class CroquetBridge : MonoBehaviour
     public bool croquetSessionRunning = false;
     public string croquetViewId;
     
-    public bool showRigidbodyStateHighlight = false;
-
     HttpServer ws = null;
     WebSocketBehavior wsb = null; // not currently used
     static WebSocket clientSock = null;
@@ -556,25 +548,6 @@ public class CroquetBridge : MonoBehaviour
             }
         }
     }
-
-    // TODO: Commented out because avatar
-    // void RegisterAsAvatar(string id)
-    // {
-    //     if (localAvatarId == id) return; // already registered
-    //
-    //     GameObject obj = FindObject(id);
-    //     if (obj == null) return;
-    //
-    //     localAvatarId = id;
-    // }
-
-    // TODO: Commented out because avatar
-    // void UnregisterAsAvatar(string id)
-    // {
-    //     if (localAvatarId != id) return; // has already been switched
-    //
-    //     localAvatarId = "";
-    // }
 
     void HandleCroquetPing(string time)
     {

@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine.AddressableAssets;
 
 using UnityEngine;
@@ -151,7 +152,7 @@ public class CroquetEntitySystem : CroquetSystem
         }
         else if (command.Equals("tearDownSession"))
         {
-
+            TearDownSession();
         }
     }
     
@@ -226,7 +227,13 @@ public class CroquetEntitySystem : CroquetSystem
             }
         }
 
-        gameObjectToMake.SetActive(!spec.wTA);
+        if (spec.wTP)
+        {
+            foreach (Renderer renderer in gameObjectToMake.GetComponentsInChildren<Renderer>())
+            {
+                renderer.enabled = false;
+            }
+        }
         
         if (spec.cC)
         {
@@ -262,10 +269,24 @@ public class CroquetEntitySystem : CroquetSystem
             // creation/destruction timing in worldcore.  not necessarily a problem.
             Debug.Log($"attempt to destroy absent object {croquetHandle}");
         }
-        
-        
     }
 
+    void TearDownSession()
+    {
+        // destroy everything in the scene for the purposes of rebuilding when the
+        // connection is reestablished.
+        
+        List<CroquetComponent> componentsToDelete = components.Values.ToList();
+        foreach (CroquetComponent component in componentsToDelete)
+        {
+            CroquetEntityComponent entityComponent = component as CroquetEntityComponent;
+            if (entityComponent != null)
+            {
+                DestroyObject(entityComponent.croquetHandle);
+            }
+        }
+    }
+    
     GameObject CreateCroquetPrimitive(PrimitiveType type, Color color)
     {
         GameObject go = new GameObject();
@@ -283,7 +304,7 @@ public class ObjectSpec
     public string cH; // croquet handle: currently an integer, but no point converting all the time
     public string cN; // Croquet name (generally, the model id)
     public bool cC; // confirmCreation: whether Croquet is waiting for a confirmCreation message for this 
-    public bool wTA; // waitToActivate:  whether to make visible immediately, or only on first posn update
+    public bool wTP; // waitToPresent:  whether to make visible immediately
     public string type;
     public string cs; // comma-separated list of extra components
 }

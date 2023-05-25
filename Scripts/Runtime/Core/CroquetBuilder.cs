@@ -57,8 +57,8 @@ public class CroquetBuilder
         sceneRunnerComponent = runnerComp;
     }
 
-    public static string JSZipInPackage = Path.GetFullPath("Packages/com.croquet.multiplayer/.SAMPLE.JS.SOURCE/croquet.zip");
-    public static string NodeExeInPackage = Path.GetFullPath("Packages/com.croquet.multiplayer/NodeJS/node.exe");
+    public static string CroquetBuildToolsInPackage = Path.GetFullPath("Packages/com.croquet.multiplayer/.JSTools");
+    public static string NodeExeInPackage = Path.GetFullPath("Packages/com.croquet.multiplayer/.JSTools/NodeJS/node.exe");
     public static string NodeExeInBuild =
         Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "croquet-bridge", "node", "node.exe"));
 
@@ -128,13 +128,17 @@ public class CroquetBuilder
 
         if (Application.platform == RuntimePlatform.OSXEditor && details.nodeExecutable == "")
         {
-            Debug.LogError("Cannot build without a path to node in the Settings object");
+            Debug.LogError("Cannot build without a path to Node in the Settings object");
             return;
         }
 
-        string croquetRoot = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "..", "..", "croquet"));
-        string builderPath = Path.Combine(croquetRoot, "build-tools");
-    
+        string builderPath = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS", "build-tools"));
+        if (!Directory.Exists(builderPath))
+        {
+            Debug.LogError("Cannot find JS build tools. Did you copy them using the Croquet menu? You must then run 'npm install' in the Unity project's parent directory.");
+            return;
+        }
+
         string nodeExecPath;
         string executable;
         string arguments = "";
