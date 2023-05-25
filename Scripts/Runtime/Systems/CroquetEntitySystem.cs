@@ -16,7 +16,7 @@ public class CroquetEntitySystem : CroquetSystem
 {
     // manages preloading the addressableAssets
     private Dictionary<string, GameObject> addressableAssets;
-    private bool addressablesReady = false; // make public read or emit event to inform other systems that the assets are loaded
+    public bool addressablesReady = false; // make public read or emit event to inform other systems that the assets are loaded
     
     // Create Singleton Reference
     public static CroquetEntitySystem Instance { get; private set; }

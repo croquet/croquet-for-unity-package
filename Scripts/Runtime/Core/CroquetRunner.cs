@@ -15,6 +15,7 @@ using Debug = UnityEngine.Debug;
 public class CroquetRunner : MonoBehaviour
 {
     public bool waitForUserLaunch;
+    public string localReflector;
     public bool showWebview;
 
     private static string bridgeSourcePath; // croquet-bridge folder under StreamingAssets
@@ -116,6 +117,14 @@ public class CroquetRunner : MonoBehaviour
         //   deployed standalone on Windows:
         //     i. nodeJS (using node.exe copied into StreamingAssets)
         
+        // figure out the web url, whatever is going to happen
+        // Use the port number determined by the bridge
+        string webURL = $"http://localhost:{port}/{appName}/index.html";
+        if (localReflector != "")
+        {
+            webURL += $"?reflector=ws://{localReflector}/reflector&files=http://{localReflector}/files/";
+        }
+
         // only compile with WebViewObject on non-Windows platforms
 #if !(UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN || UNITY_WSA)
         if (!useNodeJS && !waitForUserLaunch)
@@ -163,11 +172,8 @@ public class CroquetRunner : MonoBehaviour
 
             // webViewObject.SetTextZoom(100);  // android only. cf. https://stackoverflow.com/questions/21647641/android-webview-set-font-size-system-default/47017410#47017410
 
-            // Use the port number determined by the bridge
-            var webViewURL = $"http://localhost:{port}/{appName}/index.html";
-            TimedLog("invoke LoadURL on " + webViewURL);
-
-            webViewObject.LoadURL(webViewURL);
+            TimedLog("invoke LoadURL on " + webURL);
+            webViewObject.LoadURL(webURL);
         }
 #else // running in Windows
         if (!waitForUserLaunch) useNodeJS = true; // force node unless user explicitly wants an external browser
@@ -176,7 +182,7 @@ public class CroquetRunner : MonoBehaviour
         if (!useNodeJS && waitForUserLaunch)
         {
             // cases (b), (g)
-            TimedLog($"ready for browser to load from http://localhost:{port}/{appName}/index.html");
+            TimedLog($"ready for browser to load from {webURL}");
         }
         
         if (useNodeJS)

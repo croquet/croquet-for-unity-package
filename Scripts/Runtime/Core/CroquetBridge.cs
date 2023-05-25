@@ -384,7 +384,7 @@ public class CroquetBridge : MonoBehaviour
     void Update()
     {
         // before WS has been started, check whether we're ready to do so
-        if (sessionNameValue == -999)
+        if (sessionNameValue == -999 && CroquetEntitySystem.Instance.addressablesReady)
         {
             StartWS();
         }
