@@ -87,13 +87,13 @@ public class CroquetBridge : MonoBehaviour
         { 
             Instance = this; 
         } 
-        croquetRunner = this.gameObject.GetComponent<CroquetRunner>();
-        LoadingProgressDisplay loadingObj = GameObject.FindObjectOfType<LoadingProgressDisplay>();
+        croquetRunner = gameObject.GetComponent<CroquetRunner>();
+        LoadingProgressDisplay loadingObj = FindObjectOfType<LoadingProgressDisplay>();
         if (loadingObj != null)
         {
             loadingProgressDisplay = loadingObj.GetComponent<LoadingProgressDisplay>();
         }
-        croquetSystems = this.gameObject.GetComponents<CroquetSystem>();
+        croquetSystems = gameObject.GetComponents<CroquetSystem>();
         
         SetCSharpLogOptions("info,session");
         SetCSharpMeasureOptions("bundle,geom"); // @@ typically useful for development
@@ -388,10 +388,9 @@ public class CroquetBridge : MonoBehaviour
         {
             StartWS();
         }
-        if (loadingInProgress)
+        if (!loadingInProgress && croquetSessionRunning)
         {
-            if (loadingProgressDisplay != null) loadingProgressDisplay.Hide();
-            loadingInProgress = false;
+            loadingProgressDisplay.Hide();
         }
     }
     
@@ -585,6 +584,7 @@ public class CroquetBridge : MonoBehaviour
         Log("session", "Croquet session running!");
         croquetSessionRunning = true;
         croquetViewId = args[0];
+        loadingInProgress = false;
     }
 
     void TearDownSession()
