@@ -1,6 +1,6 @@
 {
-  "name": "croquet-for-unity-tutorials",
-  "description": "C4U Tutorials",
+  "name": "croquet-for-unity",
+  "description": "Croquet for Unity JS dependencies",
   "private": true,
   "author": "Croquet Corporation",
   "license": "Apache-2.0",
@@ -14,6 +14,6 @@
     "webpack-dev-server": "^4.11.1"
   },
   "dependencies": {
-    "@croquet/worldcore-kernel": "^2.0.0-alpha.0"
+    "@croquet/worldcore": "^2.0.0-alpha.0"
   }
 }

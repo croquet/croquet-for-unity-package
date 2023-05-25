@@ -7,8 +7,9 @@ using UnityEngine;
 public class CroquetSpatialComponent : CroquetComponent
 {
     public override CroquetSystem croquetSystem { get; set; } = CroquetSpatialSystem.Instance;
-    
+
     [Header("Model Transform (read-only)")]
+    public bool hasBeenMoved = false;
     public Vector3 position = Vector3.zero;
     public Quaternion rotation = Quaternion.identity ; 
     public Vector3 scale = Vector3.one;

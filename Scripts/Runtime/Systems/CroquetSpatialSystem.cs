@@ -14,6 +14,11 @@ public class CroquetSpatialSystem : CroquetSystem
 
     protected override Dictionary<int, CroquetComponent> components { get; set; } = new Dictionary<int, CroquetComponent>();
 
+    public Dictionary<int, CroquetComponent> GetComponents()
+    {
+        return components;
+    }
+    
     // Create Singleton Reference
     public static CroquetSpatialSystem Instance { get; private set; }
 
@@ -79,7 +84,7 @@ public class CroquetSpatialSystem : CroquetSystem
             }
         }
     }
-    
+
     /// <summary>
     /// Processing messages from Croquet to update the spatial component
     /// </summary>
@@ -135,6 +140,8 @@ public class CroquetSpatialSystem : CroquetSystem
                 continue;
             }
 
+            spatialComponent.hasBeenMoved = true;
+
             if ((encodedId & SCALE) != 0)
             {
                 Vector3 updatedScale = Vector3FromBuffer(rawData, bufferPos);
@@ -174,6 +181,17 @@ public class CroquetSpatialSystem : CroquetSystem
                 // Log("verbose", "pos: " + updatedPosition.ToString());
             }
         }
+    }
+
+    public bool hasObjectMoved(int instanceID)
+    {
+        return (components[instanceID] as CroquetSpatialComponent).hasBeenMoved;
+    }
+    
+    public bool hasObjectMoved(string croquetHandle)
+    {
+        int instanceID = CroquetEntitySystem.GetInstanceIDByCroquetHandle(croquetHandle);
+        return (components[instanceID] as CroquetSpatialComponent).hasBeenMoved;
     }
 
     public void SnapObjectTo(string croquetHandle, Vector3? position = null, Quaternion? rotation = null, Vector3? scale = null)

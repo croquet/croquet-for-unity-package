@@ -18,8 +18,6 @@ public class CroquetBridge : MonoBehaviour
     public bool croquetSessionRunning = false;
     public string croquetViewId;
     
-    public bool showRigidbodyStateHighlight = false;
-
     HttpServer ws = null;
     WebSocketBehavior wsb = null; // not currently used
     static WebSocket clientSock = null;

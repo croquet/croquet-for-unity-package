@@ -545,7 +545,7 @@ export const PM_GameRendered = superclass => class extends superclass {
             cH: String(this.gameHandle),
             cN: this.actor.id,
             cC: !!viewSpec.confirmCreation,
-            wTA: !!viewSpec.waitToActivate,
+            wTP: !!viewSpec.waitToPresent,
             type: viewSpec.type,
             cs: allComponents,
         };
