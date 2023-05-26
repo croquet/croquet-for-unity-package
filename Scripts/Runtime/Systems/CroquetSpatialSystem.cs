@@ -262,12 +262,6 @@ public class CroquetSpatialSystem : CroquetSystem
             Unparent(args);
         }
     }
-    
-    
-    void SendInitialTransforms()
-    {
-        
-    }
 
     public override void ProcessCommand(string command, byte[] data, int startIndex)
     {
