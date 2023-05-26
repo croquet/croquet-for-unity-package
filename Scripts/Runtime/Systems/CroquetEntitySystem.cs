@@ -96,6 +96,23 @@ public class CroquetEntitySystem : CroquetSystem
     {
         CroquetBridge.Instance.RegisterSystem(this);
         StartCoroutine(LoadAddressableAssetsWithLabel(CroquetBridge.Instance.appName));
+
+        RequestActorsForSceneGameObjects();
+    }
+    
+    void RequestActorsForSceneGameObjects()
+    {
+        List<string> entityInitializationBlob = new List<string>() {
+            "initializeEntitiesWithView"
+        };
+
+        foreach (CroquetComponent c in components.Values)
+        {
+            CroquetEntityComponent ec = c as CroquetEntityComponent;
+            entityInitializationBlob.Add( $"{ec.gameObject.GetInstanceID()}:{ec.actorClassName}");
+        }
+        CroquetBridge.Instance.SendToCroquet(entityInitializationBlob.ToArray());
+        // and now for the tricky bit.
     }
     
     IEnumerator LoadAddressableAssetsWithLabel(string label)
@@ -296,6 +313,8 @@ public class CroquetEntitySystem : CroquetSystem
         inner.transform.parent = go.transform;
         return go;
     }
+
+
 }
 
 [System.Serializable]
