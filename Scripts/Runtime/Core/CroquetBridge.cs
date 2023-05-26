@@ -538,11 +538,11 @@ public class CroquetBridge : MonoBehaviour
     /// <param name="startIndex"></param>
     void ProcessCroquetMessage(string command, byte[] data, int startIndex)
     {
-        foreach (CroquetSystem extension in croquetSystems)
+        foreach (CroquetSystem system in croquetSystems)
         {
-            if (extension.KnownCommands.Contains(command))
+            if (system.KnownCommands.Contains(command))
             {
-                extension.ProcessCommand(command, data, startIndex);
+                system.ProcessCommand(command, data, startIndex);
                 return;
             }
         }
@@ -585,8 +585,45 @@ public class CroquetBridge : MonoBehaviour
         croquetSessionRunning = true;
         croquetViewId = args[0];
         loadingInProgress = false;
+        string lastInitializedScene = args[2];
+        if (lastInitializedScene.Equals(""))
+        {
+            RequestSceneBuild();
+        }
     }
 
+    void RequestSceneBuild()
+    {
+        /*
+         * ask entity sys for all uninit'd objects
+         * for each object, ask all systems what they want to add
+         * send big blob of init data
+         */
+        List<string> initializationsBlob = new List<string>() {
+            "initializeEntitiesWithView"
+        };
+        List<int> needingInit = CroquetEntitySystem.Instance.InstanceIDsOfUninitializedObjects();
+        foreach (int instanceID in needingInit)
+        {
+            List<string> initStrings = new List<string>();
+            initStrings.Add($"ID:{instanceID}");
+            foreach (CroquetSystem system in croquetSystems)
+            {
+                // the properties for create() are sent as a string prop1:val1|prop2:val2...
+                string initString = system.InitializationStringForInstanceID(instanceID);
+                if (!initString.Equals(""))
+                {
+                    initStrings.Add(initString);
+                }
+            }
+
+            string oneObject = String.Join('|', initStrings.ToArray());
+            initializationsBlob.Add(oneObject);
+        }
+
+        SendToCroquet(initializationsBlob.ToArray());
+    }
+    
     void TearDownSession()
     {
         Log("session", "Croquet session teardown now happening!");

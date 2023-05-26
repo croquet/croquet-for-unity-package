@@ -11,6 +11,8 @@ public class CroquetEntityComponent : CroquetComponent
     [Header("SET")]
     
     public string actorClassName;
+    public string type;
+    
     /// <summary>
     /// The name of the Actor Class that controls this entity's behaviour
     /// </summary>

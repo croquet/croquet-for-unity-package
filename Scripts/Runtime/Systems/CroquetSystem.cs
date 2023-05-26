@@ -35,6 +35,11 @@ public abstract class CroquetSystem : MonoBehaviour
         throw new NotImplementedException();
     }
 
+    public virtual string InitializationStringForInstanceID(int instanceID)
+    {
+        return "";
+    }
+
     //TODO: implement
     //public abstract void OnSessionDisconnect();
     

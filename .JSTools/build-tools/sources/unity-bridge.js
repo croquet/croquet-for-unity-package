@@ -2,7 +2,7 @@
 //
 // Croquet Corporation, 2023
 
-import { v3_equals, q_equals, ViewService, GetViewService, StartWorldcore, ViewRoot } from "@croquet/worldcore-kernel";
+import { v3_equals, q_equals, ViewService, GetViewService, StartWorldcore, ViewRoot, Model } from "@croquet/worldcore-kernel";
 
 globalThis.timedLog = msg => {
     const toLog = `${(globalThis.CroquetViewDate || Date).now() % 100000}: ${msg}`;
@@ -132,6 +132,13 @@ console.log(`PORT ${portStr}`);
                 this.appId = appId;
                 this.sessionName = sessionName;
                 this.setReady();
+                break;
+            }
+            case 'initializeEntitiesWithView': {
+                // args are strings  prop1:val1|prop2:val2...  for each entity
+                const view = session.view;
+                const viewId = view.viewId;
+                view.publish('game', 'initializeFromView', { viewId, entities: args });
                 break;
             }
             case 'event': {
@@ -808,7 +815,7 @@ export class GameViewRoot extends ViewRoot {
 
         // we treat the construction of the view as a signal that the session is
         // ready to talk across the bridge
-        theGameEngineBridge.sendCommand('croquetSessionRunning', this.viewId);
+        theGameEngineBridge.sendCommand('croquetSessionRunning', this.viewId, model.lastInitializedScene);
         globalThis.timedLog("session running");
     }
 

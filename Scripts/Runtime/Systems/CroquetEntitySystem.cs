@@ -96,23 +96,27 @@ public class CroquetEntitySystem : CroquetSystem
     {
         CroquetBridge.Instance.RegisterSystem(this);
         StartCoroutine(LoadAddressableAssetsWithLabel(CroquetBridge.Instance.appName));
-
-        RequestActorsForSceneGameObjects();
     }
     
-    void RequestActorsForSceneGameObjects()
+    public List<int> InstanceIDsOfUninitializedObjects()
     {
-        List<string> entityInitializationBlob = new List<string>() {
-            "initializeEntitiesWithView"
-        };
-
+        List<int> needingInit = new List<int>();
         foreach (CroquetComponent c in components.Values)
         {
             CroquetEntityComponent ec = c as CroquetEntityComponent;
-            entityInitializationBlob.Add( $"{ec.gameObject.GetInstanceID()}:{ec.actorClassName}");
+            if (ec.croquetHandle.Equals(""))
+            {
+                needingInit.Add(ec.gameObject.GetInstanceID());
+            }
         }
-        CroquetBridge.Instance.SendToCroquet(entityInitializationBlob.ToArray());
-        // and now for the tricky bit.
+
+        return needingInit;
+    }
+
+    public override string InitializationStringForInstanceID(int instanceID)
+    {
+        CroquetEntityComponent ec = components[instanceID] as CroquetEntityComponent;
+        return $"ACTOR:{ec.actorClassName}|type:{ec.type}";
     }
     
     IEnumerator LoadAddressableAssetsWithLabel(string label)
