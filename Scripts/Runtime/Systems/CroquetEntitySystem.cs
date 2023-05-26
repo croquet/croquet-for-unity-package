@@ -130,14 +130,14 @@ public class CroquetEntitySystem : CroquetSystem
                     Debug.Log($"Addressable Loaded: {go.name}");
                     addressableAssets.Add(go.name.ToLower(), go); // @@ remove case-sensitivity
                 }
+                addressablesReady = true;
             };
         }
         else
         {
             Debug.Log($"No addressable assets are tagged '{label}'");
+            addressablesReady = true;
         }
-
-        addressablesReady = true;
     }
 
     public override void ProcessCommand(string command, string[] args)
