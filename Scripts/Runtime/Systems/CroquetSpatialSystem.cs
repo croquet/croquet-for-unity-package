@@ -34,6 +34,19 @@ public class CroquetSpatialSystem : CroquetSystem
         { 
             Instance = this; 
         }
+        
+        foreach (CroquetSpatialComponent c in FindObjectsOfType<CroquetSpatialComponent>())
+        {
+            c.SetCroquetSystem();
+        }
+    }
+
+    public override string InitializationStringForInstanceID(int instanceID)
+    {
+        CroquetSpatialComponent sc = components[instanceID] as CroquetSpatialComponent;
+        Vector3 position = sc.gameObject.transform.position; // read from the object, not the component
+        string posString = $"{position.x},{position.y},{position.z}";
+        return $"position:{posString}";
     }
 
     private void Update()
@@ -69,6 +82,13 @@ public class CroquetSpatialSystem : CroquetSystem
         foreach (KeyValuePair<int, CroquetComponent> kvp in components)
         {
             CroquetSpatialComponent spatialComponent = kvp.Value as CroquetSpatialComponent;
+            // if this is an object that will be initialising its transform from the Unity
+            // side, don't act on any transform mismatch until Croquet has started sending
+            // position updates for it.
+            if (spatialComponent.initializeWithSceneTransform && !spatialComponent.hasBeenMoved)
+            {
+                continue;
+            }
             
             if (Vector3.Distance(spatialComponent.scale,spatialComponent.transform.localScale) > spatialComponent.scaleDeltaEpsilon)
             {
@@ -261,12 +281,6 @@ public class CroquetSpatialSystem : CroquetSystem
             // unassociate parent
             Unparent(args);
         }
-    }
-    
-    
-    void SendInitialTransforms()
-    {
-        
     }
 
     public override void ProcessCommand(string command, byte[] data, int startIndex)

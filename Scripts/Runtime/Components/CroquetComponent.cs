@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -8,7 +9,18 @@ public abstract class CroquetComponent : MonoBehaviour
 
     void Awake()
     {
-        croquetSystem.RegisterComponent(this);
+        SetCroquetSystem();
     }
 
+    public virtual void SetCroquetSystem()
+    {
+        if (croquetSystem != null)
+        {
+            croquetSystem.RegisterComponent(this);
+        }
+        else
+        {
+            // Debug.Log($"System not available yet {this}");
+        }
+    }
 }

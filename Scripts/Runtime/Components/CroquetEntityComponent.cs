@@ -6,7 +6,7 @@ using UnityEngine;
 [AddComponentMenu("Croquet/EntityComponent")]
 public class CroquetEntityComponent : CroquetComponent
 {
-    public override CroquetSystem croquetSystem { get; set; } = CroquetEntitySystem.Instance;
+    public override CroquetSystem croquetSystem { get; set; }
     
     [Header("SET")]
     
@@ -23,4 +23,11 @@ public class CroquetEntityComponent : CroquetComponent
     public string croquetHandle = ""; // unique integer ID as a string (agreed Unique across bridge)
     // specify the accompanying actor class here
     // specify addressable name / pawn name
+    
+    public override void SetCroquetSystem()
+    {
+        croquetSystem = CroquetEntitySystem.Instance;
+        base.SetCroquetSystem();
+    }
+    
 }

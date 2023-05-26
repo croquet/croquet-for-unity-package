@@ -28,5 +28,10 @@ public class CroquetSpatialComponent : CroquetComponent
     
     //TODO: lerpCurve support
 
+    public override void SetCroquetSystem()
+    {
+        croquetSystem = CroquetSpatialSystem.Instance;
+        base.SetCroquetSystem();
+    }
 
 }

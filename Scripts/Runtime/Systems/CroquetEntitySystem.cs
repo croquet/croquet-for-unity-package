@@ -76,7 +76,7 @@ public class CroquetEntitySystem : CroquetSystem
         return 0; // TODO: remove sentinel in favor of unwrapping optional
     }
 
-    private void Awake()
+    protected void Awake()
     {
         // Create Singleton Accessor
         // If there is an instance, and it's not me, delete myself.
@@ -90,6 +90,11 @@ public class CroquetEntitySystem : CroquetSystem
         }
         
         addressableAssets = new Dictionary<string, GameObject>();
+
+        foreach (CroquetEntityComponent c in FindObjectsOfType<CroquetEntityComponent>())
+        {
+            c.SetCroquetSystem();
+        }
     }
     
     private void Start()
@@ -182,34 +187,54 @@ public class CroquetEntitySystem : CroquetSystem
         ObjectSpec spec = JsonUtility.FromJson<ObjectSpec>(args[0]);
         // Debug.Log($"making object {spec.cH}");
 
-        // try to find a prefab with the given name
-        GameObject gameObjectToMake;
-        if (spec.type.StartsWith("primitive"))
+        GameObject gameObjectToInit;
+        int instanceID;
+        if (spec.cID != "")
         {
-            PrimitiveType primType = PrimitiveType.Cube;
-            if (spec.type == "primitiveSphere") primType = PrimitiveType.Sphere;
-            else if (spec.type == "primitiveCapsule") primType = PrimitiveType.Capsule;
-            else if (spec.type == "primitiveCylinder") primType = PrimitiveType.Cylinder;
-            else if (spec.type == "primitivePlane") primType = PrimitiveType.Plane;
+            // this is a creation that was triggered by an object that's already here in the
+            // scene.
+            instanceID = int.Parse(spec.cID);
+            if (!components.ContainsKey(instanceID))
+            {
+                Debug.LogWarning($"Initializing object of type {spec.type} not found");
+                return;
+            }
 
-            gameObjectToMake = CreateCroquetPrimitive(primType, Color.blue);
+            gameObjectToInit = components[instanceID].gameObject;
         }
         else
         {
-            if (addressableAssets.ContainsKey(spec.type.ToLower()))
+            // try to find a prefab with the given name
+            if (spec.type.StartsWith("primitive"))
             {
-                gameObjectToMake = Instantiate(addressableAssets[spec.type.ToLower()]); // @@ remove case-sensitivity
+                PrimitiveType primType = PrimitiveType.Cube;
+                if (spec.type == "primitiveSphere") primType = PrimitiveType.Sphere;
+                else if (spec.type == "primitiveCapsule") primType = PrimitiveType.Capsule;
+                else if (spec.type == "primitiveCylinder") primType = PrimitiveType.Cylinder;
+                else if (spec.type == "primitivePlane") primType = PrimitiveType.Plane;
+
+                gameObjectToInit = CreateCroquetPrimitive(primType, Color.blue);
             }
             else
             {
-                Debug.Log( $"Specified spec.type ({spec.type}) is not found as a prefab! Creating Cube as Fallback Object");
-                gameObjectToMake = CreateCroquetPrimitive(PrimitiveType.Cube, Color.magenta);
+                if (addressableAssets.ContainsKey(spec.type.ToLower()))
+                {
+                    gameObjectToInit =
+                        Instantiate(addressableAssets[spec.type.ToLower()]); // @@ remove case-sensitivity
+                }
+                else
+                {
+                    Debug.Log(
+                        $"Specified spec.type ({spec.type}) is not found as a prefab! Creating Cube as Fallback Object");
+                    gameObjectToInit = CreateCroquetPrimitive(PrimitiveType.Cube, Color.magenta);
+                }
             }
+            
+            instanceID = gameObjectToInit.GetInstanceID();
         }
 
-        CroquetEntityComponent entity = gameObjectToMake.GetComponent<CroquetEntityComponent>();
+        CroquetEntityComponent entity = gameObjectToInit.GetComponent<CroquetEntityComponent>();
         entity.croquetHandle = spec.cH;
-        int instanceID = gameObjectToMake.GetInstanceID();
         AssociateCroquetHandleToInstanceID(spec.cH, instanceID);
         
         if (spec.cN != "") entity.croquetActorId = spec.cN;
@@ -235,9 +260,9 @@ public class CroquetEntitySystem : CroquetSystem
                     }
                     else
                     {
-                        if (gameObjectToMake.GetComponent(typeToAdd) == null)
+                        if (gameObjectToInit.GetComponent(typeToAdd) == null)
                         {
-                            gameObjectToMake.AddComponent(typeToAdd);
+                            gameObjectToInit.AddComponent(typeToAdd);
                         }
                     }
                 }
@@ -250,7 +275,7 @@ public class CroquetEntitySystem : CroquetSystem
 
         if (spec.wTP)
         {
-            foreach (Renderer renderer in gameObjectToMake.GetComponentsInChildren<Renderer>())
+            foreach (Renderer renderer in gameObjectToInit.GetComponentsInChildren<Renderer>())
             {
                 renderer.enabled = false;
             }
@@ -324,6 +349,7 @@ public class CroquetEntitySystem : CroquetSystem
 [System.Serializable]
 public class ObjectSpec
 {
+    public string cID; // creating ID: the instanceID of an existing Unity entity to connect to
     public string cH; // croquet handle: currently an integer, but no point converting all the time
     public string cN; // Croquet name (generally, the model id)
     public bool cC; // confirmCreation: whether Croquet is waiting for a confirmCreation message for this 

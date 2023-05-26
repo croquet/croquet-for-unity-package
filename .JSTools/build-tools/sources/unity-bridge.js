@@ -2,7 +2,7 @@
 //
 // Croquet Corporation, 2023
 
-import { v3_equals, q_equals, ViewService, GetViewService, StartWorldcore, ViewRoot, Model } from "@croquet/worldcore-kernel";
+import { v3_equals, q_equals, ViewService, GetViewService, StartWorldcore, ViewRoot, GetModelService } from "@croquet/worldcore-kernel";
 
 globalThis.timedLog = msg => {
     const toLog = `${(globalThis.CroquetViewDate || Date).now() % 100000}: ${msg}`;
@@ -135,10 +135,23 @@ console.log(`PORT ${portStr}`);
                 break;
             }
             case 'initializeEntitiesWithView': {
-                // args are strings  prop1:val1|prop2:val2...  for each entity
-                const view = session.view;
-                const viewId = view.viewId;
-                view.publish('game', 'initializeFromView', { viewId, entities: args });
+                // args to the command across the bridge are
+                //   scene name - if different from model's existing scene, init will always be accepted
+                //   "force" or "noForce", to determine whether init can override same scene in model
+                //   object string 1 (string  prop1:val1|prop2:val2...)
+                //   object string 2
+                //   etc
+
+                const [scene, forceFlag, ...entities] = args;
+
+                // don't even send the messages if it's already clear that we
+                // don't have the right to reinitialise the model
+                const { latestScene } = GetModelService('InitializationManager');
+                if (scene === latestScene && forceFlag !== "force") return;
+
+                const { view } = session;
+                const { viewId } = view;
+                view.publish('game', 'initializeFromView', { viewId, scene, forceFlag, entities });
                 break;
             }
             case 'event': {
@@ -540,7 +553,8 @@ export const PM_GameRendered = superclass => class extends superclass {
         // because pawn creation is asynchronous, it's possible that the
         // actor has already been destroyed by the time we get here.  in
         // that case, don't bother creating the unity gameobject at all.
-        if (this.actor.doomed) return;
+        const myActor = this.actor;
+        if (myActor.doomed) return;
 
         if (!viewSpec.confirmCreation) this.isViewReady = true; // not going to wait
 
@@ -548,9 +562,15 @@ export const PM_GameRendered = superclass => class extends superclass {
         if (viewSpec.extraComponents) allComponents += `,${viewSpec.extraComponents}`;
 
         this.unityViewP = new Promise(resolve => this.setReady = resolve);
+
+        // if the actor has a creatingView property, and it's this view,
+        // set cID ("creating ID") to the supplied instanceID from the game
+        // view.  Unity will look for an existing entity in its scene,
+        // rather than create a new one.
         const unityViewSpec = {
-            cH: String(this.gameHandle),
-            cN: this.actor.id,
+            cID: myActor._creatingView === this.viewId ? myActor._creatingId : "", // send as string
+            cH: String(this.gameHandle), // croquetHandle
+            cN: myActor.id, // croquetName
             cC: !!viewSpec.confirmCreation,
             wTP: !!viewSpec.waitToPresent,
             type: viewSpec.type,
@@ -815,7 +835,9 @@ export class GameViewRoot extends ViewRoot {
 
         // we treat the construction of the view as a signal that the session is
         // ready to talk across the bridge
-        theGameEngineBridge.sendCommand('croquetSessionRunning', this.viewId, model.lastInitializedScene);
+        const { latestScene } = GetModelService('InitializationManager');
+        console.log(`sessionRunning in ${this.viewId} with latestScene=${latestScene}`);
+        theGameEngineBridge.sendCommand('croquetSessionRunning', this.viewId, latestScene);
         globalThis.timedLog("session running");
     }
 
