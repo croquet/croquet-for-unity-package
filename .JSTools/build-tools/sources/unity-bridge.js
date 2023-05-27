@@ -224,13 +224,13 @@ console.log(`PORT ${portStr}`);
         const { viewId } = view;
         const initM = GetModelService('InitializationManager');
         const { latestScene, initializingView } = initM;
+console.log("provisional init", { latestScene, sceneName, forceFlag, initializingView, viewId });
         if ((sceneName === latestScene && forceFlag !== 'force') || (initializingView && initializingView !== viewId)) return;
-
+console.log("init proceeding");
         // lifted and slightly adapted from code.js in microverse
         const sendString = entities.join('\x01');
-console.log(`sending foobar string of length ${sendString.length}`);
         const array = new TextEncoder().encode(sendString);
-        const CHUNK_SIZE = 400; // $$$ 4000;
+        const CHUNK_SIZE = 2500;
         // Croquet will complain if more than 20 messages are sent in 1 second.
         // if we'll be sending more than 15 from here, introduce a throttle.
         const useThrottle = array.length > CHUNK_SIZE * 15;
