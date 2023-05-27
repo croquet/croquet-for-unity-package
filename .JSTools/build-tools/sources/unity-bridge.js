@@ -141,17 +141,8 @@ console.log(`PORT ${portStr}`);
                 //   object string 1 (string  prop1:val1|prop2:val2...)
                 //   object string 2
                 //   etc
-
-                const [scene, forceFlag, ...entities] = args;
-
-                // don't even send the messages if it's already clear that we
-                // don't have the right to reinitialise the model
-                const { latestScene } = GetModelService('InitializationManager');
-                if (scene === latestScene && forceFlag !== "force") return;
-
-                const { view } = session;
-                const { viewId } = view;
-                view.publish('game', 'initializeFromView', { viewId, scene, forceFlag, entities });
+                const [sceneName, forceFlag, ...entities] = args;
+                this.publishInitialization(sceneName, forceFlag, entities);
                 break;
             }
             case 'event': {
@@ -209,6 +200,53 @@ console.log(`PORT ${portStr}`);
     announceTeatime(teatime) {
         this.sendCommand('_teatime', String(Math.floor(teatime)));
     }
+
+    async publishInitialization(sceneName, forceFlag, entities) {
+        // don't interrupt if we're already sending
+        if (this.publishingInitP) await this.publishingInitP;
+
+        this.publishingInitP = new Promise(resolve => {
+            this.publishInitializationInChunks(sceneName, forceFlag, entities)
+            .then(() => {
+                this.publishingInitP = null;
+                resolve();
+            });
+        });
+    }
+
+    async publishInitializationInChunks(sceneName, forceFlag, entities) {
+        // don't even send the init if it's already clear that we
+        // don't have the right to reinitialise the model... which is
+        // the case if:
+        //   the initManager already has the scene that we plan to provide, and our "force" flag is not set, or
+        //   the initManager is in the process of receiving from a different view
+        const { view } = session;
+        const { viewId } = view;
+        const initM = GetModelService('InitializationManager');
+        const { latestScene, initializingView } = initM;
+        if ((sceneName === latestScene && forceFlag !== 'force') || (initializingView && initializingView !== viewId)) return;
+
+        // lifted and slightly adapted from code.js in microverse
+        const sendString = entities.join('\x01');
+console.log(`sending foobar string of length ${sendString.length}`);
+        const array = new TextEncoder().encode(sendString);
+        const CHUNK_SIZE = 400; // $$$ 4000;
+        // Croquet will complain if more than 20 messages are sent in 1 second.
+        // if we'll be sending more than 15 from here, introduce a throttle.
+        const useThrottle = array.length > CHUNK_SIZE * 15;
+        let ind = 0;
+        let isFirst = true;
+        let isLast;
+        while (ind < array.length) {
+            isLast = ind + CHUNK_SIZE >= array.length;
+            const buf = array.slice(ind, ind + CHUNK_SIZE);
+            view.publish(initM.id, 'initFromViewChunk', { viewId, sceneName, forceFlag, isFirst, isLast, buf });
+            ind += CHUNK_SIZE;
+            isFirst = false;
+
+            if (useThrottle) await new Promise(resolve => setTimeout(resolve, 50));
+        }
+   }
 
 showSetupStats() {
     // pawns keep stats on how long they took to set up.  if this isn't called, the stats will keep building up (but basically harmless).
