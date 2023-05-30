@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class CroquetSpatialSystem : CroquetSystem
 {
@@ -39,6 +40,14 @@ public class CroquetSpatialSystem : CroquetSystem
         {
             c.SetCroquetSystem();
         }
+
+        SceneManager.sceneUnloaded += ChangedActiveScene;
+    }
+
+    private void ChangedActiveScene(Scene arg0)
+    {
+        Debug.Log("HEY");
+        components.Clear();
     }
 
     public override string InitializationStringForInstanceID(int instanceID)
@@ -46,7 +55,9 @@ public class CroquetSpatialSystem : CroquetSystem
         CroquetSpatialComponent sc = components[instanceID] as CroquetSpatialComponent;
         Vector3 position = sc.gameObject.transform.position; // read from the object, not the component
         string posString = $"{position.x},{position.y},{position.z}";
-        return $"position:{posString}";
+        Quaternion rotation = sc.gameObject.transform.rotation;
+        string rotString = $"{rotation.x},{rotation.y},{rotation.z},{rotation.w},";
+        return $"position:{posString}|rotation:{rotString}";
     }
 
     private void Update()
@@ -282,6 +293,8 @@ public class CroquetSpatialSystem : CroquetSystem
             Unparent(args);
         }
     }
+    
+    
 
     public override void ProcessCommand(string command, byte[] data, int startIndex)
     {
