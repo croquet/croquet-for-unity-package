@@ -120,6 +120,7 @@ public class CroquetRunner : MonoBehaviour
         // figure out the web url, whatever is going to happen
         // Use the port number determined by the bridge
         string webURL = $"http://localhost:{port}/{appName}/index.html";
+        localReflector = PlayerPrefs.GetString("sessionIP", "");
         if (localReflector != "")
         {
             webURL += $"?reflector=ws://{localReflector}/reflector&files=http://{localReflector}/files/";
