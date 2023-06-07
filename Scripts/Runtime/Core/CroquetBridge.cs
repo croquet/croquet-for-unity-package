@@ -390,7 +390,10 @@ public class CroquetBridge : MonoBehaviour
         }
         if (!loadingInProgress && croquetSessionRunning)
         {
-            loadingProgressDisplay.Hide();
+            if (loadingProgressDisplay)
+            {
+                loadingProgressDisplay.Hide();
+            }
         }
     }
     
