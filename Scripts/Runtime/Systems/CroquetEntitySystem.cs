@@ -227,6 +227,11 @@ public class CroquetEntitySystem : CroquetSystem
             }
         }
 
+        foreach (CroquetEventParticipant eventScript in gameObjectToMake.GetComponents<CroquetEventParticipant>())
+        {
+            eventScript.AddCroquetSubscriptions();
+        }
+
         if (spec.wTP)
         {
             foreach (Renderer renderer in gameObjectToMake.GetComponentsInChildren<Renderer>())

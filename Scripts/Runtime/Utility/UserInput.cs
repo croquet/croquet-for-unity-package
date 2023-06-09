@@ -83,26 +83,26 @@ namespace Croquet.Adapters
         {
             // Debug.Log($"[INPUT] KEYDOWN: " + control.name);
 
-            CroquetBridge.SendCroquet("event", "keyDown", control.name);
+            CroquetBridge.Instance.SendToCroquet("event", "keyDown", control.name);
         }
 
         void SendKeyUp(InputControl control)
         {
             //Debug.Log($"[INPUT] KEYUP: " + control.name);
 
-            CroquetBridge.SendCroquet("event", "keyUp", control.name);
+            CroquetBridge.Instance.SendToCroquet("event", "keyUp", control.name);
         }
 
         void SendPointerDown(InputAction.CallbackContext callbackContext)
         {
             Debug.Log("[INPUT] Pointer Down");
-            //CroquetBridge.SendToCroquet("event", "pointerDown");
+            //CroquetBridge.Instance.SendToCroquet("event", "pointerDown");
         }
 
         void SendPointerUp(InputAction.CallbackContext callbackContext)
         {
             Debug.Log("[INPUT] Pointer Up");
-            //CroquetBridge.SendToCroquet("event", "pointerUp");
+            //CroquetBridge.Instance.SendToCroquet("event", "pointerUp");
         }
     }
 }

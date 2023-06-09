@@ -104,7 +104,7 @@ public class CroquetInteractableSystem : CroquetSystem
             eventArgs.Add("event");
             eventArgs.Add("pointerHit");
             eventArgs.AddRange(clickDetails);
-            CroquetBridge.SendCroquet(eventArgs.ToArray());
+            CroquetBridge.Instance.SendToCroquet(eventArgs.ToArray());
         }
     }
     

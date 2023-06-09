@@ -47,16 +47,22 @@ public class CroquetBridge : MonoBehaviour
 
     private CroquetSystem[] croquetSystems = new CroquetSystem[0];
     
+    // DEPRECATED
     public static void SendCroquet(params string[] strings)
     {
         Instance.SendToCroquet(strings);    
     }
-    
+
+    // DEPRECATED
     public static void SendCroquetSync(params string[] strings)
     {
         Instance.SendToCroquetSync(strings);   
     }
 
+    private Dictionary<string, List<(GameObject, Action<string>)>> croquetSubscriptions = new Dictionary<string, List<(GameObject, Action<string>)>>();
+    private Dictionary<GameObject, HashSet<string>> croquetSubscriptionsByGameObject =
+        new Dictionary<GameObject, HashSet<string>>();
+        
     // settings for logging and measuring (on JS-side performance log).  absence of an entry for a
     // category is taken as false.
     Dictionary<string, bool> logOptions = new Dictionary<string, bool>();
@@ -506,13 +512,19 @@ public class CroquetBridge : MonoBehaviour
         string[] args = strings[1..];
         Log("verbose", command + ": " + String.Join(", ", args));
 
+        if (command == "croquetEvent")
+        {
+            ProcessCroquetEvent(args);
+            return;
+        }
+
         bool messageWasProcessed = false;
         
-        foreach (CroquetSystem extension in croquetSystems)
+        foreach (CroquetSystem system in croquetSystems)
         {
-            if (extension.KnownCommands.Contains(command))
+            if (system.KnownCommands.Contains(command))
             {
-                extension.ProcessCommand(command, args);
+                system.ProcessCommand(command, args);
                 messageWasProcessed = true;
             }
         }
@@ -541,12 +553,73 @@ public class CroquetBridge : MonoBehaviour
     /// <param name="startIndex"></param>
     void ProcessCroquetMessage(string command, byte[] data, int startIndex)
     {
-        foreach (CroquetSystem extension in croquetSystems)
+        foreach (CroquetSystem system in croquetSystems)
         {
-            if (extension.KnownCommands.Contains(command))
+            if (system.KnownCommands.Contains(command))
             {
-                extension.ProcessCommand(command, data, startIndex);
+                system.ProcessCommand(command, data, startIndex);
                 return;
+            }
+        }
+    }
+
+    public void SubscribeToCroquetEvent(GameObject subscriber, string scope, string eventName, Action<string> handler)
+    {
+        string topic = scope + ":" + eventName;
+        if (!croquetSubscriptions.ContainsKey(topic))
+        {
+            croquetSubscriptions[topic] = new List<(GameObject, Action<string>)>();
+            SendToCroquet("registerForEventTopic", scope, eventName);
+        }
+
+        if (!croquetSubscriptionsByGameObject.ContainsKey(subscriber))
+        {
+            croquetSubscriptionsByGameObject[subscriber] = new HashSet<string>();
+        }
+        croquetSubscriptions[topic].Add((subscriber, handler));
+        croquetSubscriptionsByGameObject[subscriber].Add(topic);
+    }
+
+    public void RemoveCroquetSubscriptionsFor(GameObject subscriber)
+    {
+        if (croquetSubscriptionsByGameObject.ContainsKey(subscriber))
+        {
+            Debug.Log($"removing all subscriptions for {gameObject}");
+            foreach (string topic in croquetSubscriptionsByGameObject[subscriber])
+            {
+                (GameObject, Action<string>)[] subscriptions = croquetSubscriptions[topic].ToArray();
+                foreach ((GameObject gameObject, Action<string> handler) sub in subscriptions)
+                {
+                    if (sub.gameObject == subscriber)
+                    {
+                        croquetSubscriptions[topic].Remove(sub);
+                        if (croquetSubscriptions[topic].Count == 0)
+                        {
+                            Debug.Log($"removed last subscription for {topic}");
+                            croquetSubscriptions.Remove(topic);
+                        }
+                    }
+                }
+            }
+
+            croquetSubscriptionsByGameObject.Remove(subscriber);
+        }
+    }
+    
+    void ProcessCroquetEvent(string[] args)
+    {
+        // args are
+        //   - scope - which may be an actor id, typically from a say()
+        //   - eventName
+        //   - [optional]: arguments, encoded as a single string
+        // we look for subscriptions that match scope:eventName
+        string topic = args[0] + ":" + args[1];
+        if (croquetSubscriptions.ContainsKey(topic))
+        {
+            string argString = args.Length > 2 ? args[2] : "";
+            foreach ((GameObject gameObject, Action<string> handler) sub in croquetSubscriptions[topic])
+            {
+                sub.handler(argString);
             }
         }
     }

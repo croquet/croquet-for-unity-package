@@ -2,6 +2,11 @@
 //
 // Croquet Corporation, 2023
 
+// note on use of string separators in messages across the bridge
+//   \x01 is used to separate the command and string arguments in a message
+//   \x02 to separate entire messages in a bundle
+//   \x03 to separate the elements in an array-type argument on a 'croquetEvent' message
+
 import { v3_equals, q_equals, ViewService, GetViewService, StartWorldcore, ViewRoot } from "@croquet/worldcore-kernel";
 
 globalThis.timedLog = msg => {
@@ -135,8 +140,23 @@ console.log(`PORT ${portStr}`);
                 break;
             }
             case 'event': {
+                // DEPRECATED
                 // args[0] is event type (currently screenTap, screenDouble)
                 if (theGameInputManager) theGameInputManager.handleEvent(args);
+                break;
+            }
+            case 'publish': {
+                // args[0] is scope
+                // args[1] is eventName
+                // args[2] - if supplied - is a string containing either a singleton or array of numbers or strings.  we split out the arrays, but treat a single value as a singleton.  we also don't try to parse numbers.
+                const [ scope, eventName, argString ] = args;
+                // console.log({scope, eventName, argString});
+                if (argString === undefined) session?.view.publish(scope, eventName);
+                else {
+                    let eventArgs = argString.split('\x03');
+                    if (eventArgs.length === 1) eventArgs = eventArgs[0];
+                    session?.view.publish(scope, eventName, eventArgs);
+                }
                 break;
             }
             case 'unityPong':
@@ -237,6 +257,14 @@ export const GameEnginePawnManager = class extends ViewService {
         // console.log('command from Unity: ', { command, args });
         let pawn;
         switch (command) {
+            case 'registerForEventTopic': {
+                const [ scope, eventName ] = args;
+                // console.log(`registering for "${scope}:${eventName}" events`);
+                this.subscribe(scope, eventName, eventArgs => {
+                    this.forwardEventToUnity(scope, eventName, eventArgs);
+                });
+                break;
+            }
             case 'objectCreated': {
                 // args[0] is gameHandle
                 // args[1] is time when Unity created the pawn
@@ -279,6 +307,17 @@ export const GameEnginePawnManager = class extends ViewService {
             }
             default:
                 globalThis.timedLog(`unknown Unity command: ${command}`);
+        }
+    }
+
+    forwardEventToUnity(scope, eventName, eventArgs) {
+        console.log("forwarding event", { scope, eventName, eventArgs });
+        if (eventArgs === undefined) this.sendDeferred('_events', 'croquetEvent', scope, eventName);
+        else {
+            let stringArg;
+            if (Array.isArray(eventArgs)) stringArg = eventArgs.join('\x03');
+            else stringArg = String(eventArgs);
+            this.sendDeferred('_events', 'croquetEvent', scope, eventName, stringArg);
         }
     }
 
