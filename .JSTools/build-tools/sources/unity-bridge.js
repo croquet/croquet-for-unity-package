@@ -227,6 +227,8 @@ export const GameEnginePawnManager = class extends ViewService {
         this.deferredMessagesByGameHandle = new Map(); // handle => [msgs], iterable in the order the handles are mentioned
         this.deferredGeometriesByGameHandle = {}; // handle => msg; order not important
 
+        this.forwardedEventTopics = {}; // topic (scope:eventName) => handler
+
         this.unityMessageThrottle = 45; // ms (every two updates at 26ms)
         this.unityGeometryThrottle = 90; // ms (every four updates at 26ms)
         this.lastMessageFlush = 0;
@@ -258,11 +260,27 @@ export const GameEnginePawnManager = class extends ViewService {
         let pawn;
         switch (command) {
             case 'registerForEventTopic': {
-                const [ scope, eventName ] = args;
-                // console.log(`registering for "${scope}:${eventName}" events`);
-                this.subscribe(scope, eventName, eventArgs => {
-                    this.forwardEventToUnity(scope, eventName, eventArgs);
-                });
+                const topic = args[0];
+                if (!this.forwardedEventTopics[topic]) {
+                    const [ scope, eventName ] = topic.split(':');
+                    // console.log(`registering for "${scope}:${eventName}" events`);
+                    const handler = eventArgs => {
+                        this.forwardEventToUnity(scope, eventName, eventArgs);
+                    };
+                    this.subscribe(scope, eventName, handler);
+                    this.forwardedEventTopics[topic] = handler;
+                }
+                break;
+            }
+            case 'unregisterEventTopic': {
+                const topic = args[0];
+                const handler = this.forwardedEventTopics[topic];
+                if (handler) {
+                    const [ scope, eventName ] = topic.split(':');
+                    // console.log(`unregistering from "${scope}:${eventName}" events`);
+                    this.unsubscribe(scope, eventName, handler);
+                    delete this.forwardedEventTopics[topic];
+                }
                 break;
             }
             case 'objectCreated': {
@@ -311,7 +329,7 @@ export const GameEnginePawnManager = class extends ViewService {
     }
 
     forwardEventToUnity(scope, eventName, eventArgs) {
-        console.log("forwarding event", { scope, eventName, eventArgs });
+        // console.log("forwarding event", { scope, eventName, eventArgs });
         if (eventArgs === undefined) this.sendDeferred('_events', 'croquetEvent', scope, eventName);
         else {
             let stringArg;

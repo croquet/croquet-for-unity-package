@@ -569,7 +569,7 @@ public class CroquetBridge : MonoBehaviour
         if (!croquetSubscriptions.ContainsKey(topic))
         {
             croquetSubscriptions[topic] = new List<(GameObject, Action<string>)>();
-            SendToCroquet("registerForEventTopic", scope, eventName);
+            SendToCroquet("registerForEventTopic", topic);
         }
 
         if (!croquetSubscriptionsByGameObject.ContainsKey(subscriber))
@@ -584,7 +584,7 @@ public class CroquetBridge : MonoBehaviour
     {
         if (croquetSubscriptionsByGameObject.ContainsKey(subscriber))
         {
-            Debug.Log($"removing all subscriptions for {gameObject}");
+            // Debug.Log($"removing all subscriptions for {gameObject}");
             foreach (string topic in croquetSubscriptionsByGameObject[subscriber])
             {
                 (GameObject, Action<string>)[] subscriptions = croquetSubscriptions[topic].ToArray();
@@ -595,8 +595,9 @@ public class CroquetBridge : MonoBehaviour
                         croquetSubscriptions[topic].Remove(sub);
                         if (croquetSubscriptions[topic].Count == 0)
                         {
-                            Debug.Log($"removed last subscription for {topic}");
+                            // Debug.Log($"removed last subscription for {topic}");
                             croquetSubscriptions.Remove(topic);
+                            SendToCroquet("unregisterEventTopic", topic);
                         }
                     }
                 }
