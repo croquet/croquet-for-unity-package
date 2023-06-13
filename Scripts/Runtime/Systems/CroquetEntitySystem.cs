@@ -264,6 +264,10 @@ public class CroquetEntitySystem : CroquetSystem
                 system.UnregisterComponent(componentToUnregister); //crosses fingers
             }
             
+            
+            CroquetBridge.Instance.RemoveCroquetSubscriptionsFor(go);
+            
+            
             DisassociateCroquetHandleToInstanceID(croquetHandle);
 
             Destroy(go);

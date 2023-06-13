@@ -9,7 +9,9 @@ using WebSocketSharp;
 using WebSocketSharp.Server;
 using WebSocketSharp.Net;
 
-
+/// <summary>
+/// There be dragons.
+/// </summary>
 public class CroquetBridge : MonoBehaviour
 {
     public CroquetSettings appProperties;
@@ -87,7 +89,7 @@ public class CroquetBridge : MonoBehaviour
         // If there is an instance, and it's not me, delete myself.
         if (Instance != null && Instance != this) 
         { 
-            Destroy(this); 
+            Destroy(this);
         }
         else 
         { 
@@ -355,6 +357,7 @@ public class CroquetBridge : MonoBehaviour
 
     public void SendToCroquet(params string[] strings)
     {
+        
         deferredMessages.Add(PackCroquetMessage(strings));
     }
 
