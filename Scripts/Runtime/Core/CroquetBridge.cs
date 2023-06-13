@@ -113,9 +113,7 @@ public class CroquetBridge : MonoBehaviour
     {
         croquetSystems.Append(system);
     }
-    
-    
-    
+
     void Start()
     {
         // Frame cap
@@ -568,11 +566,16 @@ public class CroquetBridge : MonoBehaviour
 
     public void SubscribeToCroquetEvent(GameObject subscriber, string scope, string eventName, Action<string> handler)
     {
+        // if this is a Listen() that has been invoked before the object has its croquetActorId,
+        // the scope will be an empty string.  in that case we still record the subscription,
+        // but expect that FixUpEarlyEventActions will be invoked in due course to replace the
+        // subscription with the correct (actor id) scope.
+        
         string topic = scope + ":" + eventName;
         if (!croquetSubscriptions.ContainsKey(topic))
         {
             croquetSubscriptions[topic] = new List<(GameObject, Action<string>)>();
-            SendToCroquet("registerForEventTopic", topic);
+            if (scope != "") SendToCroquet("registerForEventTopic", topic);
         }
 
         if (!croquetSubscriptionsByGameObject.ContainsKey(subscriber))
@@ -583,6 +586,43 @@ public class CroquetBridge : MonoBehaviour
         croquetSubscriptionsByGameObject[subscriber].Add(topic);
     }
 
+    public void FixUpEarlyEventActions(GameObject subscriber, string croquetActorId)
+    {
+        // in principle we could also use this as the time to send Say() events that were sent
+        // before the actor id was known.  for now, those will just have been sent with
+        // empty scopes (and therefore presumably ignored).
+        if (croquetSubscriptionsByGameObject.ContainsKey(subscriber))
+        {
+            // Debug.Log($"removing all subscriptions for {gameObject}");
+            string[] allTopics = croquetSubscriptionsByGameObject[subscriber].ToArray(); // take a copy
+            foreach (string topic in allTopics)
+            {
+                if (topic.StartsWith(':'))
+                {
+                    // found a topic that was supposed to be a Listen.
+                    // go through and find the relevant subscriptions for this gameObject,
+                    // remove them, and make new subscriptions using the right scope.
+                    (GameObject, Action<string>)[] subscriptions = croquetSubscriptions[topic].ToArray();
+                    foreach ((GameObject gameObject, Action<string> handler) sub in subscriptions)
+                    {
+                        if (sub.gameObject == subscriber)
+                        {
+                            string eventName = topic.Split(':')[1];
+                            // Debug.Log($"fixing up subscription to {eventName}");
+                            SubscribeToCroquetEvent(subscriber, croquetActorId, eventName, sub.handler);
+
+                            // then remove the dummy subscription
+                            croquetSubscriptions[topic].Remove(sub);
+                        }
+                    }
+
+                    // now remove the dummy topic from the subs by game object
+                    croquetSubscriptionsByGameObject[subscriber].Remove(topic);
+                }
+            }
+        }
+    }
+    
     public void RemoveCroquetSubscriptionsFor(GameObject subscriber)
     {
         if (croquetSubscriptionsByGameObject.ContainsKey(subscriber))

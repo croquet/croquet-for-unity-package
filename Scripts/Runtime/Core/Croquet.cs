@@ -193,7 +193,7 @@ public static class Croquet
     {
         CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, string.Join<float>('\x03', argFloats));
     }
-
+#if false // needs more work
     /// <summary>
     /// Listen to messages sent directly from the corresponding actor.
     /// </summary>
@@ -260,6 +260,7 @@ public static class Croquet
         };
         CroquetBridge.Instance.SubscribeToCroquetEvent(scope, eventName, forwarder);
     }
+#endif
     #endregion
     
 }

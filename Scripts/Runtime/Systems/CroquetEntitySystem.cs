@@ -190,9 +190,13 @@ public class CroquetEntitySystem : CroquetSystem
         entity.croquetHandle = spec.cH;
         int instanceID = gameObjectToMake.GetInstanceID();
         AssociateCroquetHandleToInstanceID(spec.cH, instanceID);
-        
-        if (spec.cN != "") entity.croquetActorId = spec.cN;
 
+        if (spec.cN != "")
+        {
+            entity.croquetActorId = spec.cN;
+            CroquetBridge.Instance.FixUpEarlyEventActions(gameObjectToMake, entity.croquetActorId);
+        }
+        
         if (spec.cs != "")
         {
             string[] comps = spec.cs.Split(',');
@@ -226,12 +230,7 @@ public class CroquetEntitySystem : CroquetSystem
                 }
             }
         }
-
-        foreach (CroquetEventParticipant eventScript in gameObjectToMake.GetComponents<CroquetEventParticipant>())
-        {
-            eventScript.AddCroquetSubscriptions();
-        }
-
+        
         if (spec.wTP)
         {
             foreach (Renderer renderer in gameObjectToMake.GetComponentsInChildren<Renderer>())
