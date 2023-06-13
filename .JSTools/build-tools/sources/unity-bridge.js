@@ -7,7 +7,7 @@
 //   \x02 to separate entire messages in a bundle
 //   \x03 to separate the elements in an array-type argument on a 'croquetEvent' message
 
-import { v3_equals, q_equals, ViewService, GetViewService, StartWorldcore, ViewRoot } from "@croquet/worldcore-kernel";
+import { mix, Pawn, ViewRoot, ViewService, GetViewService, StartWorldcore, PawnManager, v3_equals, q_equals } from "@croquet/worldcore-kernel";
 
 globalThis.timedLog = msg => {
     const toLog = `${(globalThis.CroquetViewDate || Date).now() % 100000}: ${msg}`;
@@ -259,30 +259,12 @@ export const GameEnginePawnManager = class extends ViewService {
         // console.log('command from Unity: ', { command, args });
         let pawn;
         switch (command) {
-            case 'registerForEventTopic': {
-                const topic = args[0];
-                if (!this.forwardedEventTopics[topic]) {
-                    const [ scope, eventName ] = topic.split(':');
-                    // console.log(`registering for "${scope}:${eventName}" events`);
-                    const handler = eventArgs => {
-                        this.forwardEventToUnity(scope, eventName, eventArgs);
-                    };
-                    this.subscribe(scope, eventName, handler);
-                    this.forwardedEventTopics[topic] = handler;
-                }
+            case 'registerForEventTopic':
+                this.registerTopicForForwarding(args[0]);
                 break;
-            }
-            case 'unregisterEventTopic': {
-                const topic = args[0];
-                const handler = this.forwardedEventTopics[topic];
-                if (handler) {
-                    const [ scope, eventName ] = topic.split(':');
-                    // console.log(`unregistering from "${scope}:${eventName}" events`);
-                    this.unsubscribe(scope, eventName, handler);
-                    delete this.forwardedEventTopics[topic];
-                }
+            case 'unregisterEventTopic':
+                this.unregisterTopicForForwarding(args[0]);
                 break;
-            }
             case 'objectCreated': {
                 // args[0] is gameHandle
                 // args[1] is time when Unity created the pawn
@@ -325,6 +307,28 @@ export const GameEnginePawnManager = class extends ViewService {
             }
             default:
                 globalThis.timedLog(`unknown Unity command: ${command}`);
+        }
+    }
+
+    registerTopicForForwarding(topic) {
+        if (!this.forwardedEventTopics[topic]) {
+            const [scope, eventName] = topic.split(':');
+            // console.log(`registering for "${scope}:${eventName}" events`);
+            const handler = eventArgs => {
+                this.forwardEventToUnity(scope, eventName, eventArgs);
+            };
+            this.subscribe(scope, eventName, handler);
+            this.forwardedEventTopics[topic] = handler;
+        }
+    }
+
+    unregisterTopicForForwarding(topic) {
+        const handler = this.forwardedEventTopics[topic];
+        if (handler) {
+            const [scope, eventName] = topic.split(':');
+            // console.log(`unregistering from "${scope}:${eventName}" events`);
+            this.unsubscribe(scope, eventName, handler);
+            delete this.forwardedEventTopics[topic];
         }
     }
 
@@ -555,19 +559,9 @@ performance.measure(`to U (batch ${this.msgBatch}): ${numMessages} msgs in ${bat
     }
 };
 
+const gamePawnMixins = {};
+
 const buildStats = [], setupStats = [];
-
-export const PM_GameWorldPawn = superclass => class extends superclass {
-    constructor(actor) {
-        super(actor);
-
-        this.pawnManager = GetViewService('GameEnginePawnManager');
-    }
-
-    gameSubscribe(eventType, callback) {
-        this.pawnManager.addEventSubscription(eventType, callback);
-    }
-};
 
 export const PM_GameRendered = superclass => class extends superclass {
     // getters for pawnManager and gameHandle allow them to be accessed even from super constructor
@@ -582,6 +576,14 @@ export const PM_GameRendered = superclass => class extends superclass {
         this.messagesAwaitingCreation = []; // removed once creation is requested
         this.geometryAwaitingCreation = null; // can be written by PM_Spatial and its subclasses
         this.isViewReady = false;
+
+        const eventsListened = actor.pawnListeners;
+        eventsListened.forEach(eventName => {
+            this.pawnManager.registerTopicForForwarding(`${this.actor.id}:${eventName}`);
+        });
+
+        const initArgs = actor.pawnInitializationArgs;
+        this.setGameObject(initArgs);
     }
 
     setGameObject(viewSpec) {
@@ -662,10 +664,6 @@ setupStats[bucket] = (setupStats[bucket] || 0) + 1;
         }
     }
 
-    gameSubscribe(eventType, callback) {
-        this.pawnManager.addEventSubscription(eventType, callback);
-    }
-
     destroy() {
         // console.log(`pawn ${this.gameHandle} destroyed`);
         this.pawnManager.destroyObject(this.gameHandle);
@@ -676,6 +674,7 @@ setupStats[bucket] = (setupStats[bucket] || 0) + 1;
         this.sendToUnity('makeInteractable', layers);
     }
 };
+gamePawnMixins.Base = PM_GameRendered;
 
 export const PM_GameMaterial = superclass => class extends superclass {
     constructor(actor) {
@@ -689,6 +688,7 @@ export const PM_GameMaterial = superclass => class extends superclass {
         this.sendToUnity('setColor', this.actor.color);
     }
 };
+gamePawnMixins.Material = PM_GameMaterial;
 
 export const PM_GameSpatial = superclass => class extends superclass {
 
@@ -761,6 +761,7 @@ export const PM_GameSpatial = superclass => class extends superclass {
     }
 
 };
+gamePawnMixins.Spatial = PM_GameSpatial;
 
 export const PM_GameSmoothed = superclass => class extends PM_GameSpatial(superclass) {
 
@@ -820,6 +821,7 @@ export const PM_GameSmoothed = superclass => class extends PM_GameSpatial(superc
         this._scaleSnapped = this._rotationSnapped = this._translationSnapped = false;
     }
 };
+gamePawnMixins.Smoothed = PM_GameSmoothed;
 
 export const PM_GameAvatar = superclass => class extends superclass {
 
@@ -853,11 +855,48 @@ export const PM_GameAvatar = superclass => class extends superclass {
     drive() { }
 
 };
+gamePawnMixins.Avatar = PM_GameAvatar;
+
+// $$$ confusing naming: GamePawnManager is a specialisation of the standard
+// Worldcore PawnManager, with pawn-creation logic that removes the need for
+// static declaration of pawn classes.
+// GameEnginePawnManager is a new kind of service, created specifically for
+// the bridge to Unity, handling the creation and management of Unity-side
+// gameObjects that track the Croquet pawns.  it could perhaps be renamed
+// to something like GameBridgeManager.
+class GamePawnManager extends PawnManager {
+
+    newPawn(actor) {
+        // for the unity world, pawn classes are built on the fly using
+        // the mixins defined above, based on the pawnMixins list of mixin
+        // names provided by the actor.
+        // if the list is empty, we create a raw Pawn.
+        // if there are any elements in the list, we prepend the obligatory
+        // Base mixin (PM_GameRendered) for a game-rendered pawn.
+
+        const mixinNames = actor.pawnMixins;
+        if (!mixinNames) return null; // an error
+
+        let p = null;
+        if (mixinNames.length === 0) p = new Pawn(actor);
+        else {
+            const mixins = (['Base'].concat(mixinNames)).map(n => gamePawnMixins[n]);
+            const pawnClass = mix(Pawn).with(...mixins);
+            p = new pawnClass(actor);
+        }
+        this.pawns.set(actor.id, p);
+        return p;
+    }
+
+}
+globalThis.CustomPawnManager = GamePawnManager;
 
 export class GameViewRoot extends ViewRoot {
 
     static viewServices() {
-        return [GameEnginePawnManager];
+        // $$$ for now, hard-code these two.  figure out later how to
+        // customise (presumably based on annotation in the ModelRoot)
+        return [GameEnginePawnManager, GameInputManager];
     }
 
     constructor(model) {
