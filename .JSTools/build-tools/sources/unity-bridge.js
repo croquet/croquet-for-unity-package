@@ -864,9 +864,10 @@ gamePawnMixins.Avatar = PM_GameAvatar;
 // the bridge to Unity, handling the creation and management of Unity-side
 // gameObjects that track the Croquet pawns.  it could perhaps be renamed
 // to something like GameBridgeManager.
-class GamePawnManager extends PawnManager {
 
-    newPawn(actor) {
+// $$$ temporary mega-hack: overwrite the newPawn method in the PawnManager
+// prototype.
+PawnManager.prototype.newPawn = function(actor) {
         // for the unity world, pawn classes are built on the fly using
         // the mixins defined above, based on the pawnMixins list of mixin
         // names provided by the actor.
@@ -886,10 +887,7 @@ class GamePawnManager extends PawnManager {
         }
         this.pawns.set(actor.id, p);
         return p;
-    }
-
-}
-globalThis.CustomPawnManager = GamePawnManager;
+};
 
 export class GameViewRoot extends ViewRoot {
 
