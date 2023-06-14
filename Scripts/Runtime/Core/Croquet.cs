@@ -7,7 +7,7 @@ public static class Croquet
     #region Say and Listen Functions
 
     /// <summary>
-    /// Send a message directly to the corresponding actor.
+    /// Send an event directly to the corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -18,7 +18,7 @@ public static class Croquet
     }
     
     /// <summary>
-    /// Send a message directly to the corresponding actor.
+    /// Send an event directly to the corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -30,7 +30,7 @@ public static class Croquet
     }
     
     /// <summary>
-    /// Send a message directly to the corresponding actor.
+    /// Send an event directly to the corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -42,7 +42,7 @@ public static class Croquet
     }
     
     /// <summary>
-    /// Send a message directly to the corresponding actor.
+    /// Send an event directly to the corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -54,7 +54,7 @@ public static class Croquet
     }
     
     /// <summary>
-    /// Send a message directly to the corresponding actor.
+    /// Send an event directly to the corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -66,63 +66,68 @@ public static class Croquet
     }
 
     /// <summary>
-    /// Listen to messages sent directly from the corresponding actor.
+    /// Listen for events sent directly from the corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
     /// <param name="handler"></param>
-    public static void Listen(GameObject gameObject, string eventName, Action handler)
+    public static Action<string> Listen(GameObject gameObject, string eventName, Action handler)
     {
         string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
         Action<string> forwarder = s => handler();
         CroquetBridge.Instance.SubscribeToCroquetEvent(gameObject, scope, eventName, forwarder);
+        return forwarder;
     }
     
     /// <summary>
-    /// Listen to messages sent directly from the corresponding actor.
+    /// Listen for events sent directly from the corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
     /// <param name="handler"></param>
-    public static void Listen(GameObject gameObject, string eventName, Action<string> handler)
+    public static Action<string> Listen(GameObject gameObject, string eventName, Action<string> handler)
     {
         string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
-        CroquetBridge.Instance.SubscribeToCroquetEvent(gameObject, scope, eventName, handler);
+        Action<string> forwarder = s => handler(s); // same type, but we want to ensure a unique handler
+        CroquetBridge.Instance.SubscribeToCroquetEvent(gameObject, scope, eventName, forwarder);
+        return forwarder;
     }
     
     /// <summary>
-    /// Listen to messages sent directly from the corresponding actor.
+    /// Listen for events sent directly from the corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
     /// <param name="handler"></param>
-    public static void Listen(GameObject gameObject, string eventName, Action<string[]> handler)
+    public static Action<string> Listen(GameObject gameObject, string eventName, Action<string[]> handler)
     {
         string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
         Action<string> forwarder = s => handler(s.Split('\x03'));
         CroquetBridge.Instance.SubscribeToCroquetEvent(gameObject, scope, eventName, forwarder);
+        return forwarder;
     }
     
     /// <summary>
-    /// Listen to messages sent directly from the corresponding actor.
+    /// Listen for events sent directly from the corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
     /// <param name="handler"></param>
-    public static void Listen(GameObject gameObject, string eventName, Action<float> handler)
+    public static Action<string> Listen(GameObject gameObject, string eventName, Action<float> handler)
     {
         string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
         Action<string> forwarder = s => handler(float.Parse(s));
         CroquetBridge.Instance.SubscribeToCroquetEvent(gameObject, scope, eventName, forwarder);
+        return forwarder;
     }
     
     /// <summary>
-    /// Listen to messages sent directly from the corresponding actor.
+    /// Listen for events sent directly from the corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
     /// <param name="handler"></param>
-    public static void Listen(GameObject gameObject, string eventName, Action<float[]> handler)
+    public static Action<string> Listen(GameObject gameObject, string eventName, Action<float[]> handler)
     {
         string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
         Action<string> forwarder = s =>
@@ -135,13 +140,27 @@ public static class Croquet
             handler(floats.ToArray());
         };
         CroquetBridge.Instance.SubscribeToCroquetEvent(gameObject, scope, eventName, forwarder);
+        return forwarder;
     }
+
+    /// <summary>
+    /// Cancel listen for events sent directly from the corresponding actor.
+    /// </summary>
+    /// <param name="gameObject"></param>
+    /// <param name="eventName"></param>
+    /// <param name="forwarder"></param>
+    public static void Ignore(GameObject gameObject, string eventName, Action<string> forwarder)
+    {
+        string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
+        CroquetBridge.Instance.UnsubscribeFromCroquetEvent(gameObject,scope, eventName, forwarder);
+    }
+
     #endregion
     
     #region Publish and Subscribe Functions
 
     /// <summary>
-    /// Send a message directly to the corresponding actor.
+    /// Publish an event with explicit scope.
     /// </summary>
     /// <param name="scope"></param>
     /// <param name="eventName"></param>
@@ -151,7 +170,7 @@ public static class Croquet
     }
     
     /// <summary>
-    /// Send a message directly to the corresponding actor.
+    /// Publish an event with explicit scope.
     /// </summary>
     /// <param name="scope"></param>
     /// <param name="eventName"></param>
@@ -162,7 +181,7 @@ public static class Croquet
     }
     
     /// <summary>
-    /// Send a message directly to the corresponding actor.
+    /// Publish an event with explicit scope.
     /// </summary>
     /// <param name="scope"></param>
     /// <param name="eventName"></param>
@@ -173,7 +192,7 @@ public static class Croquet
     }
     
     /// <summary>
-    /// Send a message directly to the corresponding actor.
+    /// Publish an event with explicit scope.
     /// </summary>
     /// <param name="scope"></param>
     /// <param name="eventName"></param>
@@ -184,7 +203,7 @@ public static class Croquet
     }
     
     /// <summary>
-    /// Send a message directly to the corresponding actor.
+    /// Publish an event with explicit scope.
     /// </summary>
     /// <param name="scope"></param>
     /// <param name="eventName"></param>
@@ -193,61 +212,66 @@ public static class Croquet
     {
         CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, string.Join<float>('\x03', argFloats));
     }
-#if false // needs more work
+
     /// <summary>
-    /// Listen to messages sent directly from the corresponding actor.
+    /// Listen for events sent with explicit scope.
     /// </summary>
     /// <param name="scope"></param>
     /// <param name="eventName"></param>
     /// <param name="handler"></param>
-    public static void Subscribe(string scope, string eventName, Action handler)
+    public static Action<string> Subscribe(string scope, string eventName, Action handler)
     {
         Action<string> forwarder = s => handler();
         CroquetBridge.Instance.SubscribeToCroquetEvent(scope, eventName, forwarder);
+        return forwarder;
     }
     
     /// <summary>
-    /// Listen to messages sent directly from the corresponding actor.
+    /// Listen for events sent with explicit scope.
     /// </summary>
     /// <param name="scope"></param>
     /// <param name="eventName"></param>
     /// <param name="handler"></param>
-    public static void Subscribe(string scope, string eventName, Action<string> handler)
+    public static Action<string> Subscribe(string scope, string eventName, Action<string> handler)
     {
-        CroquetBridge.Instance.SubscribeToCroquetEvent(scope, eventName, handler);
+        Action<string> forwarder = s => handler(s); // same type, but we want to ensure a unique handler
+        CroquetBridge.Instance.SubscribeToCroquetEvent(scope, eventName, forwarder);
+        return forwarder;
     }
     
     /// <summary>
-    /// Listen to messages sent directly from the corresponding actor.
+    /// Listen for events sent with explicit scope.
     /// </summary>
     /// <param name="scope"></param>
     /// <param name="eventName"></param>
     /// <param name="handler"></param>
-    public static void Subscribe(string scope, string eventName, Action<string[]> handler)
+    public static Action<string> Subscribe(string scope, string eventName, Action<string[]> handler)
     {
         Action<string> forwarder = s => handler(s.Split('\x03'));
         CroquetBridge.Instance.SubscribeToCroquetEvent(scope, eventName, forwarder);
+        return forwarder;
     }
     
     /// <summary>
-    /// Listen to messages sent directly from the corresponding actor.
+    /// Listen for events sent with explicit scope.
     /// </summary>
     /// <param name="scope"></param>
     /// <param name="eventName"></param>
     /// <param name="handler"></param>
-    public static void Subscribe(string scope, string eventName, Action<float> handler)
+    public static Action<string> Subscribe(string scope, string eventName, Action<float> handler)
     {
         Action<string> forwarder = s => handler(float.Parse(s));
         CroquetBridge.Instance.SubscribeToCroquetEvent(scope, eventName, forwarder);
+        return forwarder;
     }
     
     /// <summary>
-    /// Listen to messages sent directly from the corresponding actor.
+    /// Listen for events sent with explicit scope.
     /// </summary>
     /// <param name="scope"></param>
     /// <param name="eventName"></param>
     /// <param name="handler"></param>
-    public static void Subscribe(string scope, string eventName, Action<float[]> handler)
+    public static Action<string> Subscribe(string scope, string eventName, Action<float[]> handler)
     {
         Action<string> forwarder = s =>
         {
@@ -259,8 +283,21 @@ public static class Croquet
             handler(floats.ToArray());
         };
         CroquetBridge.Instance.SubscribeToCroquetEvent(scope, eventName, forwarder);
+        return forwarder;
     }
-#endif
+
+    /// <summary>
+    /// Unsubscribe from events sent with explicit scope.
+    /// </summary>
+    /// <param name="scope"></param>
+    /// <param name="eventName"></param>
+    /// <param name="forwarder"></param>
+    public static void Unsubscribe(string scope, string eventName, Action<string> forwarder)
+    {
+        CroquetBridge.Instance.UnsubscribeFromCroquetEvent(scope, eventName, forwarder);
+    }
+
     #endregion
     
 }
+

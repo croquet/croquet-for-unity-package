@@ -43,7 +43,7 @@ public class CroquetBridge : MonoBehaviour
 
     LoadingProgressDisplay loadingProgressDisplay;
     public bool loadingInProgress = true;
-
+    
     public static CroquetBridge Instance { get; private set; }
     private CroquetRunner croquetRunner;
 
@@ -153,14 +153,17 @@ public class CroquetBridge : MonoBehaviour
             string apiKey = Instance.appProperties.apiKey;
             string appId = Instance.appProperties.appPrefix + "." + Instance.appName;
             string sessionName = Instance.sessionNameValue.ToString();
+            string earlySubscriptionTopics = Instance.EarlySubscriptionTopics();
             
             string[] command = new string[] {
                 "readyForSession",
                 apiKey,
                 appId,
-                sessionName    
+                sessionName,
+                earlySubscriptionTopics
             };
 
+            // send the message directly (bypassing the deferred-message queue)
             string msg = String.Join('\x01', command);
             clientSock.Send(msg);
             
@@ -182,6 +185,8 @@ public class CroquetBridge : MonoBehaviour
     // TODO: remove sentinel value
     public int sessionNameValue = -999; // @@ when running in the editor it would be good to see this; figure out how to make it read-only
     
+    public bool simulateNetworkGlitch = false;
+
     void StartWS()
     {
         // TODO: could try this workaround (effectively disabling Nagel), as suggested at
@@ -399,7 +404,14 @@ public class CroquetBridge : MonoBehaviour
         {
             if (loadingProgressDisplay)
             {
+                // @@ ought to do this just once
                 loadingProgressDisplay.Hide();
+            }
+
+            if (simulateNetworkGlitch)
+            {
+                SendToCroquetSync("simulateNetworkGlitch");
+                simulateNetworkGlitch = false;
             }
         }
     }
@@ -575,15 +587,104 @@ public class CroquetBridge : MonoBehaviour
         if (!croquetSubscriptions.ContainsKey(topic))
         {
             croquetSubscriptions[topic] = new List<(GameObject, Action<string>)>();
-            if (scope != "") SendToCroquet("registerForEventTopic", topic);
+            if (scope != "" && croquetSessionRunning)
+            {
+                SendToCroquet("registerForEventTopic", topic);
+            }
         }
 
-        if (!croquetSubscriptionsByGameObject.ContainsKey(subscriber))
+        if (subscriber != null)
         {
-            croquetSubscriptionsByGameObject[subscriber] = new HashSet<string>();
+            if (!croquetSubscriptionsByGameObject.ContainsKey(subscriber))
+            {
+                croquetSubscriptionsByGameObject[subscriber] = new HashSet<string>();
+            }
+            croquetSubscriptionsByGameObject[subscriber].Add(topic);
         }
+
         croquetSubscriptions[topic].Add((subscriber, handler));
-        croquetSubscriptionsByGameObject[subscriber].Add(topic);
+    }
+
+    public void SubscribeToCroquetEvent(string scope, string eventName, Action<string> handler)
+    {
+        SubscribeToCroquetEvent(null, scope, eventName, handler);
+    }
+
+    public string EarlySubscriptionTopics()
+    {
+        // gameObjects and scripts that start up before the Croquet view has been built are 
+        // allowed to request subscriptions to Croquet events.  when the bridge connection is
+        // first made, we gather all existing subscriptions that have a null subscriber (i.e.,
+        // are not pawn-specific Listens) and tell Croquet to be ready to send those events as
+        // soon as the session starts.
+        HashSet<string> topics = new HashSet<string>();
+        foreach (string topic in croquetSubscriptions.Keys)
+        {
+            List<(GameObject, Action<string>)> subscriptions = croquetSubscriptions[topic];
+            foreach ((GameObject gameObject, Action<string> handler) sub in subscriptions)
+            {
+                if (sub.gameObject == null)
+                {
+                    topics.Add(topic);
+                }
+            }
+        }
+
+        string joinedTopics = "";
+        if (topics.Count > 0)
+        {
+            Debug.Log($"sending {topics.Count} early-subscription topics");
+            joinedTopics = string.Join('\x03', topics.ToArray());
+        }
+        return joinedTopics;
+    }
+
+    public void UnsubscribeFromCroquetEvent(GameObject gameObject, string scope, string eventName,
+        Action<string> forwarder)
+    {
+        // gameObject will be null for non-Listen subscriptions.
+        // if gameObject is *not* null, we need to check whether the removal of this subscription
+        // means that the topic can be removed from the list being listened to by this object.
+        // that will be the case as long as there aren't subscriptions for the same gameObject and
+        // same topic but with different handlers.
+        string topic = scope + ":" + eventName;
+        if (croquetSubscriptions.ContainsKey(topic))
+        {
+            int remainingSubscriptionsForSameObject = 0;
+            (GameObject, Action<string>)[] subscriptions = croquetSubscriptions[topic].ToArray();
+            foreach ((GameObject gameObject, Action<string> handler) sub in subscriptions)
+            {
+                if (sub.handler.Equals(forwarder))
+                {
+                    croquetSubscriptions[topic].Remove(sub);
+                    if (croquetSubscriptions[topic].Count == 0)
+                    {
+                        // no remaining subscriptions for this topic at all
+                        Debug.Log($"removed last subscription for {topic}");
+                        croquetSubscriptions.Remove(topic);
+                        if (croquetSessionRunning)
+                        {
+                            SendToCroquet("unregisterEventTopic", topic);
+                        }
+                    }
+                }
+                else if (gameObject != null && sub.gameObject.Equals(gameObject))
+                {
+                    remainingSubscriptionsForSameObject++;
+                }
+            }
+
+            if (gameObject != null && remainingSubscriptionsForSameObject == 0)
+            {
+                Debug.Log($"removed {topic} from object's topic list");
+                croquetSubscriptionsByGameObject[gameObject].Remove(topic);
+            }
+        }
+    }
+
+    public void UnsubscribeFromCroquetEvent(string scope, string eventName, Action<string> forwarder)
+    {
+        UnsubscribeFromCroquetEvent(null, scope, eventName, forwarder);
     }
 
     public void FixUpEarlyEventActions(GameObject subscriber, string croquetActorId)
@@ -661,7 +762,7 @@ public class CroquetBridge : MonoBehaviour
         if (croquetSubscriptions.ContainsKey(topic))
         {
             string argString = args.Length > 2 ? args[2] : "";
-            foreach ((GameObject gameObject, Action<string> handler) sub in croquetSubscriptions[topic])
+            foreach ((GameObject gameObject, Action<string> handler) sub in croquetSubscriptions[topic].ToArray()) // take copy in case some mutating happens
             {
                 sub.handler(argString);
             }

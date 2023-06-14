@@ -20,6 +20,8 @@ globalThis.CROQUET_NODE = typeof window === 'undefined';
 
 let theGameInputManager;
 
+// theGameEngineBridge is a singleton instance of BridgeToUnity, built immediately
+// on loading of this file.  it is never rebuilt.
 class BridgeToUnity {
     constructor() {
         this.bridgeIsConnected = false;
@@ -130,12 +132,14 @@ console.log(`PORT ${portStr}`);
                 break;
             }
             case 'readyForSession': {
-                // args are [apiKey, appId, sessionName ]
-                const [apiKey, appId, sessionName ] = args;
+                // args are [apiKey, appId, sessionName, earlySubscriptionTopics ]
+                const [apiKey, appId, sessionName, earlySubscriptionTopics ] = args;
                 globalThis.timedLog(`starting session of ${appId} with key ${apiKey}`);
                 this.apiKey = apiKey;
                 this.appId = appId;
                 this.sessionName = sessionName;
+                console.log({earlySubscriptionTopics});
+                this.earlySubscriptionTopics = earlySubscriptionTopics; // \x03-separated list of topics
                 this.setReady();
                 break;
             }
@@ -176,6 +180,9 @@ console.log(`PORT ${portStr}`);
                 performance.measure(measureText, { start: startPerf, end: startPerf + Number(durationMS) });
                 break;
             }
+            case 'simulateNetworkGlitch':
+                this.simulateNetworkGlitch();
+                break;
             case 'shutdown':
                 // @@ not sure this will ever make sense
                 globalThis.timedLog('shutdown event received');
@@ -210,6 +217,12 @@ console.log(`PORT ${portStr}`);
         this.sendCommand('_teatime', String(Math.floor(teatime)));
     }
 
+    simulateNetworkGlitch() {
+        CROQUETVM.controller.connection.reconnectDelay = 3000;
+        CROQUETVM.controller.connection.socket.close(4000, 'simulate glitch');
+        setTimeout(() => CROQUETVM.controller.connection.reconnectDelay = 0, 500);
+    }
+
 showSetupStats() {
     // pawns keep stats on how long they took to set up.  if this isn't called, the stats will keep building up (but basically harmless).
     console.log(`build: ${Object.entries(buildStats).map(([k, v]) => `${k}:${v}`).join(' ')} total: ${Object.entries(setupStats).map(([k, v]) => `${k}:${v}`).join(' ')}`);
@@ -218,6 +231,9 @@ showSetupStats() {
 }
 export const theGameEngineBridge = new BridgeToUnity();
 
+// GameEnginePawnManager is a ViewService, and is therefore constructed afresh
+// on Session.join().  if there is a network glitch, the manager will be destroyed
+// on disconnection and then rebuilt when the session re-connects.
 export const GameEnginePawnManager = class extends ViewService {
     constructor(name) {
         super(name || "GameEnginePawnManager");
@@ -235,6 +251,11 @@ export const GameEnginePawnManager = class extends ViewService {
         this.lastGeometryFlush = 0;
 
         theGameEngineBridge.setCommandHandler(this.handleUnityCommand.bind(this));
+
+        const earlySubs = theGameEngineBridge.earlySubscriptionTopics;
+        if (earlySubs) {
+            earlySubs.split('\x03').forEach(topic => this.registerTopicForForwarding(topic))
+        }
     }
 
     destroy() {
@@ -313,7 +334,7 @@ export const GameEnginePawnManager = class extends ViewService {
     registerTopicForForwarding(topic) {
         if (!this.forwardedEventTopics[topic]) {
             const [scope, eventName] = topic.split(':');
-            // console.log(`registering for "${scope}:${eventName}" events`);
+            console.log(`registering for "${scope}:${eventName}" events`);
             const handler = eventArgs => {
                 this.forwardEventToUnity(scope, eventName, eventArgs);
             };
