@@ -354,7 +354,7 @@ export const GameEnginePawnManager = class extends ViewService {
     }
 
     forwardEventToUnity(scope, eventName, eventArgs, associatedHandle) {
-        console.log("forwarding event", { scope, eventName, eventArgs });
+        // console.log("forwarding event", { scope, eventName, eventArgs });
         if (eventArgs === undefined) this.sendDeferred('_events', 'croquetEvent', scope, eventName);
         else {
             let stringArg;

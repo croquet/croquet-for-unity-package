@@ -186,6 +186,10 @@ public class CroquetEntitySystem : CroquetSystem
             }
         }
 
+        if (gameObjectToMake.GetComponent<CroquetEntityComponent>() == null){
+            gameObjectToMake.AddComponent<CroquetEntityComponent>();
+        }
+        
         CroquetEntityComponent entity = gameObjectToMake.GetComponent<CroquetEntityComponent>();
         entity.croquetHandle = spec.cH;
         int instanceID = gameObjectToMake.GetInstanceID();
