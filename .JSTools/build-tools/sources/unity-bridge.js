@@ -360,7 +360,7 @@ export const GameEnginePawnManager = class extends ViewService {
             let stringArg;
             if (Array.isArray(eventArgs)) stringArg = eventArgs.join('\x03');
             else stringArg = String(eventArgs);
-            // associatedHandle is used in sending initial values of listened properties 
+            // associatedHandle is used in sending initial values of listened properties
             // during pawn construction, to ensure that they are properly ordered wrt
             // the makeObject command
             this.sendDeferred(associatedHandle || '_events', 'croquetEvent', scope, eventName, stringArg);
@@ -1101,7 +1101,7 @@ export async function StartSession(model, view) {
         autoSleep: false,
         expectedSimFPS: 0, // 0 => don't attempt to load-balance simulation
         flags: ['unity'],
-        debug: globalThis.CROQUET_NODE ? ['session'] : ['session', 'messages'],
+        // debug: globalThis.CROQUET_NODE ? ['session'] : ['session', 'messages'],
         model,
         view,
         progressReporter: ratio => {
