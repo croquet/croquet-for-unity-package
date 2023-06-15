@@ -612,7 +612,7 @@ export const PM_GameRendered = superclass => class extends superclass {
         }
 
         const initArgs = actor.pawnInitializationArgs;
-        this.setGameObject(initArgs);
+        this.setGameObject(initArgs); // args may be adjusted by mixins
 
         const propertiesListened = actor.pawnPropertyListeners;
         if (propertiesListened) {
@@ -816,6 +816,11 @@ export const PM_GameSmoothed = superclass => class extends PM_GameSpatial(superc
     // $$$ should send the tug value across the bridge, and update when it changes
     set tug(t) { this._tug = t }
     get tug() { return this._tug }
+
+    setGameObject(viewSpec) {
+        viewSpec.waitToPresent = true;
+        super.setGameObject(viewSpec);
+    }
 
     scaleTo(v) {
         this.say("setScale", v, this.throttle);
