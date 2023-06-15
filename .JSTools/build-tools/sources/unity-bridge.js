@@ -600,7 +600,10 @@ export const PM_GameRendered = superclass => class extends superclass {
         this.messagesAwaitingCreation = []; // removed once creation is requested
         this.geometryAwaitingCreation = null; // can be written by PM_Spatial and its subclasses
         this.isViewReady = false;
+    }
 
+    initialize(actor) {
+        // construction is complete, through all mixin layers
         const eventsListened = actor.pawnListeners;
         if (eventsListened) {
             eventsListened.forEach(eventName => {
@@ -916,9 +919,10 @@ PawnManager.prototype.newPawn = function(actor) {
         let p = null;
         if (mixinNames.length === 0) p = new Pawn(actor);
         else {
-            const mixins = (['Base'].concat(mixinNames)).map(n => gamePawnMixins[n]);
+            const mixins = ['Base'].concat(mixinNames).map(n => gamePawnMixins[n]);
             const pawnClass = mix(Pawn).with(...mixins);
             p = new pawnClass(actor);
+            p.initialize(actor);
         }
         this.pawns.set(actor.id, p);
         return p;
