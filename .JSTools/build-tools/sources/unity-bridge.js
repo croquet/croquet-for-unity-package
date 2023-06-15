@@ -333,8 +333,8 @@ export const GameEnginePawnManager = class extends ViewService {
 
     registerTopicForForwarding(topic) {
         if (!this.forwardedEventTopics[topic]) {
+            console.log(`registering for "${topic}" events`);
             const [scope, eventName] = topic.split(':');
-            console.log(`registering for "${scope}:${eventName}" events`);
             const handler = eventArgs => {
                 this.forwardEventToUnity(scope, eventName, eventArgs);
             };
@@ -353,14 +353,17 @@ export const GameEnginePawnManager = class extends ViewService {
         }
     }
 
-    forwardEventToUnity(scope, eventName, eventArgs) {
-        // console.log("forwarding event", { scope, eventName, eventArgs });
+    forwardEventToUnity(scope, eventName, eventArgs, associatedHandle) {
+        console.log("forwarding event", { scope, eventName, eventArgs });
         if (eventArgs === undefined) this.sendDeferred('_events', 'croquetEvent', scope, eventName);
         else {
             let stringArg;
             if (Array.isArray(eventArgs)) stringArg = eventArgs.join('\x03');
             else stringArg = String(eventArgs);
-            this.sendDeferred('_events', 'croquetEvent', scope, eventName, stringArg);
+            // associatedHandle is used in sending initial values of listened properties 
+            // during pawn construction, to ensure that they are properly ordered wrt
+            // the makeObject command
+            this.sendDeferred(associatedHandle || '_events', 'croquetEvent', scope, eventName, stringArg);
         }
     }
 
@@ -599,12 +602,23 @@ export const PM_GameRendered = superclass => class extends superclass {
         this.isViewReady = false;
 
         const eventsListened = actor.pawnListeners;
-        eventsListened.forEach(eventName => {
-            this.pawnManager.registerTopicForForwarding(`${this.actor.id}:${eventName}`);
-        });
+        if (eventsListened) {
+            eventsListened.forEach(eventName => {
+                this.pawnManager.registerTopicForForwarding(`${this.actor.id}:${eventName}`);
+            });
+        }
 
         const initArgs = actor.pawnInitializationArgs;
         this.setGameObject(initArgs);
+
+        const propertiesListened = actor.pawnPropertyListeners;
+        if (propertiesListened) {
+            propertiesListened.forEach(propertyName => {
+                const setEventName = `${propertyName}Set`;
+                this.pawnManager.registerTopicForForwarding(`${this.actor.id}:${setEventName}`);
+                this.pawnManager.forwardEventToUnity(actor.id, setEventName, this.actor[propertyName], this.gameHandle);
+            });
+        }
     }
 
     setGameObject(viewSpec) {
