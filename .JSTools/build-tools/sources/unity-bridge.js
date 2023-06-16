@@ -830,6 +830,10 @@ export const PM_GameSmoothed = superclass => class extends PM_GameSpatial(superc
 
     setGameObject(viewSpec) {
         viewSpec.waitToPresent = true;
+        const components = viewSpec.extraComponents ? viewSpec.extraComponents.split(',') : [];
+        if (!components.includes('PresentOnFirstMove')) {
+            viewSpec.extraComponents = (components.concat(['PresentOnFirstMove'])).join(',');
+        }
         super.setGameObject(viewSpec);
     }
 
