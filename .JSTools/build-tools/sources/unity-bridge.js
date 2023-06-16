@@ -5,7 +5,7 @@
 // note on use of string separators in messages across the bridge
 //   \x01 is used to separate the command and string arguments in a message
 //   \x02 to separate entire messages in a bundle
-//   \x03 to separate the elements in an array-type argument on a 'croquetEvent' message
+//   \x03 to separate the elements in an array-type argument on a 'croquetPub' message
 
 import { mix, Pawn, ViewRoot, ViewService, GetViewService, StartWorldcore, PawnManager, v3_equals, q_equals } from "@croquet/worldcore-kernel";
 
@@ -242,6 +242,7 @@ export const GameEnginePawnManager = class extends ViewService {
         this.pawnsByGameHandle = {}; // handle => pawn
         this.deferredMessagesByGameHandle = new Map(); // handle => [msgs], iterable in the order the handles are mentioned
         this.deferredGeometriesByGameHandle = {}; // handle => msg; order not important
+        this.deferredOtherMessages = []; // events etc, always sent after gameHandle-specific messages
 
         this.forwardedEventTopics = {}; // topic (scope:eventName) => handler
 
@@ -256,6 +257,8 @@ export const GameEnginePawnManager = class extends ViewService {
         if (earlySubs) {
             earlySubs.split('\x03').forEach(topic => this.registerTopicForForwarding(topic))
         }
+
+        this.subscribe('__wc', 'say', this.forwardSayToUnity);
     }
 
     destroy() {
@@ -333,7 +336,7 @@ export const GameEnginePawnManager = class extends ViewService {
 
     registerTopicForForwarding(topic) {
         if (!this.forwardedEventTopics[topic]) {
-            console.log(`registering for "${topic}" events`);
+            // console.log(`registering for "${topic}" events`);
             const [scope, eventName] = topic.split(':');
             const handler = eventArgs => {
                 this.forwardEventToUnity(scope, eventName, eventArgs);
@@ -353,18 +356,20 @@ export const GameEnginePawnManager = class extends ViewService {
         }
     }
 
-    forwardEventToUnity(scope, eventName, eventArgs, associatedHandle) {
+    forwardEventToUnity(scope, eventName, eventArgs) {
         // console.log("forwarding event", { scope, eventName, eventArgs });
-        if (eventArgs === undefined) this.sendDeferred('_events', 'croquetEvent', scope, eventName);
+        if (eventArgs === undefined) this.sendDeferred(null, 'croquetPub', scope, eventName);
         else {
             let stringArg;
             if (Array.isArray(eventArgs)) stringArg = eventArgs.join('\x03');
             else stringArg = String(eventArgs);
-            // associatedHandle is used in sending initial values of listened properties
-            // during pawn construction, to ensure that they are properly ordered wrt
-            // the makeObject command
-            this.sendDeferred(associatedHandle || '_events', 'croquetEvent', scope, eventName, stringArg);
+            this.sendDeferred(null, 'croquetPub', scope, eventName, stringArg);
         }
+    }
+
+    forwardSayToUnity(data) {
+        const [ actorId, eventName, args ] = data;
+        this.forwardEventToUnity(actorId, eventName, args);
     }
 
     makeGameObject(pawn, unityViewSpec) {
@@ -426,10 +431,14 @@ export const GameEnginePawnManager = class extends ViewService {
     }
 
     sendDeferred(gameHandle, command, ...args) {
-        let deferredForSame = this.deferredMessagesByGameHandle.get(gameHandle);
-        if (!deferredForSame) {
-            deferredForSame = [];
-            this.deferredMessagesByGameHandle.set(gameHandle, deferredForSame);
+        let deferredForSame;
+        if (gameHandle == null) deferredForSame = this.deferredOtherMessages;
+        else {
+            deferredForSame = this.deferredMessagesByGameHandle.get(gameHandle);
+            if (!deferredForSame) {
+                deferredForSame = [];
+                this.deferredMessagesByGameHandle.set(gameHandle, deferredForSame);
+            }
         }
         deferredForSame.push({ command, args });
     }
@@ -499,19 +508,21 @@ const pNow = performance.now();
         };
 
         const messages = [];
+        const addMessage = spec => {
+            const { command } = spec;
+            let { args } = spec;
+            if (args.length) {
+                const transformer = transformers[command] || transformers.default;
+                args = transformer(args);
+            }
+            messages.push([command, ...args].join('\x01'));
+        }
         this.deferredMessagesByGameHandle.forEach(msgSpecs => {
-            msgSpecs.forEach(spec => {
-                const { command } = spec;
-                let { args } = spec;
-                if (args.length) {
-                    const transformer = transformers[command] || transformers.default;
-                    args = transformer(args);
-                }
-                messages.push([command, ...args].join('\x01'));
-            });
+            msgSpecs.forEach(addMessage);
         });
-
         this.deferredMessagesByGameHandle.clear();
+        this.deferredOtherMessages.forEach(addMessage);
+        this.deferredOtherMessages.length = 0;
 
         const numMessages = messages.length; // before sendBundle messes with it
         if (numMessages > 1) {
@@ -619,7 +630,7 @@ export const PM_GameRendered = superclass => class extends superclass {
             propertiesListened.forEach(propertyName => {
                 const setEventName = `${propertyName}Set`;
                 this.pawnManager.registerTopicForForwarding(`${this.actor.id}:${setEventName}`);
-                this.pawnManager.forwardEventToUnity(actor.id, setEventName, this.actor[propertyName], this.gameHandle);
+                this.pawnManager.forwardEventToUnity(actor.id, setEventName, this.actor[propertyName]);
             });
         }
     }
@@ -747,7 +758,7 @@ export const PM_GameSpatial = superclass => class extends superclass {
     get up() { return this.actor.up }
 
     geometryUpdateIfNeeded() {
-        if (this.driving || this.rigidBodyType === 'static' || !this.isViewReady || this.doomed) return null;
+        if ((this.driving && this.lastSentTranslation) || this.rigidBodyType === 'static' || !this.isViewReady || this.doomed) return null;
 
         const updates = {};
         const { scale, rotation, translation } = this; // NB: the actor's direct property values

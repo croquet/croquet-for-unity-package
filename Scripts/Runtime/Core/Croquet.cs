@@ -75,7 +75,7 @@ public static class Croquet
     {
         string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
         Action<string> forwarder = s => handler();
-        CroquetBridge.Instance.SubscribeToCroquetEvent(gameObject, scope, eventName, forwarder);
+        CroquetBridge.Instance.ListenForCroquetEvent(gameObject, scope, eventName, forwarder);
         return forwarder;
     }
     
@@ -89,7 +89,7 @@ public static class Croquet
     {
         string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
         Action<string> forwarder = s => handler(s); // same type, but we want to ensure a unique handler
-        CroquetBridge.Instance.SubscribeToCroquetEvent(gameObject, scope, eventName, forwarder);
+        CroquetBridge.Instance.ListenForCroquetEvent(gameObject, scope, eventName, forwarder);
         return forwarder;
     }
     
@@ -103,7 +103,7 @@ public static class Croquet
     {
         string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
         Action<string> forwarder = s => handler(s.Split('\x03'));
-        CroquetBridge.Instance.SubscribeToCroquetEvent(gameObject, scope, eventName, forwarder);
+        CroquetBridge.Instance.ListenForCroquetEvent(gameObject, scope, eventName, forwarder);
         return forwarder;
     }
     
@@ -117,7 +117,7 @@ public static class Croquet
     {
         string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
         Action<string> forwarder = s => handler(float.Parse(s));
-        CroquetBridge.Instance.SubscribeToCroquetEvent(gameObject, scope, eventName, forwarder);
+        CroquetBridge.Instance.ListenForCroquetEvent(gameObject, scope, eventName, forwarder);
         return forwarder;
     }
     
@@ -139,7 +139,7 @@ public static class Croquet
             }
             handler(floats.ToArray());
         };
-        CroquetBridge.Instance.SubscribeToCroquetEvent(gameObject, scope, eventName, forwarder);
+        CroquetBridge.Instance.ListenForCroquetEvent(gameObject, scope, eventName, forwarder);
         return forwarder;
     }
 

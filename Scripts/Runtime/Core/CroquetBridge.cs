@@ -530,9 +530,9 @@ public class CroquetBridge : MonoBehaviour
         string[] args = strings[1..];
         Log("verbose", command + ": " + String.Join(", ", args));
 
-        if (command == "croquetEvent")
+        if (command == "croquetPub")
         {
-            ProcessCroquetEvent(args);
+            ProcessCroquetPublish(args);
             return;
         }
 
@@ -581,40 +581,42 @@ public class CroquetBridge : MonoBehaviour
         }
     }
 
-    public void SubscribeToCroquetEvent(GameObject subscriber, string scope, string eventName, Action<string> handler)
+    public void SubscribeToCroquetEvent(string scope, string eventName, Action<string> handler)
     {
-        // if this is a Listen() that has been invoked before the object has its croquetActorId,
-        // the scope will be an empty string.  in that case we still record the subscription,
-        // but expect that FixUpEarlyEventActions will be invoked in due course to replace the
-        // subscription with the correct (actor id) scope.
-        
         string topic = scope + ":" + eventName;
         if (!croquetSubscriptions.ContainsKey(topic))
         {
             croquetSubscriptions[topic] = new List<(GameObject, Action<string>)>();
-            if (scope != "" && croquetSessionRunning)
+            if (croquetSessionRunning)
             {
                 SendToCroquet("registerForEventTopic", topic);
             }
         }
+        croquetSubscriptions[topic].Add((null, handler));
+    }
+    
+    public void ListenForCroquetEvent(GameObject subscriber, string scope, string eventName, Action<string> handler)
+    {
+        // if this has been invoked before the object has its croquetActorId,
+        // the scope will be an empty string.  in that case we still record the subscription,
+        // but expect that FixUpEarlyEventActions will be invoked shortly to replace the
+        // subscription with the correct (actor id) scope.
 
-        if (subscriber != null)
+        string topic = scope + ":" + eventName;
+        if (!croquetSubscriptions.ContainsKey(topic))
         {
-            if (!croquetSubscriptionsByGameObject.ContainsKey(subscriber))
-            {
-                croquetSubscriptionsByGameObject[subscriber] = new HashSet<string>();
-            }
-            croquetSubscriptionsByGameObject[subscriber].Add(topic);
+            croquetSubscriptions[topic] = new List<(GameObject, Action<string>)>();
         }
+
+        if (!croquetSubscriptionsByGameObject.ContainsKey(subscriber))
+        {
+            croquetSubscriptionsByGameObject[subscriber] = new HashSet<string>();
+        }
+        croquetSubscriptionsByGameObject[subscriber].Add(topic);
 
         croquetSubscriptions[topic].Add((subscriber, handler));
     }
-
-    public void SubscribeToCroquetEvent(string scope, string eventName, Action<string> handler)
-    {
-        SubscribeToCroquetEvent(null, scope, eventName, handler);
-    }
-
+    
     public string EarlySubscriptionTopics()
     {
         // gameObjects and scripts that start up before the Croquet view has been built are 
@@ -715,7 +717,7 @@ public class CroquetBridge : MonoBehaviour
                         {
                             string eventName = topic.Split(':')[1];
                             // Debug.Log($"fixing up subscription to {eventName}");
-                            SubscribeToCroquetEvent(subscriber, croquetActorId, eventName, sub.handler);
+                            ListenForCroquetEvent(subscriber, croquetActorId, eventName, sub.handler);
 
                             // then remove the dummy subscription
                             croquetSubscriptions[topic].Remove(sub);
@@ -756,24 +758,26 @@ public class CroquetBridge : MonoBehaviour
         }
     }
     
-    void ProcessCroquetEvent(string[] args)
+    void ProcessCroquetPublish(string[] args)
     {
         // args are
-        //   - scope - which may be an actor id, typically from a say()
+        //   - scope
         //   - eventName
         //   - [optional]: arguments, encoded as a single string
-        // we look for subscriptions that match scope:eventName
-        string topic = args[0] + ":" + args[1];
+
+        string scope = args[0];
+        string eventName = args[1];
+        string argString = args.Length > 2 ? args[2] : "";
+        string topic = $"{scope}:{eventName}";
         if (croquetSubscriptions.ContainsKey(topic))
         {
-            string argString = args.Length > 2 ? args[2] : "";
             foreach ((GameObject gameObject, Action<string> handler) sub in croquetSubscriptions[topic].ToArray()) // take copy in case some mutating happens
             {
                 sub.handler(argString);
             }
         }
     }
-
+    
     void HandleCroquetPing(string time)
     {
         Log("diagnostics", "PING");
