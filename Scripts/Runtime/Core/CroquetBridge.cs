@@ -186,6 +186,7 @@ public class CroquetBridge : MonoBehaviour
     public int sessionNameValue = -999; // @@ when running in the editor it would be good to see this; figure out how to make it read-only
     
     public bool simulateNetworkGlitch = false;
+    public float networkGlitchDuration = 3.0f;
 
     void StartWS()
     {
@@ -410,8 +411,12 @@ public class CroquetBridge : MonoBehaviour
 
             if (simulateNetworkGlitch)
             {
-                SendToCroquetSync("simulateNetworkGlitch");
-                simulateNetworkGlitch = false;
+                simulateNetworkGlitch = false; // cancel the request
+
+                int milliseconds = (int) (networkGlitchDuration * 1000f);
+                if (milliseconds == 0) return;
+                
+                SendToCroquetSync("simulateNetworkGlitch", milliseconds.ToString());
             }
         }
     }
