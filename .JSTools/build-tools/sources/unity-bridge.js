@@ -181,7 +181,7 @@ console.log(`PORT ${portStr}`);
                 break;
             }
             case 'simulateNetworkGlitch':
-                this.simulateNetworkGlitch();
+                this.simulateNetworkGlitch(Number(args[0]));
                 break;
             case 'shutdown':
                 // @@ not sure this will ever make sense
@@ -217,8 +217,8 @@ console.log(`PORT ${portStr}`);
         this.sendCommand('_teatime', String(Math.floor(teatime)));
     }
 
-    simulateNetworkGlitch() {
-        CROQUETVM.controller.connection.reconnectDelay = 3000;
+    simulateNetworkGlitch(milliseconds) {
+        CROQUETVM.controller.connection.reconnectDelay = milliseconds;
         CROQUETVM.controller.connection.socket.close(4000, 'simulate glitch');
         setTimeout(() => CROQUETVM.controller.connection.reconnectDelay = 0, 500);
     }
