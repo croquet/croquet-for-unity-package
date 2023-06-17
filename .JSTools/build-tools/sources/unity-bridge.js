@@ -132,13 +132,14 @@ console.log(`PORT ${portStr}`);
                 break;
             }
             case 'readyForSession': {
-                // args are [apiKey, appId, sessionName, earlySubscriptionTopics ]
-                const [apiKey, appId, sessionName, earlySubscriptionTopics ] = args;
+                // args are [apiKey, appId, sessionName, assetManifests. earlySubscriptionTopics ]
+                const [apiKey, appId, sessionName, assetManifests, earlySubscriptionTopics ] = args;
                 globalThis.timedLog(`starting session of ${appId} with key ${apiKey}`);
                 this.apiKey = apiKey;
                 this.appId = appId;
                 this.sessionName = sessionName;
-                console.log({earlySubscriptionTopics});
+                // console.log({earlySubscriptionTopics});
+                this.assetManifests = assetManifests;
                 this.earlySubscriptionTopics = earlySubscriptionTopics; // \x03-separated list of topics
                 this.setReady();
                 break;
@@ -251,12 +252,28 @@ export const GameEnginePawnManager = class extends ViewService {
         this.lastMessageFlush = 0;
         this.lastGeometryFlush = 0;
 
+        this.assetManifests = {};
+
         theGameEngineBridge.setCommandHandler(this.handleUnityCommand.bind(this));
 
         const earlySubs = theGameEngineBridge.earlySubscriptionTopics;
         if (earlySubs) {
             earlySubs.split('\x03').forEach(topic => this.registerTopicForForwarding(topic))
         }
+
+        const { assetManifests } = theGameEngineBridge;
+        if (assetManifests) {
+            const manifestStrings = assetManifests.split('\x03');
+            for (let i = 0; i < manifestStrings.length; i += 4) {
+                const assetName = manifestStrings[i];
+                const mixins = manifestStrings[i + 1].split(',');
+                const statics = manifestStrings[i + 2].split(',');
+                const watched = manifestStrings[i + 3].split(',');
+            }
+            this.assetManifests[assetName] = { mixins, statics, watched };
+        }
+
+        console.log(this.assetManifests);
 
         this.subscribe('__wc', 'say', this.forwardSayToUnity);
     }

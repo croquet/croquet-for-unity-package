@@ -16,6 +16,7 @@ public class CroquetEntitySystem : CroquetSystem
 {
     // manages preloading the addressableAssets
     private Dictionary<string, GameObject> addressableAssets;
+    public string assetManifestString;
     public bool addressablesReady = false; // make public read or emit event to inform other systems that the assets are loaded
     
     // Create Singleton Reference
@@ -131,6 +132,9 @@ public class CroquetEntitySystem : CroquetSystem
                     addressableAssets.Add(go.name.ToLower(), go); // @@ remove case-sensitivity
                 }
                 addressablesReady = true;
+                // prepare this now, because trying within the Socket's OnOpen 
+                // fails.  presumably a thread issue.
+                assetManifestString = AssetManifestsAsString();
             };
         }
         else
@@ -138,6 +142,39 @@ public class CroquetEntitySystem : CroquetSystem
             Debug.Log($"No addressable assets are tagged '{label}'");
             addressablesReady = true;
         }
+    }
+
+    public string AssetManifestsAsString()
+    {
+        // we expect each addressable asset to have an attached CroquetActorManifest, that contains
+        //    string[] mixins;
+        //    string[] staticProperties;
+        //    string[] watchedProperties;
+
+        // here we build a single string that combines all assets' manifest properties.
+        // arbitrarily, the string format is
+        //   assetName1:mixinsList1:staticsList1:watchedList1:assetName2:mixinsList2:...
+        // where ':' is in fact \x03, and the lists are comma-separated
+
+        List<string> allManifests = new List<string>();
+        foreach (KeyValuePair<string, GameObject> kv in Instance.addressableAssets)
+        {
+            GameObject asset = kv.Value;
+            CroquetActorManifest manifest = asset.GetComponent<CroquetActorManifest>();
+            if (manifest != null)
+            {
+                List<string> oneAssetStrings = new List<string>();
+                oneAssetStrings.Add(kv.Key); // asset name
+                oneAssetStrings.Add(string.Join(',', manifest.mixins));
+                oneAssetStrings.Add(string.Join(',', manifest.staticProperties));
+                oneAssetStrings.Add(string.Join(',', manifest.watchedProperties));
+                allManifests.Add(string.Join('\x03', oneAssetStrings.ToArray()));
+            }
+        }
+
+        string result = allManifests.Count == 0 ? "" : string.Join('\x03', allManifests.ToArray());
+Debug.Log("MANIFESTS: " + result);
+        return result;
     }
 
     public override void ProcessCommand(string command, string[] args)

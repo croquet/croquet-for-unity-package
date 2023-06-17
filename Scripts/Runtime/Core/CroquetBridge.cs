@@ -153,13 +153,15 @@ public class CroquetBridge : MonoBehaviour
             string apiKey = Instance.appProperties.apiKey;
             string appId = Instance.appProperties.appPrefix + "." + Instance.appName;
             string sessionName = Instance.sessionNameValue.ToString();
-            string earlySubscriptionTopics = Instance.EarlySubscriptionTopics();
+            string assetManifests = CroquetEntitySystem.Instance.assetManifestString;
+            string earlySubscriptionTopics = Instance.EarlySubscriptionTopicsAsString();
             
             string[] command = new string[] {
                 "readyForSession",
                 apiKey,
                 appId,
                 sessionName,
+                assetManifests,
                 earlySubscriptionTopics
             };
 
@@ -617,7 +619,7 @@ public class CroquetBridge : MonoBehaviour
         croquetSubscriptions[topic].Add((subscriber, handler));
     }
     
-    public string EarlySubscriptionTopics()
+    public string EarlySubscriptionTopicsAsString()
     {
         // gameObjects and scripts that start up before the Croquet view has been built are 
         // allowed to request subscriptions to Croquet events.  when the bridge connection is
@@ -645,7 +647,7 @@ public class CroquetBridge : MonoBehaviour
         }
         return joinedTopics;
     }
-
+    
     public void UnsubscribeFromCroquetEvent(GameObject gameObject, string scope, string eventName,
         Action<string> forwarder)
     {
