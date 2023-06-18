@@ -269,11 +269,9 @@ export const GameEnginePawnManager = class extends ViewService {
                 const mixins = manifestStrings[i + 1].split(',');
                 const statics = manifestStrings[i + 2].split(',');
                 const watched = manifestStrings[i + 3].split(',');
+                this.assetManifests[assetName] = { mixins, statics, watched };
             }
-            this.assetManifests[assetName] = { mixins, statics, watched };
         }
-
-        console.log(this.assetManifests);
 
         this.subscribe('__wc', 'say', this.forwardSayToUnity);
     }
