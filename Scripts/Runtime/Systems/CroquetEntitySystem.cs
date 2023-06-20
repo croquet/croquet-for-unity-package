@@ -232,12 +232,14 @@ Debug.Log("MANIFESTS: " + result);
         int instanceID = gameObjectToMake.GetInstanceID();
         AssociateCroquetHandleToInstanceID(spec.cH, instanceID);
 
+        // croquetName (actor.id)
         if (spec.cN != "")
         {
             entity.croquetActorId = spec.cN;
-            CroquetBridge.Instance.FixUpEarlyEventActions(gameObjectToMake, entity.croquetActorId);
+            CroquetBridge.Instance.FixUpEarlyListens(gameObjectToMake, entity.croquetActorId);
         }
         
+        // allComponents
         if (spec.cs != "")
         {
             string[] comps = spec.cs.Split(',');
@@ -271,7 +273,20 @@ Debug.Log("MANIFESTS: " + result);
                 }
             }
         }
+
+        // propertyValues
+        if (spec.ps.Length != 0)
+        {
+            // an array with pairs   propName1, propVal1, propName2,...
+            string[] props = spec.ps;
+            for (int i = 0; i < props.Length; i += 2)
+            {
+                // Debug.Log($"setting {props[i]} to {props[i + 1]}");
+                entity.actorProperties[props[i]] = props[i + 1]; // in its encoded form
+            }
+        }
         
+        // waitToPresent
         if (spec.wTP)
         {
             foreach (Renderer renderer in gameObjectToMake.GetComponentsInChildren<Renderer>())
@@ -280,10 +295,22 @@ Debug.Log("MANIFESTS: " + result);
             }
         }
         
+        // confirmCreation
         if (spec.cC)
         {
             CroquetBridge.Instance.SendToCroquet("objectCreated", spec.cH, DateTimeOffset.Now.ToUnixTimeMilliseconds().ToString());
         }
+    }
+
+    public string GetPropertyValueString(GameObject gameObject, string propertyName)
+    {
+        Dictionary<string, string> properties = gameObject.GetComponent<CroquetEntityComponent>().actorProperties;
+        if (!properties.ContainsKey(propertyName))
+        {
+            Debug.LogWarning($"failed to find property {propertyName} in {gameObject}");
+            return "";
+        }
+        return properties[propertyName];
     }
     
     void DestroyObject(string croquetHandle)
@@ -356,4 +383,5 @@ public class ObjectSpec
     public bool wTP; // waitToPresent:  whether to make visible immediately
     public string type;
     public string cs; // comma-separated list of extra components
+    public string[] ps; // actor properties and their values
 }

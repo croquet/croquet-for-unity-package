@@ -26,7 +26,7 @@ public static class Croquet
     public static void Say(GameObject gameObject, string eventName, string argString)
     {
         string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
-        CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, argString);
+        CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, "s", argString);
     }
     
     /// <summary>
@@ -38,7 +38,7 @@ public static class Croquet
     public static void Say(GameObject gameObject, string eventName, string[] argStrings)
     {
         string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
-        CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, string.Join('\x03', argStrings));    
+        CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, "ss", string.Join('\x03', argStrings));    
     }
     
     /// <summary>
@@ -50,7 +50,7 @@ public static class Croquet
     public static void Say(GameObject gameObject, string eventName, float argFloat)
     {
         string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
-        CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, argFloat.ToString());
+        CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, "f", argFloat.ToString());
     }
     
     /// <summary>
@@ -62,7 +62,7 @@ public static class Croquet
     public static void Say(GameObject gameObject, string eventName, float[] argFloats)
     {
         string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
-        CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, string.Join<float>('\x03', argFloats));
+        CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, "ff", string.Join<float>('\x03', argFloats));
     }
 
     /// <summary>
@@ -152,7 +152,7 @@ public static class Croquet
     public static void Ignore(GameObject gameObject, string eventName, Action<string> forwarder)
     {
         string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
-        CroquetBridge.Instance.UnsubscribeFromCroquetEvent(gameObject,scope, eventName, forwarder);
+        CroquetBridge.Instance.UnsubscribeFromCroquetEvent(gameObject, scope, eventName, forwarder);
     }
 
     #endregion
@@ -177,7 +177,7 @@ public static class Croquet
     /// <param name="argString"></param>
     public static void Publish(string scope, string eventName, string argString)
     {
-        CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, argString);
+        CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, "s", argString);
     }
     
     /// <summary>
@@ -188,7 +188,7 @@ public static class Croquet
     /// <param name="argStrings"></param>
     public static void Publish(string scope, string eventName, string[] argStrings)
     {
-        CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, string.Join('\x03', argStrings));    
+        CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, "ss", string.Join('\x03', argStrings));    
     }
     
     /// <summary>
@@ -199,7 +199,7 @@ public static class Croquet
     /// <param name="argFloat"></param>
     public static void Publish(string scope, string eventName, float argFloat)
     {
-        CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, argFloat.ToString());
+        CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, "f", argFloat.ToString());
     }
     
     /// <summary>
@@ -210,7 +210,7 @@ public static class Croquet
     /// <param name="argFloats"></param>
     public static void Publish(string scope, string eventName, float[] argFloats)
     {
-        CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, string.Join<float>('\x03', argFloats));
+        CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, "ff", string.Join<float>('\x03', argFloats));
     }
 
     /// <summary>
@@ -299,5 +299,37 @@ public static class Croquet
 
     #endregion
     
+    #region Actor Property Access
+
+    public static string ReadActorString(GameObject gameObject, string propertyName)
+    {
+        string stringVal = CroquetEntitySystem.Instance.GetPropertyValueString(gameObject, propertyName);
+        return stringVal;
+    }
+    
+    public static string[] ReadActorStringArray(GameObject gameObject, string propertyName)
+    {
+        string stringVal = CroquetEntitySystem.Instance.GetPropertyValueString(gameObject, propertyName);
+        return stringVal.Split('\x03');
+    }
+
+    public static float ReadActorFloat(GameObject gameObject, string propertyName)
+    {
+        string stringVal = CroquetEntitySystem.Instance.GetPropertyValueString(gameObject, propertyName);
+        return float.Parse(stringVal);
+    }
+    
+    public static float[] ReadActorFloatArray(GameObject gameObject, string propertyName)
+    {
+        string stringVal = CroquetEntitySystem.Instance.GetPropertyValueString(gameObject, propertyName);
+        List<float> floats = new List<float>();
+        foreach (string str in stringVal.Split('\x03'))
+        {
+            floats.Add(float.Parse(str));
+        }
+        return floats.ToArray();
+    }
+    
+    #endregion
 }
 

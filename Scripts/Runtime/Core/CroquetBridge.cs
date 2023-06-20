@@ -466,7 +466,7 @@ public class CroquetBridge : MonoBehaviour
             if (qm.isBinary)
             {
                 byte[] rawData = qm.rawData;
-                int sepPos = Array.IndexOf(rawData, (byte) 3);
+                int sepPos = Array.IndexOf(rawData, (byte) 5);
                 // Debug.Log(BitConverter.ToString(rawData));
                 if (sepPos >= 1)
                 {
@@ -601,7 +601,7 @@ public class CroquetBridge : MonoBehaviour
     {
         // if this has been invoked before the object has its croquetActorId,
         // the scope will be an empty string.  in that case we still record the subscription,
-        // but expect that FixUpEarlyEventActions will be invoked shortly to replace the
+        // but expect that FixUpEarlyListens will be invoked shortly to replace the
         // subscription with the correct (actor id) scope.
 
         string topic = scope + ":" + eventName;
@@ -619,7 +619,7 @@ public class CroquetBridge : MonoBehaviour
         croquetSubscriptions[topic].Add((subscriber, handler));
     }
     
-    public string EarlySubscriptionTopicsAsString()
+    private string EarlySubscriptionTopicsAsString()
     {
         // gameObjects and scripts that start up before the Croquet view has been built are 
         // allowed to request subscriptions to Croquet events.  when the bridge connection is
@@ -643,7 +643,7 @@ public class CroquetBridge : MonoBehaviour
         if (topics.Count > 0)
         {
             Debug.Log($"sending {topics.Count} early-subscription topics");
-            joinedTopics = string.Join('\x03', topics.ToArray());
+            joinedTopics = string.Join(',', topics.ToArray());
         }
         return joinedTopics;
     }
@@ -696,7 +696,7 @@ public class CroquetBridge : MonoBehaviour
         UnsubscribeFromCroquetEvent(null, scope, eventName, forwarder);
     }
 
-    public void FixUpEarlyEventActions(GameObject subscriber, string croquetActorId)
+    public void FixUpEarlyListens(GameObject subscriber, string croquetActorId)
     {
         // in principle we could also use this as the time to send Say() events that were sent
         // before the actor id was known.  for now, those will just have been sent with

@@ -5,9 +5,11 @@
 // note on use of string separators in messages across the bridge
 //   \x01 is used to separate the command and string arguments in a message
 //   \x02 to separate entire messages in a bundle
-//   \x03 to separate the elements in an array-type argument on a 'croquetPub' message
+//   \x03 to separate the elements in an array-type argument within a message, such as on a property update, say(), or publish()
+//   \x04 currently unused
+//   \x05 to mark the start of the data argument in a binary-encoded message, such as updateSpatial.
 
-import { mix, Pawn, ViewRoot, ViewService, GetViewService, StartWorldcore, PawnManager, v3_equals, q_equals } from "@croquet/worldcore-kernel";
+import { mix, Pawn, ViewRoot, ViewService, GetViewService, StartWorldcore, PawnManager, v3_equals, q_equals } from "@croquet/worldcore";
 
 globalThis.timedLog = msg => {
     const toLog = `${(globalThis.CroquetViewDate || Date).now() % 100000}: ${msg}`;
@@ -96,6 +98,12 @@ console.log(`PORT ${portStr}`);
         this.socket.send(msg);
     }
 
+    encodeValueAsString(args) {
+        // when sending a property value as part of a message over the bridge,
+        // elements of an array are separated with \x03
+        return Array.isArray(args) ? args.join('\x03') : String(args);
+    }
+
     handleUnityMessageOrBundle(msg) {
         // handle a single or multiple message from Unity
         const start = performance.now();
@@ -140,7 +148,7 @@ console.log(`PORT ${portStr}`);
                 this.sessionName = sessionName;
                 // console.log({earlySubscriptionTopics});
                 this.assetManifests = assetManifests;
-                this.earlySubscriptionTopics = earlySubscriptionTopics; // \x03-separated list of topics
+                this.earlySubscriptionTopics = earlySubscriptionTopics; // comma-separated list
                 this.setReady();
                 break;
             }
@@ -153,13 +161,30 @@ console.log(`PORT ${portStr}`);
             case 'publish': {
                 // args[0] is scope
                 // args[1] is eventName
-                // args[2] - if supplied - is a string containing either a singleton or array of numbers or strings.  we split out the arrays, but treat a single value as a singleton.  we also don't try to parse numbers.
-                const [ scope, eventName, argString ] = args;
-                // console.log({scope, eventName, argString});
-                if (argString === undefined) session?.view.publish(scope, eventName);
+                // args[2] - if supplied - is a string describing the format of the next argument:
+                //      s - single string
+                //      ss - string array
+                //      f - single float
+                //      ff - float array
+                // args[3] - the encoded arg
+                const [ scope, eventName, argFormat, argString ] = args;
+                // console.log({scope, eventName, argFormat, argString});
+                if (argFormat === undefined) session?.view.publish(scope, eventName);
                 else {
                     let eventArgs = argString.split('\x03');
-                    if (eventArgs.length === 1) eventArgs = eventArgs[0];
+                    switch (argFormat) {
+                        case 's':
+                            eventArgs = eventArgs[0];
+                            break;
+                        case 'f':
+                            eventArgs = Number(eventArgs[0]);
+                            break;
+                        case 'ff':
+                            eventArgs = eventArgs.map(Number);
+                            break;
+                        case 'ss': // ok as is
+                        default:
+                    }
                     session?.view.publish(scope, eventName, eventArgs);
                 }
                 break;
@@ -197,7 +222,7 @@ console.log(`PORT ${portStr}`);
     }
 
     updateWithTeatime(teatime) {
-        // sent by the PawnManager on each update()
+        // sent by the gameViewManager on each update()
         const now = Date.now();
         if (now - (this.lastTeatimeAnnouncement || 0) >= 1000) {
             this.announceTeatime(teatime);
@@ -219,9 +244,10 @@ console.log(`PORT ${portStr}`);
     }
 
     simulateNetworkGlitch(milliseconds) {
-        CROQUETVM.controller.connection.reconnectDelay = milliseconds;
-        CROQUETVM.controller.connection.socket.close(4000, 'simulate glitch');
-        setTimeout(() => CROQUETVM.controller.connection.reconnectDelay = 0, 500);
+        const vm = globalThis.CROQUETVM; // @@ privileged information
+        vm.controller.connection.reconnectDelay = milliseconds;
+        vm.controller.connection.socket.close(4000, 'simulate glitch');
+        setTimeout(() => vm.controller.connection.reconnectDelay = 0, 500);
     }
 
 showSetupStats() {
@@ -232,12 +258,12 @@ showSetupStats() {
 }
 export const theGameEngineBridge = new BridgeToUnity();
 
-// GameEnginePawnManager is a ViewService, and is therefore constructed afresh
+// GameViewManager is a ViewService, and is therefore constructed afresh
 // on Session.join().  if there is a network glitch, the manager will be destroyed
 // on disconnection and then rebuilt when the session re-connects.
-export const GameEnginePawnManager = class extends ViewService {
+export const GameViewManager = class extends ViewService {
     constructor(name) {
-        super(name || "GameEnginePawnManager");
+        super(name || "GameViewManager");
 
         this.lastGameHandle = 0;
         this.pawnsByGameHandle = {}; // handle => pawn
@@ -258,17 +284,18 @@ export const GameEnginePawnManager = class extends ViewService {
 
         const earlySubs = theGameEngineBridge.earlySubscriptionTopics;
         if (earlySubs) {
-            earlySubs.split('\x03').forEach(topic => this.registerTopicForForwarding(topic))
+            earlySubs.split(',').forEach(topic => this.registerTopicForForwarding(topic));
         }
 
         const { assetManifests } = theGameEngineBridge;
         if (assetManifests) {
+            const parseArray = str => str.split(',').filter(Boolean); // remove empties
             const manifestStrings = assetManifests.split('\x03');
             for (let i = 0; i < manifestStrings.length; i += 4) {
                 const assetName = manifestStrings[i];
-                const mixins = manifestStrings[i + 1].split(',');
-                const statics = manifestStrings[i + 2].split(',');
-                const watched = manifestStrings[i + 3].split(',');
+                const mixins = parseArray(manifestStrings[i + 1]);
+                const statics = parseArray(manifestStrings[i + 2]);
+                const watched = parseArray(manifestStrings[i + 3]);
                 this.assetManifests[assetName] = { mixins, statics, watched };
             }
         }
@@ -299,9 +326,11 @@ export const GameEnginePawnManager = class extends ViewService {
         let pawn;
         switch (command) {
             case 'registerForEventTopic':
+                // only used for subscribe(), not listen()
                 this.registerTopicForForwarding(args[0]);
                 break;
             case 'unregisterEventTopic':
+                // only used for subscribe(), not listen()
                 this.unregisterTopicForForwarding(args[0]);
                 break;
             case 'objectCreated': {
@@ -375,9 +404,7 @@ export const GameEnginePawnManager = class extends ViewService {
         // console.log("forwarding event", { scope, eventName, eventArgs });
         if (eventArgs === undefined) this.sendDeferred(null, 'croquetPub', scope, eventName);
         else {
-            let stringArg;
-            if (Array.isArray(eventArgs)) stringArg = eventArgs.join('\x03');
-            else stringArg = String(eventArgs);
+            const stringArg = theGameEngineBridge.encodeValueAsString(eventArgs);
             this.sendDeferred(null, 'croquetPub', scope, eventName, stringArg);
         }
     }
@@ -445,27 +472,33 @@ export const GameEnginePawnManager = class extends ViewService {
         }
     }
 
-    sendDeferred(gameHandle, command, ...args) {
-        let deferredForSame;
-        if (gameHandle == null) deferredForSame = this.deferredOtherMessages;
-        else {
-            deferredForSame = this.deferredMessagesByGameHandle.get(gameHandle);
-            if (!deferredForSame) {
-                deferredForSame = [];
-                this.deferredMessagesByGameHandle.set(gameHandle, deferredForSame);
-            }
+    ensureDeferredMessages(gameHandle) {
+        let messages = this.deferredMessagesByGameHandle.get(gameHandle);
+        if (!messages) {
+            messages = [];
+            this.deferredMessagesByGameHandle.set(gameHandle, messages);
         }
+        return messages;
+    }
+
+    sendDeferred(gameHandle, command, ...args) {
+        const deferredForSame = gameHandle == null
+            ? this.deferredOtherMessages
+            : this.ensureDeferredMessages(gameHandle);
         deferredForSame.push({ command, args });
     }
 
-    // NOT USED
-    sendDeferredWithMerge(gameHandle, command, mergeHandler, ...args) {
-        const deferredForSame = this.deferredMessagesByGameHandle.get(gameHandle);
-        if (!deferredForSame) this.sendDeferred(gameHandle, command, ...args); // end of story
-        else {
-            const previous = deferredForSame.find(spec => spec.command === command);
-            if (previous) mergeHandler(previous.args, args);
-            else deferredForSame.push({ command, args });
+    sendDeferredWithOverride(gameHandle, key, command, ...args) {
+        // if an existing entry in the deferred messages for this pawn has the
+        // specified key, replace its command and arguments with the new ones.
+        const deferredForSame = this.ensureDeferredMessages(gameHandle);
+        const previous = deferredForSame.find(spec => spec.overrideKey === key);
+        if (previous) {
+            console.log(`overriding ${command} on ${gameHandle}`);
+            previous.command = command;
+            previous.args = args;
+        } else {
+            deferredForSame.push({ command, args, overrideKey: key });
         }
     }
 
@@ -531,7 +564,7 @@ const pNow = performance.now();
                 args = transformer(args);
             }
             messages.push([command, ...args].join('\x01'));
-        }
+        };
         this.deferredMessagesByGameHandle.forEach(msgSpecs => {
             msgSpecs.forEach(addMessage);
         });
@@ -561,7 +594,7 @@ performance.measure(`to U (batch ${this.msgBatch}): ${numMessages} msgs in ${bat
         this.deferredGeometriesByGameHandle = {};
 
         for (const [gameHandle, pawn] of Object.entries(this.pawnsByGameHandle)) {
-            const update = pawn.geometryUpdateIfNeeded();
+            const update = pawn.geometryUpdateIfNeeded?.(); // pawns aren't guaranteed to be spatial
             if (update) toBeMerged.push([this.unityId(gameHandle), update]);
         }
 
@@ -601,7 +634,7 @@ performance.measure(`to U (batch ${this.msgBatch}): ${numMessages} msgs in ${bat
         const buffer = array.buffer;
         const filledBytes = pos * 4;
         const command = 'updateSpatial';
-        const cmdPrefix = `${String(Date.now())}\x02${command}\x03`;
+        const cmdPrefix = `${String(Date.now())}\x02${command}\x05`;
         const message = new Uint8Array(cmdPrefix.length + filledBytes);
         for (let i = 0; i < cmdPrefix.length; i++) message[i] = cmdPrefix.charCodeAt(i);
         message.set(new Uint8Array(buffer).subarray(0, filledBytes), cmdPrefix.length);
@@ -614,9 +647,9 @@ const gamePawnMixins = {};
 const buildStats = [], setupStats = [];
 
 export const PM_GameRendered = superclass => class extends superclass {
-    // getters for pawnManager and gameHandle allow them to be accessed even from super constructor
-    get pawnManager() { return this._pawnManager || (this._pawnManager = GetViewService('GameEnginePawnManager' ))}
-    get gameHandle() { return this._gameHandle || (this._gameHandle = this.pawnManager.nextGameHandle()) }
+    // getters for gameViewManager and gameHandle allow them to be accessed even from super constructor
+    get gameViewManager() { return this._gameViewManager || (this._gameViewManager = GetViewService('GameViewManager' ))}
+    get gameHandle() { return this._gameHandle || (this._gameHandle = this.gameViewManager.nextGameHandle()) }
     get componentNames() { return this._componentNames || (this._componentNames = new Set()) }
 
     constructor(actor) {
@@ -630,24 +663,33 @@ export const PM_GameRendered = superclass => class extends superclass {
 
     initialize(actor) {
         // construction is complete, through all mixin layers
-        const eventsListened = actor.pawnListeners;
-        if (eventsListened) {
-            eventsListened.forEach(eventName => {
-                this.pawnManager.registerTopicForForwarding(`${this.actor.id}:${eventName}`);
-            });
-        }
 
-        const initArgs = actor.pawnInitializationArgs;
+        const manifest = this.gameViewManager.assetManifests[actor.gamePawnType];
+        const { statics, watched } = manifest;
+        // gather any statics into an argument on the initialisation message:
+        // an array with pairs   propName1, propVal1, propName2,...
+        const propertyStrings = [];
+        (statics.concat(watched)).forEach(propName => {
+            if (actor[propName] === undefined) {
+                console.warn(`found undefined value for ${propName}`, this);
+            }
+            propertyStrings.push(propName, theGameEngineBridge.encodeValueAsString(actor[propName]));
+        });
+        const initArgs = {
+            type: actor.gamePawnType,
+            propertyValues: propertyStrings
+        };
         this.setGameObject(initArgs); // args may be adjusted by mixins
 
-        const propertiesListened = actor.pawnPropertyListeners;
-        if (propertiesListened) {
-            propertiesListened.forEach(propertyName => {
-                const setEventName = `${propertyName}Set`;
-                this.pawnManager.registerTopicForForwarding(`${this.actor.id}:${setEventName}`);
-                this.pawnManager.forwardEventToUnity(actor.id, setEventName, this.actor[propertyName]);
+        // additionally, for the "watched" properties, set up listeners for the
+        // automatically generated fooSet events (in the case of property foo)
+        watched.forEach(propName => {
+            const setEventName = `${propName}Set`;
+            console.log(`setting up listener for ${setEventName} on ${this.gameHandle}`);
+            this.listen(setEventName, newVal => {
+                this.forwardWatchedProperty(setEventName, newVal);
             });
-        }
+        });
     }
 
     setGameObject(viewSpec) {
@@ -671,6 +713,7 @@ export const PM_GameRendered = superclass => class extends superclass {
             wTP: !!viewSpec.waitToPresent,
             type: viewSpec.type,
             cs: allComponents,
+            ps: viewSpec.propertyValues,
         };
 // every pawn tracks the delay between its creation on the Croquet
 // side and receipt of a message from Unity confirming the corresponding
@@ -681,17 +724,24 @@ if (this.gameHandle % 100 === 0) {
     globalThis.timedLog(`pawn ${this.gameHandle} created`);
 }
 
-        this.pawnManager.makeGameObject(this, unityViewSpec);
+        this.gameViewManager.makeGameObject(this, unityViewSpec);
         this.messagesAwaitingCreation.forEach(cmdAndArgs => {
-            this.pawnManager.sendDeferredFromPawn(...[this.gameHandle, ...cmdAndArgs]);
+            this.gameViewManager.sendDeferredFromPawn(...[this.gameHandle, ...cmdAndArgs]);
         });
         delete this.messagesAwaitingCreation;
 
         // PM_GameSpatial introduces geometryAwaitingCreation
         if (this.geometryAwaitingCreation) {
-            this.pawnManager.updatePawnGeometry(this.gameHandle, this.geometryAwaitingCreation);
+            this.gameViewManager.updatePawnGeometry(this.gameHandle, this.geometryAwaitingCreation);
             this.geometryAwaitingCreation = null;
         }
+    }
+
+    forwardWatchedProperty(setEventName, newVal) {
+        const scope = this.actor.id;
+        const stringArg = theGameEngineBridge.encodeValueAsString(newVal);
+        const overrideKey = setEventName;
+        this.gameViewManager.sendDeferredWithOverride(this.gameHandle, overrideKey, 'croquetPub', scope, setEventName, stringArg);
     }
 
     unityViewReady(estimatedReadyTime) {
@@ -712,25 +762,25 @@ setupStats[bucket] = (setupStats[bucket] || 0) + 1;
 
     addChild(pawn) {
         super.addChild(pawn);
-        this.pawnManager.setParent(pawn.gameHandle, this.gameHandle);
+        this.gameViewManager.setParent(pawn.gameHandle, this.gameHandle);
     }
 
     removeChild(pawn) {
         super.removeChild(pawn);
-        this.pawnManager.unparent(pawn.gameHandle);
+        this.gameViewManager.unparent(pawn.gameHandle);
     }
 
     sendToUnity(command, ...args) {
         if (this.messagesAwaitingCreation) {
             this.messagesAwaitingCreation.push([command, ...args]);
         } else {
-            this.pawnManager.sendDeferredFromPawn(this.gameHandle, command, ...args);
+            this.gameViewManager.sendDeferredFromPawn(this.gameHandle, command, ...args);
         }
     }
 
     destroy() {
         // console.log(`pawn ${this.gameHandle} destroyed`);
-        this.pawnManager.destroyObject(this.gameHandle);
+        this.gameViewManager.destroyObject(this.gameHandle);
         super.destroy();
     }
 
@@ -816,7 +866,7 @@ export const PM_GameSpatial = superclass => class extends superclass {
             // not ready yet.  store it (overwriting any previous value)
             this.geometryAwaitingCreation = updateSpec;
         } else {
-            this.pawnManager.updatePawnGeometry(this.gameHandle, updateSpec);
+            this.gameViewManager.updatePawnGeometry(this.gameHandle, updateSpec);
         }
     }
 
@@ -930,13 +980,12 @@ export const PM_GameAvatar = superclass => class extends superclass {
 };
 gamePawnMixins.Avatar = PM_GameAvatar;
 
-// $$$ confusing naming: GamePawnManager is a specialisation of the standard
+// GamePawnManager is [will be] a specialisation of the standard
 // Worldcore PawnManager, with pawn-creation logic that removes the need for
 // static declaration of pawn classes.
-// GameEnginePawnManager is a new kind of service, created specifically for
+// GameViewManager is a new kind of service, created specifically for
 // the bridge to Unity, handling the creation and management of Unity-side
-// gameObjects that track the Croquet pawns.  it could perhaps be renamed
-// to something like GameBridgeManager.
+// gameObjects that track the Croquet pawns.
 
 // $$$ temporary mega-hack: overwrite the newPawn method in the PawnManager
 // prototype.
@@ -944,21 +993,33 @@ PawnManager.prototype.newPawn = function(actor) {
         // for the unity world, pawn classes are built on the fly using
         // the mixins defined above, based on the pawnMixins list of mixin
         // names provided by the actor.
-        // if the list is empty, we create a raw Pawn.
         // if there are any elements in the list, we prepend the obligatory
         // Base mixin (PM_GameRendered) for a game-rendered pawn.
+        // an actor that doesn't want any game pawn still gets a vanilla Pawn,
+        // e.g. so it can support having children.
 
-        const mixinNames = actor.pawnMixins;
-        if (!mixinNames) return null; // an error
-
-        let p = null;
-        if (mixinNames.length === 0) p = new Pawn(actor);
-        else {
-            const mixins = ['Base'].concat(mixinNames).map(n => gamePawnMixins[n]);
-            const pawnClass = mix(Pawn).with(...mixins);
-            p = new pawnClass(actor);
-            p.initialize(actor);
+        const { gamePawnType } = actor;
+        if (!gamePawnType) {
+            // doesn't want a game pawn at all
+            const p = new Pawn(actor);
+            this.pawns.set(actor.id, p);
+            return p;
         }
+
+        if (!this._gameViewManager) this._gameViewManager = GetViewService("GameViewManager");
+
+        const manifest = this._gameViewManager.assetManifests[gamePawnType];
+        if (!manifest) {
+            console.warn(`no manifest for gamePawnType "${gamePawnType}"`);
+            return null;
+        }
+
+        const mixinNames = manifest.mixins; // can be empty
+        const mixins = ['Base'].concat(mixinNames).map(n => gamePawnMixins[n]);
+        const PawnClass = mix(Pawn).with(...mixins);
+        const p = new PawnClass(actor);
+        p.initialize(actor); // new: 2-phase init, so all constructors run to completion first
+
         this.pawns.set(actor.id, p);
         return p;
 };
@@ -968,7 +1029,7 @@ export class GameViewRoot extends ViewRoot {
     static viewServices() {
         // $$$ for now, hard-code these two.  figure out later how to
         // customise (presumably based on annotation in the ModelRoot)
-        return [GameEnginePawnManager, GameInputManager];
+        return [GameViewManager, GameInputManager];
     }
 
     constructor(model) {
@@ -983,7 +1044,7 @@ export class GameViewRoot extends ViewRoot {
 }
 
 export class GameInputManager extends ViewService {
-    get pawnManager() { return this._pawnManager || (this._pawnManager = GetViewService('GameEnginePawnManager')) }
+    get gameViewManager() { return this._gameViewManager || (this._gameViewManager = GetViewService('GameViewManager')) }
 
     constructor(name) {
         super(name || "GameInputManager");
@@ -1043,7 +1104,7 @@ export class GameInputManager extends ViewService {
                 for (let i = 1; i < args.length; i++) {
                     const parsedArg = args[i].split(',');
                     const [gameHandle, x, y, z, ...layers] = parsedArg;
-                    const pawn = this.pawnManager.getPawn(gameHandle);
+                    const pawn = this.gameViewManager.getPawn(gameHandle);
                     if (pawn) {
                         const xyz = [x, y, z].map(Number);
                         hitList.push({ pawn, xyz, layers});
