@@ -217,7 +217,13 @@ public class CroquetBuilder
                 if (!string.IsNullOrWhiteSpace(line))
                 {
                     if (line.StartsWith(exitPrefix)) webpackExit = int.Parse(line.Substring(exitPrefix.Length));
-                    else Debug.Log("JS builder: " + line);
+                    else
+                    {
+                        string labeledLine = "JS builder: " + line;
+                        if (line.Contains("ERROR")) Debug.LogError(labeledLine);
+                        else if (line.Contains("WARNING")) Debug.LogWarning(labeledLine);
+                        else Debug.Log(labeledLine);
+                    }
                 }
             }
             newLines = errors.Split('\n');
