@@ -1,7 +1,6 @@
 // reconfigurable startup script for an app using Croquet on NodeJS
 
-const { MyModelRoot } = require("__APP_SOURCE__/Models.js");
-const { StartSession } = require("./unity-bridge.js");
-const { MyViewRoot } = require("__APP_SOURCE__/Views-unity.js");
+import { MyModelRoot } from "__APP_SOURCE__/Models";
+import { StartSession, GameViewRoot } from "./unity-bridge";
 
-StartSession(MyModelRoot, MyViewRoot);
+StartSession(MyModelRoot, GameViewRoot);
