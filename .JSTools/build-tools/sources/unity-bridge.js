@@ -494,7 +494,7 @@ export const GameViewManager = class extends ViewService {
         const deferredForSame = this.ensureDeferredMessages(gameHandle);
         const previous = deferredForSame.find(spec => spec.overrideKey === key);
         if (previous) {
-            console.log(`overriding ${command} on ${gameHandle}`);
+            // console.log(`overriding ${command} on ${gameHandle}`);
             previous.command = command;
             previous.args = args;
         } else {
@@ -686,8 +686,8 @@ export const PM_GameRendered = superclass => class extends superclass {
         watched.forEach(propName => {
             const setEventName = `${propName}Set`;
             console.log(`setting up listener for ${setEventName} on ${this.gameHandle}`);
-            this.listen(setEventName, newVal => {
-                this.forwardWatchedProperty(setEventName, newVal);
+            this.listenOnce(setEventName, ({ value }) => {
+                this.forwardWatchedProperty(setEventName, value);
             });
         });
     }
