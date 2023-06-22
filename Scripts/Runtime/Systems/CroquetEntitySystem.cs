@@ -173,7 +173,6 @@ public class CroquetEntitySystem : CroquetSystem
         }
 
         string result = allManifests.Count == 0 ? "" : string.Join('\x03', allManifests.ToArray());
-Debug.Log("MANIFESTS: " + result);
         return result;
     }
 
@@ -263,6 +262,7 @@ Debug.Log("MANIFESTS: " + result);
                     {
                         if (gameObjectToMake.GetComponent(typeToAdd) == null)
                         {
+                            // Debug.Log($"adding component {typeToAdd}");
                             gameObjectToMake.AddComponent(typeToAdd);
                         }
                     }

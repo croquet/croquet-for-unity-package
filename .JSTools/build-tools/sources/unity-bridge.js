@@ -685,7 +685,7 @@ export const PM_GameRendered = superclass => class extends superclass {
         // automatically generated fooSet events (in the case of property foo)
         watched.forEach(propName => {
             const setEventName = `${propName}Set`;
-            console.log(`setting up listener for ${setEventName} on ${this.gameHandle}`);
+            console.log(`setting up listener for ${setEventName} on ${this.actor.id}`);
             this.listenOnce(setEventName, ({ value }) => {
                 this.forwardWatchedProperty(setEventName, value);
             });
