@@ -974,11 +974,9 @@ export const PM_GameAvatar = superclass => class extends superclass {
         if (this.isMyAvatar) {
             this.driving = true;
             this.drive();
-            this.sendToUnity('registerAsAvatar');
         } else {
             this.driving = false;
             this.park();
-            this.sendToUnity('unregisterAsAvatar');
         }
     }
 

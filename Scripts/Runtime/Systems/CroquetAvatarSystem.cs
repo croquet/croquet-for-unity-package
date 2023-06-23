@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -6,18 +7,16 @@ using UnityEngine;
 
 public class CroquetAvatarSystem : CroquetSystem
 {
-    public override List<string> KnownCommands { get; } = new()
-    {
-        "registerAsAvatar",
-        "unregisterAsAvatar",
-    };
+    public override List<string> KnownCommands { get; } = new() { };
 
     protected override Dictionary<int, CroquetComponent> components { get; set; } =
         new Dictionary<int, CroquetComponent>();
     
     // Create Singleton Reference
     public static CroquetAvatarSystem Instance { get; private set; }
-    
+ 
+    private CroquetAvatarComponent lastKnownActiveAvatar;
+
     private void Awake()
     {
         // Create Singleton Accessor
@@ -32,54 +31,51 @@ public class CroquetAvatarSystem : CroquetSystem
         }
     }
     
-    public override void ProcessCommand(string command, string[] args)
+    void CheckForActiveAvatar()
     {
-        if (command.Equals("registerAsAvatar"))
+        // find the avatar component, if any, whose gameObject's actor's "driver" value
+        // is equal to our local croquetViewId.
+        // this needs to be efficient, so it can be called from update loops if wanted.
+        string croquetViewId = CroquetBridge.Instance.croquetViewId;
+        if (croquetViewId != "")
         {
-            // enable control through local interaction
-            RegisterAsAvatar(args[0]);
-        }
-        else if (command.Equals("unregisterAsAvatar"))
-        {
-            // disable control through local interaction
-            UnregisterAsAvatar(args[0]);
-        }
-    }
+            if (lastKnownActiveAvatar != null)
+            {
+                // we think we know, but check just in case the driver has changed
+                string driver = Croquet.ReadActorString(lastKnownActiveAvatar.gameObject, "driver");
+                if (driver != croquetViewId)
+                {
+                    Debug.Log("avatar lost its active status");
+                    lastKnownActiveAvatar.isActiveAvatar = false;
+                    lastKnownActiveAvatar = null;
+                }
+            }
 
-    void RegisterAsAvatar(string croquetHandle)
-    {
-        int instanceID = CroquetEntitySystem.Instance.GetGameObjectByCroquetHandle(croquetHandle).GetInstanceID();
-        if (components.ContainsKey(instanceID))
-        {
-            CroquetAvatarComponent component = components[instanceID] as CroquetAvatarComponent;
-            component.isActiveAvatar = true;
-        }
-    }
-
-    void UnregisterAsAvatar(string croquetHandle)
-    {
-        int instanceID = CroquetEntitySystem.Instance.GetGameObjectByCroquetHandle(croquetHandle).GetInstanceID();
-        if (components.ContainsKey(instanceID))
-        {
-            CroquetAvatarComponent component = components[instanceID] as CroquetAvatarComponent;
-            component.isActiveAvatar = false;
+            if (lastKnownActiveAvatar == null)
+            {
+                // TODO: (Critical) We probably need to switch the base class to use generics
+                foreach (var kvp in components)
+                {
+                    CroquetAvatarComponent c = kvp.Value as CroquetAvatarComponent;
+                    if (c != null)
+                    {
+                        if (Croquet.ReadActorString(c.gameObject, "driver") == croquetViewId)
+                        {
+                            Debug.Log("found active avatar");
+                            c.isActiveAvatar = true;
+                            lastKnownActiveAvatar = c;
+                            return;
+                        }
+                    }
+                }
+            }
         }
     }
 
     [CanBeNull]
     public CroquetAvatarComponent GetActiveAvatarComponent()
     {
-        // TODO: (Critical) We probably need to switch the base class to use generics
-        foreach (var kvp in components)
-        {
-            CroquetAvatarComponent c = kvp.Value as CroquetAvatarComponent;
-            if (c != null)
-            {
-                if (c.isActiveAvatar)
-                    return c;
-            }
-        }
-        
-        return null;
+        CheckForActiveAvatar();
+        return lastKnownActiveAvatar;
     }
 }
