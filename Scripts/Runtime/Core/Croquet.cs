@@ -387,5 +387,16 @@ public static class Croquet
     }
 
     #endregion
+
+    public static float SessionTime()
+    {
+        // a time source (in seconds) that should be within a few ms across all clients.
+        // this is NOT the session's Teatime (which increases monotonically across 
+        // starts and stops over hours and days), but a measure of how long this
+        // particular session has been running on its assigned reflector.
+        // during game startup (at least until the Croquet session has started) this
+        // will return the default value -1f.
+        return CroquetBridge.Instance.CroquetSessionTime();
+    }
 }
 

@@ -34,8 +34,7 @@ public class CroquetBridge : MonoBehaviour
     }
     
     static ConcurrentQueue<QueuedMessage> messageQueue = new ConcurrentQueue<QueuedMessage>();
-    static System.Diagnostics.Stopwatch stopWatch = new System.Diagnostics.Stopwatch();
-    static long estimatedTeatimeAtStopwatchZero = -1; // an impossible value
+    static long estimatedDateNowAtReflectorZero = -1; // an impossible value
 
     List<string> deferredMessages = new List<string>();
     static float messageThrottle = 0.05f; // 50ms
@@ -105,8 +104,6 @@ public class CroquetBridge : MonoBehaviour
         
         SetCSharpLogOptions("info,session");
         SetCSharpMeasureOptions("bundle,geom"); // @@ typically useful for development
-        stopWatch.Start();
-        
     }
 
     public void RegisterSystem(CroquetSystem system)
@@ -317,53 +314,17 @@ public class CroquetBridge : MonoBehaviour
     // static because called from a class that doesn't know about this instance.
     static void HandleMessage(MessageEventArgs e) // string message)
     {
-        string data = "";
-        if (e.IsText)
-        {
-            data = e.Data;
-            if (data.StartsWith("_teatime"))
-            {
-                // @@ we can do much better than this.  for a start, switch to
-                // communicating the offset of teatime relative to system time (which JS and
-                // C# appear to share).
-                // these messages are sent once per second
-                string[] strings = data.Split('\x01');
-                long teatime = long.Parse(strings[1]);
-                long newEstimate = teatime - stopWatch.ElapsedMilliseconds;
-                if (estimatedTeatimeAtStopwatchZero == -1) estimatedTeatimeAtStopwatchZero = newEstimate;
-                else
-                {
-                    long oldEstimate = estimatedTeatimeAtStopwatchZero;
-                    float ratio = 0.2f; // weight for the incoming value
-                    estimatedTeatimeAtStopwatchZero =
-                        (long)(ratio * newEstimate + (1f - ratio) * estimatedTeatimeAtStopwatchZero);
-                    // if (Math.Abs(estimatedTeatimeAtStopwatchZero - oldEstimate) > 10)
-                    // {
-                    // Debug.Log($"TEATIME CHANGE: {estimatedTeatimeAtStopwatchZero - oldEstimate}ms");
-                    // }
-                }
-
-                return;
-            }
-        }
-
         // add a time so we can tell how long it sits in the queue
         QueuedMessage qm = new QueuedMessage();
         qm.queueTime = DateTimeOffset.Now.ToUnixTimeMilliseconds();
         qm.isBinary = e.IsBinary;
         if (e.IsBinary) qm.rawData = e.RawData; 
-        else qm.data = data;
+        else qm.data = e.Data;
         messageQueue.Enqueue(qm);
-    }
-
-    long EstimatedTeatime()
-    {
-        return estimatedTeatimeAtStopwatchZero + stopWatch.ElapsedMilliseconds;
     }
 
     public void SendToCroquet(params string[] strings)
     {
-        
         deferredMessages.Add(PackCroquetMessage(strings));
     }
 
@@ -556,6 +517,7 @@ public class CroquetBridge : MonoBehaviour
         else if (command == "joinProgress") HandleJoinProgress(args[0]);
         else if (command == "croquetSessionRunning") HandleSessionRunning(args);
         else if (command == "tearDownSession") TearDownSession();
+        else if (command == "croquetTime") HandleCroquetReflectorTime(args[0]);
         else if (!messageWasProcessed)
         {
             // not a known command; maybe just text for logging
@@ -784,6 +746,33 @@ public class CroquetBridge : MonoBehaviour
     {
         Log("diagnostics", "PING");
         SendToCroquet("unityPong", time);
+    }
+
+    void HandleCroquetReflectorTime(string time)
+    {
+        // this code assumes that JS and C# share system time (Date.now and
+        // DateTimeOffset.Now.ToUnixTimeMilliseconds).
+        // these messages are sent once per second.
+        long newEstimate = long.Parse(time);
+        if (estimatedDateNowAtReflectorZero == -1) estimatedDateNowAtReflectorZero = newEstimate;
+        else
+        {
+            long oldEstimate = estimatedDateNowAtReflectorZero;
+            int ratio = 50; // weight (percent) for the incoming value
+            estimatedDateNowAtReflectorZero =
+                (ratio * newEstimate + (100 - ratio) * estimatedDateNowAtReflectorZero) / 100;
+            if (Math.Abs(estimatedDateNowAtReflectorZero - oldEstimate) > 10)
+            {
+                Debug.Log($"CROQUET TIME CHANGE: {estimatedDateNowAtReflectorZero - oldEstimate}ms");
+            }
+        }
+    }
+    
+    public float CroquetSessionTime()
+    {
+        if (estimatedDateNowAtReflectorZero == -1) return -1f;
+        
+        return (DateTimeOffset.Now.ToUnixTimeMilliseconds() - estimatedDateNowAtReflectorZero) / 1000f;
     }
 
     void HandleLogFromJS(string[] args)
