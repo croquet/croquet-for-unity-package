@@ -558,6 +558,9 @@ export const GameViewManager = class extends ViewService {
     flushDeferredMessages() {
 const pNow = performance.now();
 
+        // give each pawn a chance to update watched properties
+        Object.values(this.pawnsByGameHandle).forEach(pawn => pawn.forwardPropertiesIfNeeded?.());
+
         // now that opportunistic updatePawnGeometry is handled separately, there are
         // currently no commands that need special treatment.  but we may as
         // well keep the option available.
@@ -674,10 +677,10 @@ export const PM_GameRendered = superclass => class extends superclass {
     constructor(actor) {
         super(actor);
 
-        this.throttleFromUnity = 100; // ms
-        this.messagesAwaitingCreation = []; // removed once creation is requested
-        this.geometryAwaitingCreation = null; // can be written by PM_Spatial and its subclasses
-        this.isViewReady = false;
+        this._throttleFromUnity = 100; // ms
+        this._messagesAwaitingCreation = []; // removed once creation is requested
+        this._geometryAwaitingCreation = null; // can be written by PM_Spatial and its subclasses
+        this._isViewReady = false;
     }
 
     initialize(actor) {
@@ -688,27 +691,23 @@ export const PM_GameRendered = superclass => class extends superclass {
         // gather any statics into an argument on the initialisation message:
         // an array with pairs   propName1, propVal1, propName2,...
         const propertyStrings = [];
+        if (watched.length) this._watchedPropertyValues = {}; // propName => [val, stringyVal]
         (statics.concat(watched)).forEach(propName => {
-            if (actor[propName] === undefined) {
+            const value = actor[propName];
+            if (value === undefined) {
                 console.warn(`found undefined value for ${propName}`, this);
             }
-            propertyStrings.push(propName, theGameEngineBridge.encodeValueAsString(actor[propName]));
+            const stringyValue = theGameEngineBridge.encodeValueAsString(value);
+            propertyStrings.push(propName, stringyValue);
+            if (watched.includes(propName)) {
+                this._watchedPropertyValues[propName] = [value, stringyValue];
+            }
         });
         const initArgs = {
             type: actor.gamePawnType,
             propertyValues: propertyStrings
         };
         this.setGameObject(initArgs); // args may be adjusted by mixins
-
-        // additionally, for the "watched" properties, set up listeners for the
-        // automatically generated fooSet events (in the case of property foo)
-        watched.forEach(propName => {
-            const setEventName = `${propName}Set`;
-            console.log(`setting up listener for ${setEventName} on ${this.actor.id}`);
-            this.listenOnce(setEventName, ({ value }) => {
-                this.forwardWatchedProperty(setEventName, value);
-            });
-        });
     }
 
     setGameObject(viewSpec) {
@@ -719,7 +718,7 @@ export const PM_GameRendered = superclass => class extends superclass {
         // that case, don't bother creating the unity gameobject at all.
         if (this.actor.doomed) return;
 
-        if (!viewSpec.confirmCreation) this.isViewReady = true; // not going to wait
+        if (!viewSpec.confirmCreation) this._isViewReady = true; // not going to wait
 
         let allComponents = [...this.componentNames].join(',');
         if (viewSpec.extraComponents) allComponents += `,${viewSpec.extraComponents}`;
@@ -744,29 +743,48 @@ if (this.gameHandle % 100 === 0) {
 }
 
         this.gameViewManager.makeGameObject(this, unityViewSpec);
-        this.messagesAwaitingCreation.forEach(cmdAndArgs => {
+        this._messagesAwaitingCreation.forEach(cmdAndArgs => {
             this.gameViewManager.sendDeferredFromPawn(...[this.gameHandle, ...cmdAndArgs]);
         });
-        delete this.messagesAwaitingCreation;
+        delete this._messagesAwaitingCreation;
 
-        // PM_GameSpatial introduces geometryAwaitingCreation
-        if (this.geometryAwaitingCreation) {
-            this.gameViewManager.updatePawnGeometry(this.gameHandle, this.geometryAwaitingCreation);
-            this.geometryAwaitingCreation = null;
+        // PM_GameSpatial introduces _geometryAwaitingCreation
+        if (this._geometryAwaitingCreation) {
+            this.gameViewManager.updatePawnGeometry(this.gameHandle, this._geometryAwaitingCreation);
+            this._geometryAwaitingCreation = null;
         }
     }
 
-    forwardWatchedProperty(setEventName, newVal) {
-        const scope = this.actor.id;
-        const stringArg = theGameEngineBridge.encodeValueAsString(newVal);
-        const overrideKey = setEventName;
-        this.gameViewManager.sendDeferredWithOverride(this.gameHandle, overrideKey, 'croquetPub', scope, setEventName, stringArg);
+    forwardPropertiesIfNeeded() {
+        if (!this._watchedPropertyValues) return;
+
+        const { actor } = this;
+        for (const [propName, valueAndString] of Object.entries(this._watchedPropertyValues)) {
+            const [value, stringyValue] = valueAndString;
+            const newValue = actor[propName];
+            let changed, newStringyValue;
+            if (Array.isArray(value)) {
+                // @@ would be nice if we can find a more efficient approach
+                newStringyValue = theGameEngineBridge.encodeValueAsString(newValue);
+                changed = newStringyValue !== stringyValue;
+            } else {
+                changed = newValue !== value;
+                if (changed) newStringyValue = theGameEngineBridge.encodeValueAsString(newValue);
+            }
+
+            if (changed) {
+                valueAndString[0] = newValue;
+                valueAndString[1] = newStringyValue;
+                const setEventName = propName + 'Set';
+                this.gameViewManager.sendDeferred(this.gameHandle, 'croquetPub', actor.id, setEventName, newStringyValue);
+            }
+        }
     }
 
     unityViewReady(estimatedReadyTime) {
         // unity side has told us that the object is ready for use
         // console.log(`unityViewReady for ${this.gameHandle}`);
-        this.isViewReady = true;
+        this._isViewReady = true;
         this.setReady();
 if (this.gameHandle % 100 === 0) {
     globalThis.timedLog(`pawn ${this.gameHandle} ready`);
@@ -790,8 +808,8 @@ setupStats[bucket] = (setupStats[bucket] || 0) + 1;
     }
 
     sendToUnity(command, ...args) {
-        if (this.messagesAwaitingCreation) {
-            this.messagesAwaitingCreation.push([command, ...args]);
+        if (this._messagesAwaitingCreation) {
+            this._messagesAwaitingCreation.push([command, ...args]);
         } else {
             this.gameViewManager.sendDeferredFromPawn(this.gameHandle, command, ...args);
         }
@@ -842,7 +860,7 @@ export const PM_GameSpatial = superclass => class extends superclass {
     get up() { return this.actor.up }
 
     geometryUpdateIfNeeded() {
-        if ((this.driving && this.lastSentTranslation) || this.rigidBodyType === 'static' || !this.isViewReady || this.doomed) return null;
+        if ((this.driving && this.lastSentTranslation) || this.rigidBodyType === 'static' || !this._isViewReady || this.doomed) return null;
 
         const updates = {};
         const { scale, rotation, translation } = this; // NB: the actor's direct property values
@@ -881,16 +899,16 @@ export const PM_GameSpatial = superclass => class extends superclass {
         // opportunistic geometry update.
         // if the game pawn hasn't been created yet, store this update to be
         // delivered once the creation has been requested.
-        if (this.messagesAwaitingCreation) {
+        if (this._messagesAwaitingCreation) {
             // not ready yet.  store it (overwriting any previous value)
-            this.geometryAwaitingCreation = updateSpec;
+            this._geometryAwaitingCreation = updateSpec;
         } else {
             this.gameViewManager.updatePawnGeometry(this.gameHandle, updateSpec);
         }
     }
 
     geometryUpdateFromUnity(update) {
-        this.set(update, this.throttleFromUnity);
+        this.set(update, this._throttleFromUnity);
     }
 
 };
