@@ -300,6 +300,11 @@ public class CroquetEntitySystem : CroquetSystem
         {
             CroquetBridge.Instance.SendToCroquet("objectCreated", spec.cH, DateTimeOffset.Now.ToUnixTimeMilliseconds().ToString());
         }
+
+        foreach (ICroquetDriven component in gameObjectToMake.GetComponents<ICroquetDriven>())
+        {
+            component.CroquetInitializationComplete();
+        }
     }
 
     public string GetPropertyValueString(GameObject gameObject, string propertyName)
@@ -384,4 +389,9 @@ public class ObjectSpec
     public string type;
     public string cs; // comma-separated list of extra components
     public string[] ps; // actor properties and their values
+}
+
+public interface ICroquetDriven
+{
+    void CroquetInitializationComplete();
 }
