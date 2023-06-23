@@ -7,7 +7,7 @@ public static class Croquet
     #region Say and Listen Functions
 
     /// <summary>
-    /// Send an event directly to the corresponding actor.
+    /// Send an event with no arguments directly to the corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -18,7 +18,7 @@ public static class Croquet
     }
     
     /// <summary>
-    /// Send an event directly to the corresponding actor.
+    /// Send an event with a string argument directly to the corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -30,7 +30,7 @@ public static class Croquet
     }
     
     /// <summary>
-    /// Send an event directly to the corresponding actor.
+    /// Send an event with a string-array argument directly to the corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -42,7 +42,7 @@ public static class Croquet
     }
     
     /// <summary>
-    /// Send an event directly to the corresponding actor.
+    /// Send an event with a float argument directly to the corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -54,7 +54,7 @@ public static class Croquet
     }
     
     /// <summary>
-    /// Send an event directly to the corresponding actor.
+    /// Send an event with a float-array argument directly to the corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -66,7 +66,19 @@ public static class Croquet
     }
 
     /// <summary>
-    /// Listen for events sent directly from the corresponding actor.
+    /// Send an event with a boolean argument directly to the corresponding actor.
+    /// </summary>
+    /// <param name="gameObject"></param>
+    /// <param name="eventName"></param>
+    /// <param name="argBool"></param>
+    public static void Say(GameObject gameObject, string eventName, bool argBool)
+    {
+        string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
+        CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, "b", argBool.ToString());
+    }
+
+    /// <summary>
+    /// Listen for a say event with no argument from the corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -80,7 +92,7 @@ public static class Croquet
     }
     
     /// <summary>
-    /// Listen for events sent directly from the corresponding actor.
+    /// Listen for a say event with string argument from the corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -94,7 +106,7 @@ public static class Croquet
     }
     
     /// <summary>
-    /// Listen for events sent directly from the corresponding actor.
+    /// Listen for a say event with string-array argument from the corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -108,7 +120,7 @@ public static class Croquet
     }
     
     /// <summary>
-    /// Listen for events sent directly from the corresponding actor.
+    /// Listen for a say event with float argument from the corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -122,7 +134,7 @@ public static class Croquet
     }
     
     /// <summary>
-    /// Listen for events sent directly from the corresponding actor.
+    /// Listen for a say event with float-array argument from the corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -144,7 +156,21 @@ public static class Croquet
     }
 
     /// <summary>
-    /// Cancel listen for events sent directly from the corresponding actor.
+    /// Listen for a say event with boolean argument from the corresponding actor.
+    /// </summary>
+    /// <param name="gameObject"></param>
+    /// <param name="eventName"></param>
+    /// <param name="handler"></param>
+    public static Action<string> Listen(GameObject gameObject, string eventName, Action<bool> handler)
+    {
+        string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
+        Action<string> forwarder = s => handler(bool.Parse(s));
+        CroquetBridge.Instance.ListenForCroquetEvent(gameObject, scope, eventName, forwarder);
+        return forwarder;
+    }
+    
+    /// <summary>
+    /// Cancel listen for say events
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -160,7 +186,7 @@ public static class Croquet
     #region Publish and Subscribe Functions
 
     /// <summary>
-    /// Publish an event with explicit scope.
+    /// Publish an event with explicit scope and no argument.
     /// </summary>
     /// <param name="scope"></param>
     /// <param name="eventName"></param>
@@ -170,7 +196,7 @@ public static class Croquet
     }
     
     /// <summary>
-    /// Publish an event with explicit scope.
+    /// Publish an event with explicit scope and string argument.
     /// </summary>
     /// <param name="scope"></param>
     /// <param name="eventName"></param>
@@ -181,7 +207,7 @@ public static class Croquet
     }
     
     /// <summary>
-    /// Publish an event with explicit scope.
+    /// Publish an event with explicit scope and string-array argument.
     /// </summary>
     /// <param name="scope"></param>
     /// <param name="eventName"></param>
@@ -192,7 +218,7 @@ public static class Croquet
     }
     
     /// <summary>
-    /// Publish an event with explicit scope.
+    /// Publish an event with explicit scope and float argument.
     /// </summary>
     /// <param name="scope"></param>
     /// <param name="eventName"></param>
@@ -203,7 +229,7 @@ public static class Croquet
     }
     
     /// <summary>
-    /// Publish an event with explicit scope.
+    /// Publish an event with explicit scope and float-array argument.
     /// </summary>
     /// <param name="scope"></param>
     /// <param name="eventName"></param>
@@ -214,7 +240,18 @@ public static class Croquet
     }
 
     /// <summary>
-    /// Listen for events sent with explicit scope.
+    /// Publish an event with explicit scope and boolean argument.
+    /// </summary>
+    /// <param name="scope"></param>
+    /// <param name="eventName"></param>
+    /// <param name="argBool"></param>
+    public static void Publish(string scope, string eventName, bool argBool)
+    {
+        CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, "b", argBool.ToString());
+    }
+
+    /// <summary>
+    /// Listen for events sent with explicit scope and no argument.
     /// </summary>
     /// <param name="scope"></param>
     /// <param name="eventName"></param>
@@ -227,7 +264,7 @@ public static class Croquet
     }
     
     /// <summary>
-    /// Listen for events sent with explicit scope.
+    /// Listen for events sent with explicit scope and string argument.
     /// </summary>
     /// <param name="scope"></param>
     /// <param name="eventName"></param>
@@ -240,7 +277,7 @@ public static class Croquet
     }
     
     /// <summary>
-    /// Listen for events sent with explicit scope.
+    /// Listen for events sent with explicit scope and string-array argument.
     /// </summary>
     /// <param name="scope"></param>
     /// <param name="eventName"></param>
@@ -253,7 +290,7 @@ public static class Croquet
     }
     
     /// <summary>
-    /// Listen for events sent with explicit scope.
+    /// Listen for events sent with explicit scope and float argument.
     /// </summary>
     /// <param name="scope"></param>
     /// <param name="eventName"></param>
@@ -266,7 +303,7 @@ public static class Croquet
     }
     
     /// <summary>
-    /// Listen for events sent with explicit scope.
+    /// Listen for events sent with explicit scope and float-array argument.
     /// </summary>
     /// <param name="scope"></param>
     /// <param name="eventName"></param>
@@ -282,6 +319,19 @@ public static class Croquet
             }
             handler(floats.ToArray());
         };
+        CroquetBridge.Instance.SubscribeToCroquetEvent(scope, eventName, forwarder);
+        return forwarder;
+    }
+
+    /// <summary>
+    /// Listen for events sent with explicit scope and boolean argument.
+    /// </summary>
+    /// <param name="scope"></param>
+    /// <param name="eventName"></param>
+    /// <param name="handler"></param>
+    public static Action<string> Subscribe(string scope, string eventName, Action<bool> handler)
+    {
+        Action<string> forwarder = s => handler(bool.Parse(s));
         CroquetBridge.Instance.SubscribeToCroquetEvent(scope, eventName, forwarder);
         return forwarder;
     }
@@ -329,7 +379,13 @@ public static class Croquet
         }
         return floats.ToArray();
     }
-    
+
+    public static bool ReadActorBool(GameObject gameObject, string propertyName)
+    {
+        string stringVal = CroquetEntitySystem.Instance.GetPropertyValueString(gameObject, propertyName);
+        return bool.Parse(stringVal);
+    }
+
     #endregion
 }
 

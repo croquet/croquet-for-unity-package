@@ -98,10 +98,14 @@ console.log(`PORT ${portStr}`);
         this.socket.send(msg);
     }
 
-    encodeValueAsString(args) {
+    encodeValueAsString(arg) {
         // when sending a property value as part of a message over the bridge,
         // elements of an array are separated with \x03
-        return Array.isArray(args) ? args.join('\x03') : String(args);
+        return Array.isArray(arg)
+            ? arg.join('\x03')
+            : typeof arg === 'boolean'
+                ? arg ? 'True' : 'False'
+                : String(arg);
     }
 
     handleUnityMessageOrBundle(msg) {
@@ -166,6 +170,7 @@ console.log(`PORT ${portStr}`);
                 //      ss - string array
                 //      f - single float
                 //      ff - float array
+                //      b - boolean
                 // args[3] - the encoded arg
                 const [ scope, eventName, argFormat, argString ] = args;
                 // console.log({scope, eventName, argFormat, argString});
@@ -173,16 +178,19 @@ console.log(`PORT ${portStr}`);
                 else {
                     let eventArgs = argString.split('\x03');
                     switch (argFormat) {
-                        case 's':
+                        case 's': // string
                             eventArgs = eventArgs[0];
                             break;
-                        case 'f':
+                        case 'f': // float
                             eventArgs = Number(eventArgs[0]);
                             break;
-                        case 'ff':
+                        case 'ff': // float array
                             eventArgs = eventArgs.map(Number);
                             break;
-                        case 'ss': // ok as is
+                        case 'b': // boolean
+                            eventArgs = eventArgs[0] === "True";
+                            break;
+                        case 'ss': // string array; ok as is
                         default:
                     }
                     session?.view.publish(scope, eventName, eventArgs);
