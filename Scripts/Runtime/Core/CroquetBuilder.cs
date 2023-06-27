@@ -9,6 +9,9 @@ using Debug = UnityEngine.Debug;
 
 public class CroquetBuilder
 {
+    public static string NodeExeInBuild =
+        Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "croquet-bridge", "node", "node.exe"));
+
 #if UNITY_EDITOR
     // on MacOS we offer the user the chance to start a webpack watcher that will
     // re-bundle the Croquet app automatically whenever the code is updated.
@@ -59,8 +62,6 @@ public class CroquetBuilder
 
     public static string CroquetBuildToolsInPackage = Path.GetFullPath("Packages/com.croquet.multiplayer/.JSTools");
     public static string NodeExeInPackage = Path.GetFullPath("Packages/com.croquet.multiplayer/.JSTools/NodeJS/node.exe");
-    public static string NodeExeInBuild =
-        Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "croquet-bridge", "node", "node.exe"));
 
     public struct JSBuildDetails
     {
