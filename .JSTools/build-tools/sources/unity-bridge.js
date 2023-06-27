@@ -145,13 +145,13 @@ console.log(`PORT ${portStr}`);
             }
             case 'readyForSession': {
                 // args are [apiKey, appId, sessionName, assetManifests. earlySubscriptionTopics ]
-                const [apiKey, appId, sessionName, assetManifests, earlySubscriptionTopics ] = args;
+                const [apiKey, appId, sessionName, assetManifestString, earlySubscriptionTopics ] = args;
                 globalThis.timedLog(`starting session of ${appId} with key ${apiKey}`);
                 this.apiKey = apiKey;
                 this.appId = appId;
                 this.sessionName = sessionName;
                 // console.log({earlySubscriptionTopics});
-                this.assetManifests = assetManifests;
+                this.assetManifestString = assetManifestString;
                 this.earlySubscriptionTopics = earlySubscriptionTopics; // comma-separated list
                 this.setReady();
                 break;
@@ -306,10 +306,10 @@ export const GameViewManager = class extends ViewService {
             earlySubs.split(',').forEach(topic => this.registerTopicForForwarding(topic));
         }
 
-        const { assetManifests } = theGameEngineBridge;
-        if (assetManifests) {
+        const { assetManifestString } = theGameEngineBridge;
+        if (assetManifestString) {
             const parseArray = str => str.split(',').filter(Boolean); // remove empties
-            const manifestStrings = assetManifests.split('\x03');
+            const manifestStrings = assetManifestString.split('\x03');
             for (let i = 0; i < manifestStrings.length; i += 4) {
                 const assetName = manifestStrings[i];
                 const mixins = parseArray(manifestStrings[i + 1]);
@@ -318,7 +318,6 @@ export const GameViewManager = class extends ViewService {
                 this.assetManifests[assetName] = { mixins, statics, watched };
             }
         }
-
         this.subscribe('__wc', 'say', this.forwardSayToUnity);
     }
 
@@ -338,6 +337,11 @@ export const GameViewManager = class extends ViewService {
 
     getPawn(gameHandle) {
         return this.pawnsByGameHandle[gameHandle] || null;
+    }
+
+    assetManifestForType(type) {
+        // @@ for now, Unity side only deals with lower-case names
+        return this.assetManifests[type.toLowerCase()];
     }
 
     handleUnityCommand(command, args) {
@@ -686,7 +690,7 @@ export const PM_GameRendered = superclass => class extends superclass {
     initialize(actor) {
         // construction is complete, through all mixin layers
 
-        const manifest = this.gameViewManager.assetManifests[actor.gamePawnType];
+        const manifest = this.gameViewManager.assetManifestForType(actor.gamePawnType);
         const { statics, watched } = manifest;
         // gather any statics into an argument on the initialisation message:
         // an array with pairs   propName1, propVal1, propName2,...
@@ -836,7 +840,9 @@ export const PM_GameMaterial = superclass => class extends superclass {
     }
 
     onColorSet() {
-        this.sendToUnity('setColor', this.actor.color);
+        // don't try to set a colour if the actor doesn't have one
+        const { color } = this.actor;
+        if (color) this.sendToUnity('setColor', color);
     }
 };
 gamePawnMixins.Material = PM_GameMaterial;
@@ -983,6 +989,16 @@ export const PM_GameSmoothed = superclass => class extends PM_GameSpatial(superc
 };
 gamePawnMixins.Smoothed = PM_GameSmoothed;
 
+export const PM_GameInteractable = superclass => class extends superclass {
+
+    constructor(actor) {
+        super(actor);
+        this.componentNames.add('CroquetInteractableComponent');
+    }
+
+};
+gamePawnMixins.Interactable = PM_GameInteractable;
+
 export const PM_GameAvatar = superclass => class extends superclass {
 
     constructor(actor) {
@@ -1043,7 +1059,7 @@ PawnManager.prototype.newPawn = function(actor) {
 
         if (!this._gameViewManager) this._gameViewManager = GetViewService("GameViewManager");
 
-        const manifest = this._gameViewManager.assetManifests[gamePawnType];
+        const manifest = this._gameViewManager.assetManifestForType(gamePawnType);
         if (!manifest) {
             console.warn(`no manifest for gamePawnType "${gamePawnType}"`);
             return null;
@@ -1143,8 +1159,9 @@ export class GameInputManager extends ViewService {
                     const [gameHandle, x, y, z, ...layers] = parsedArg;
                     const pawn = this.gameViewManager.getPawn(gameHandle);
                     if (pawn) {
+                        const { actor } = pawn;
                         const xyz = [x, y, z].map(Number);
-                        hitList.push({ pawn, xyz, layers});
+                        hitList.push({ actor, xyz, layers });
                     }
                 }
                 if (hitList.length) this.publish('input', 'pointerHit', { hits: hitList });

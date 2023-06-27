@@ -75,7 +75,7 @@ public class CroquetInteractableSystem : CroquetSystem
                 CroquetEntityComponent entity = objectHit.GetComponent<CroquetEntityComponent>();
                 if (interactable)
                 {
-                    if (interactable.interactable)
+                    if (interactable.isInteractable)
                     {
                         // collect id, hit.x, hit.y, hit.z[, layer1, layer2 etc]
                         List<string> oneHit = new List<string>();
@@ -117,7 +117,7 @@ public class CroquetInteractableSystem : CroquetSystem
         if (go != null)
         {
             CroquetInteractableComponent component = components[go.GetInstanceID()] as CroquetInteractableComponent;
-            component.interactable = true;
+            component.isInteractable = true;
             
             if (layers != "")
             {
