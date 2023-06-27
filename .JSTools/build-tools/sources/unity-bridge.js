@@ -277,6 +277,9 @@ showSetupStats() {
 }
 export const theGameEngineBridge = new BridgeToUnity();
 
+// GameViewManager is a new kind of service, created specifically for
+// the bridge to Unity, handling the creation and management of Unity-side
+// gameObjects that track the Croquet pawns.
 // GameViewManager is a ViewService, and is therefore constructed afresh
 // on Session.join().  if there is a network glitch, the manager will be destroyed
 // on disconnection and then rebuilt when the session re-connects.
@@ -1031,16 +1034,15 @@ export const PM_GameAvatar = superclass => class extends superclass {
 };
 gamePawnMixins.Avatar = PM_GameAvatar;
 
-// GamePawnManager is [will be] a specialisation of the standard
+// GamePawnManager is a specialisation of the standard
 // Worldcore PawnManager, with pawn-creation logic that removes the need for
-// static declaration of pawn classes.
-// GameViewManager is a new kind of service, created specifically for
-// the bridge to Unity, handling the creation and management of Unity-side
-// gameObjects that track the Croquet pawns.
+// actor-side declaration of pawn classes.
+class GamePawnManager extends PawnManager {
+    newPawn(actor) {
+        return actor.gamePawnType ? this.newGamePawn(actor) : super.newPawn(actor);
+    }
 
-// $$$ temporary mega-hack: overwrite the newPawn method in the PawnManager
-// prototype.
-PawnManager.prototype.newPawn = function(actor) {
+    newGamePawn(actor) {
         // for the unity world, pawn classes are built on the fly using
         // the mixins defined above, based on the pawnMixins list of mixin
         // names provided by the actor.
@@ -1049,16 +1051,9 @@ PawnManager.prototype.newPawn = function(actor) {
         // an actor that doesn't want any game pawn still gets a vanilla Pawn,
         // e.g. so it can support having children.
 
-        const { gamePawnType } = actor;
-        if (!gamePawnType) {
-            // doesn't want a game pawn at all
-            const p = new Pawn(actor);
-            this.pawns.set(actor.id, p);
-            return p;
-        }
-
         if (!this._gameViewManager) this._gameViewManager = GetViewService("GameViewManager");
 
+        const { gamePawnType } = actor;
         const manifest = this._gameViewManager.assetManifestForType(gamePawnType);
         if (!manifest) {
             console.warn(`no manifest for gamePawnType "${gamePawnType}"`);
@@ -1073,14 +1068,24 @@ PawnManager.prototype.newPawn = function(actor) {
 
         this.pawns.set(actor.id, p);
         return p;
-};
+    }
+
+    spawnPawn(actor) {
+        const p = this.newPawn(actor);
+        if (p) p.link();
+    }
+}
 
 export class GameViewRoot extends ViewRoot {
 
     static viewServices() {
-        // $$$ for now, hard-code these two.  figure out later how to
-        // customise (presumably based on annotation in the ModelRoot)
-        return [GameViewManager, GameInputManager];
+        // $$$ for now, hard-code these three.  figure out later how to
+        // customise (presumably based on presence of System components
+        // on the Unity Croquet bridge)
+        // note that our PawnManager needs to come last, because it'll
+        // immediately get to work on building pawns that might call
+        // on the other managers during their creation.
+        return [GameViewManager, GameInputManager, GamePawnManager];
     }
 
     constructor(model) {
