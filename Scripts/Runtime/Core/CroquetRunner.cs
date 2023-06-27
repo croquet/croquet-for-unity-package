@@ -139,11 +139,11 @@ public class CroquetRunner : MonoBehaviour
                 cb: (msg) => { TimedLog(string.Format("CallFromJS[{0}]", msg)); },
                 err: (msg) => { TimedLog(string.Format("CallOnError[{0}]", msg)); },
                 httpErr: (msg) => { TimedLog(string.Format("CallOnHttpError[{0}]", msg)); },
-                started: (msg) => { TimedLog(string.Format("CallOnStarted[{0}]", msg)); },
+                started: (msg) => { /* TimedLog(string.Format("CallOnStarted[{0}]", msg)); */ },
                 hooked: (msg) => { TimedLog(string.Format("CallOnHooked[{0}]", msg)); },
                 ld: (msg) =>
                 {
-                    TimedLog(string.Format("CallOnLoaded[{0}]", msg));
+                    // TimedLog(string.Format("CallOnLoaded[{0}]", msg));
                     webViewObject.EvaluateJS(@"
                       if (window && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.unityControl) {
                         window.Unity = {

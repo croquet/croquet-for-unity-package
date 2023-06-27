@@ -16,6 +16,7 @@ public class CroquetEntitySystem : CroquetSystem
 {
     // manages preloading the addressableAssets
     private Dictionary<string, GameObject> addressableAssets;
+    public string assetManifestString;
     public bool addressablesReady = false; // make public read or emit event to inform other systems that the assets are loaded
     
     // Create Singleton Reference
@@ -131,6 +132,9 @@ public class CroquetEntitySystem : CroquetSystem
                     addressableAssets.Add(go.name.ToLower(), go); // @@ remove case-sensitivity
                 }
                 addressablesReady = true;
+                // prepare this now, because trying within the Socket's OnOpen 
+                // fails.  presumably a thread issue.
+                assetManifestString = AssetManifestsAsString();
             };
         }
         else
@@ -138,6 +142,38 @@ public class CroquetEntitySystem : CroquetSystem
             Debug.Log($"No addressable assets are tagged '{label}'");
             addressablesReady = true;
         }
+    }
+
+    public string AssetManifestsAsString()
+    {
+        // we expect each addressable asset to have an attached CroquetActorManifest, that contains
+        //    string[] mixins;
+        //    string[] staticProperties;
+        //    string[] watchedProperties;
+
+        // here we build a single string that combines all assets' manifest properties.
+        // arbitrarily, the string format is
+        //   assetName1:mixinsList1:staticsList1:watchedList1:assetName2:mixinsList2:...
+        // where ':' is in fact \x03, and the lists are comma-separated
+
+        List<string> allManifests = new List<string>();
+        foreach (KeyValuePair<string, GameObject> kv in Instance.addressableAssets)
+        {
+            GameObject asset = kv.Value;
+            CroquetActorManifest manifest = asset.GetComponent<CroquetActorManifest>();
+            if (manifest != null)
+            {
+                List<string> oneAssetStrings = new List<string>();
+                oneAssetStrings.Add(kv.Key); // asset name
+                oneAssetStrings.Add(string.Join(',', manifest.mixins));
+                oneAssetStrings.Add(string.Join(',', manifest.staticProperties));
+                oneAssetStrings.Add(string.Join(',', manifest.watchedProperties));
+                allManifests.Add(string.Join('\x03', oneAssetStrings.ToArray()));
+            }
+        }
+
+        string result = allManifests.Count == 0 ? "" : string.Join('\x03', allManifests.ToArray());
+        return result;
     }
 
     public override void ProcessCommand(string command, string[] args)
@@ -186,13 +222,23 @@ public class CroquetEntitySystem : CroquetSystem
             }
         }
 
+        if (gameObjectToMake.GetComponent<CroquetEntityComponent>() == null){
+            gameObjectToMake.AddComponent<CroquetEntityComponent>();
+        }
+        
         CroquetEntityComponent entity = gameObjectToMake.GetComponent<CroquetEntityComponent>();
         entity.croquetHandle = spec.cH;
         int instanceID = gameObjectToMake.GetInstanceID();
         AssociateCroquetHandleToInstanceID(spec.cH, instanceID);
-        
-        if (spec.cN != "") entity.croquetActorId = spec.cN;
 
+        // croquetName (actor.id)
+        if (spec.cN != "")
+        {
+            entity.croquetActorId = spec.cN;
+            CroquetBridge.Instance.FixUpEarlyListens(gameObjectToMake, entity.croquetActorId);
+        }
+        
+        // allComponents
         if (spec.cs != "")
         {
             string[] comps = spec.cs.Split(',');
@@ -216,6 +262,7 @@ public class CroquetEntitySystem : CroquetSystem
                     {
                         if (gameObjectToMake.GetComponent(typeToAdd) == null)
                         {
+                            // Debug.Log($"adding component {typeToAdd}");
                             gameObjectToMake.AddComponent(typeToAdd);
                         }
                     }
@@ -227,11 +274,19 @@ public class CroquetEntitySystem : CroquetSystem
             }
         }
 
-        foreach (CroquetEventParticipant eventScript in gameObjectToMake.GetComponents<CroquetEventParticipant>())
+        // propertyValues
+        if (spec.ps.Length != 0)
         {
-            eventScript.AddCroquetSubscriptions();
+            // an array with pairs   propName1, propVal1, propName2,...
+            string[] props = spec.ps;
+            for (int i = 0; i < props.Length; i += 2)
+            {
+                // Debug.Log($"setting {props[i]} to {props[i + 1]}");
+                entity.actorProperties[props[i]] = props[i + 1]; // in its encoded form
+            }
         }
-
+        
+        // waitToPresent
         if (spec.wTP)
         {
             foreach (Renderer renderer in gameObjectToMake.GetComponentsInChildren<Renderer>())
@@ -240,10 +295,27 @@ public class CroquetEntitySystem : CroquetSystem
             }
         }
         
+        // confirmCreation
         if (spec.cC)
         {
             CroquetBridge.Instance.SendToCroquet("objectCreated", spec.cH, DateTimeOffset.Now.ToUnixTimeMilliseconds().ToString());
         }
+
+        foreach (ICroquetDriven component in gameObjectToMake.GetComponents<ICroquetDriven>())
+        {
+            component.CroquetInitializationComplete();
+        }
+    }
+
+    public string GetPropertyValueString(GameObject gameObject, string propertyName)
+    {
+        Dictionary<string, string> properties = gameObject.GetComponent<CroquetEntityComponent>().actorProperties;
+        if (!properties.ContainsKey(propertyName))
+        {
+            Debug.LogWarning($"failed to find property {propertyName} in {gameObject}");
+            return "";
+        }
+        return properties[propertyName];
     }
     
     void DestroyObject(string croquetHandle)
@@ -263,6 +335,10 @@ public class CroquetEntitySystem : CroquetSystem
                 CroquetSystem system = componentToUnregister.croquetSystem;
                 system.UnregisterComponent(componentToUnregister); //crosses fingers
             }
+            
+            
+            CroquetBridge.Instance.RemoveCroquetSubscriptionsFor(go);
+            
             
             DisassociateCroquetHandleToInstanceID(croquetHandle);
 
@@ -312,4 +388,10 @@ public class ObjectSpec
     public bool wTP; // waitToPresent:  whether to make visible immediately
     public string type;
     public string cs; // comma-separated list of extra components
+    public string[] ps; // actor properties and their values
+}
+
+public interface ICroquetDriven
+{
+    void CroquetInitializationComplete();
 }

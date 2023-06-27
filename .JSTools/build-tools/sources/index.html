@@ -10,7 +10,10 @@
             }
         </style>
         <script id="timerWorker" type="text/js-worker">
-            onmessage = ({ data }) => setInterval(() => postMessage('interval'), data.interval);
+            onmessage = ({ data }) => {
+                if (data.interval) setInterval(() => postMessage('interval'), data.interval);
+                else setTimeout(() => postMessage(data.id), data.duration);
+            };
         </script>
     </head>
     <body>

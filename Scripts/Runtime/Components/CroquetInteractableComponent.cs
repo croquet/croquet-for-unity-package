@@ -6,9 +6,9 @@ public class CroquetInteractableComponent : CroquetComponent
 {
     public override CroquetSystem croquetSystem { get; set; } = CroquetInteractableSystem.Instance;
 
-    public bool interactable = false;
+    public bool isInteractable = true;
 
-    public string[] interactableLayers;
+    public string[] interactableLayers = new string[]{};
 
 
 }
