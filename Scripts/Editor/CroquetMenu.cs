@@ -17,7 +17,9 @@ class CroquetBuildPreprocess : IPreprocessBuildWithReport
         if (target == BuildTarget.StandaloneWindows || target == BuildTarget.StandaloneWindows64)
         {
             string src = CroquetBuilder.NodeExeInPackage;
-            string dest = "Assets/StreamingAssets/croquet-bridge/node/node.exe";
+            string dest = CroquetBuilder.NodeExeInBuild;
+            string destDir = Path.GetDirectoryName(dest);
+            Directory.CreateDirectory(destDir);
             FileUtil.CopyFileOrDirectory(src, dest);
         }
     }
@@ -68,7 +70,7 @@ class CroquetBuildPostprocess : IPostprocessBuildWithReport
         BuildTarget target = report.summary.platform;
         if (target == BuildTarget.StandaloneWindows || target == BuildTarget.StandaloneWindows64)
         {
-            string dest = "Assets/StreamingAssets/croquet-bridge/node/node.exe";
+            string dest = CroquetBuilder.NodeExeInBuild;
             FileUtil.DeleteFileOrDirectory(dest);
             FileUtil.DeleteFileOrDirectory(dest + ".meta");
         }
@@ -102,7 +104,7 @@ public class CroquetMenu
         //   a watcher for any scene is running (MacOS only), or
         //   a build has been requested and hasn't finished yet 
         if (!CroquetBuilder.KnowHowToBuildJS()) return false;
-        
+
 #if !UNITY_EDITOR_WIN
         if (CroquetBuilder.RunningWatcherApp() != "") return false;
 #endif
@@ -170,8 +172,8 @@ public class CroquetMenu
         return appName != "" && appName != CroquetBuilder.GetSceneBuildDetails().appName;
     }
 #endif
-    
-    
+
+
     [MenuItem(CopyJSItem, false, 200)]
     private static void CopyJS()
     {
