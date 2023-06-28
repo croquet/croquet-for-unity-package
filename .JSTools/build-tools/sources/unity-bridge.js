@@ -869,7 +869,10 @@ export const PM_GameSpatial = superclass => class extends superclass {
     get up() { return this.actor.up }
 
     geometryUpdateIfNeeded() {
-        if ((this.driving && this.lastSentTranslation) || this.rigidBodyType === 'static' || !this._isViewReady || this.doomed) return null;
+        // for an avatar, filter out all updates other than the very first time,
+        // or if some property has been snapped
+        const avatarFiltering = this.driving && this.lastSentTranslation && !this._scaleSnapped && !this._rotationSnapped && !this._translationSnapped;
+        if (avatarFiltering || this.rigidBodyType === 'static' || !this._isViewReady || this.doomed) return null;
 
         const updates = {};
         const { scale, rotation, translation } = this; // NB: the actor's direct property values
@@ -901,6 +904,7 @@ export const PM_GameSpatial = superclass => class extends superclass {
     }
 
     resetGeometrySnapState() {
+        // for Spatial, act as if every update is a snap.  PM_GameSmoothed assumes the opposite.
         this._scaleSnapped = this._rotationSnapped = this._translationSnapped = true;
     }
 
@@ -1125,27 +1129,28 @@ export class GameInputManager extends ViewService {
             return;
         }
 
+        const { viewId } = this;
         switch (event) {
             case 'keyDown': {
                 const keyCode = args[1];
-                this.publish('input', `${keyCode.toLowerCase()}Down`);
-                this.publish('input', 'keyDown', { key: keyCode });
+                this.publish('input', `${keyCode.toLowerCase()}Down`, { viewId });
+                this.publish('input', 'keyDown', { viewId, key: keyCode });
                 break;
             }
             case 'keyUp': {
                 const keyCode = args[1];
-                this.publish('input', `${keyCode.toLowerCase()}Up`);
-                this.publish('input', 'keyUp', { key: keyCode });
+                this.publish('input', `${keyCode.toLowerCase()}Up`, { viewId });
+                this.publish('input', 'keyUp', { viewId, key: keyCode });
                 break;
             }
             case 'pointerDown': {
                 const button = Number(args[1]);
-                this.publish('input', 'pointerDown', { button });
+                this.publish('input', 'pointerDown', { viewId, button });
                 break;
             }
             case 'pointerUp': {
                 const button = Number(args[1]);
-                this.publish('input', 'pointerUp', { button });
+                this.publish('input', 'pointerUp', { viewId, button });
                 break;
             }
             case 'pointerHit': {
@@ -1169,7 +1174,7 @@ export class GameInputManager extends ViewService {
                         hitList.push({ actor, xyz, layers });
                     }
                 }
-                if (hitList.length) this.publish('input', 'pointerHit', { hits: hitList });
+                if (hitList.length) this.publish('input', 'pointerHit', { viewId, hits: hitList });
                 break;
             }
             default:
