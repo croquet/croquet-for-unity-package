@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using WebSocketSharp;
 using WebSocketSharp.Server;
 using WebSocketSharp.Net;
@@ -149,7 +150,7 @@ public class CroquetBridge : MonoBehaviour
 
             string apiKey = Instance.appProperties.apiKey;
             string appId = Instance.appProperties.appPrefix + "." + Instance.appName;
-            string sessionName = Instance.sessionNameValue.ToString();
+            string sessionName = Instance.sessionName.ToString();
             string assetManifests = CroquetEntitySystem.Instance.assetManifestString;
             string earlySubscriptionTopics = Instance.EarlySubscriptionTopicsAsString();
             
@@ -181,8 +182,9 @@ public class CroquetBridge : MonoBehaviour
         }
     }
 
-    // TODO: remove sentinel value
-    public int sessionNameValue = -999; // @@ when running in the editor it would be good to see this; figure out how to make it read-only
+    private bool hasStartedWS = false;
+    public int defaultSessionName = 123;
+    public int sessionName = 0;
     
     public bool simulateNetworkGlitch = false;
     public float networkGlitchDuration = 3.0f;
@@ -202,15 +204,18 @@ public class CroquetBridge : MonoBehaviour
             return;
         }
 #endif
+        hasStartedWS = true; // even if it turns out to fail, don't try again
         
-        // recover a specific session name from PlayerPrefs
-        sessionNameValue = PlayerPrefs.GetInt("sessionNameValue", 1);
+        // @@ assume that if this scene has a buildIndex greater than zero it was
+        // started from a session-name chooser and should use the recorded value
+        int buildIndex = SceneManager.GetActiveScene().buildIndex;
+        sessionName = buildIndex == 0 ? defaultSessionName : PlayerPrefs.GetInt("sessionNameValue", 1);
         
         Log("session", "building WS Server on open port");
         int port = appProperties.preferredPort;
-        int maximumTries = 9;
+        int remainingTries = 9;
         bool goodPortFound = false;
-        while (!goodPortFound && maximumTries>0)
+        while (!goodPortFound && remainingTries > 0)
         {
             HttpServer wsAttempt = null;
             try
@@ -229,9 +234,18 @@ public class CroquetBridge : MonoBehaviour
             {
                 Debug.Log($"Exception detected for port {port}:{e}");
                 port++;
-                maximumTries--;
+                remainingTries--;
                 wsAttempt.Stop();
             }
+        }
+
+        if (!goodPortFound)
+        {
+            Debug.LogError("Cannot find an available port for the Croquet bridge");
+#if UNITY_EDITOR
+            EditorApplication.ExitPlaymode();
+#endif
+            return;
         }
 
         ws.OnGet += OnGetHandler;
@@ -360,7 +374,7 @@ public class CroquetBridge : MonoBehaviour
     void Update()
     {
         // before WS has been started, check whether we're ready to do so
-        if (sessionNameValue == -999 && CroquetEntitySystem.Instance.addressablesReady)
+        if (!hasStartedWS && CroquetEntitySystem.Instance.addressablesReady)
         {
             StartWS();
         }
