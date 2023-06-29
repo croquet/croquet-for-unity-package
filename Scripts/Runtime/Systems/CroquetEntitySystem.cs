@@ -95,12 +95,12 @@ public class CroquetEntitySystem : CroquetSystem
         addressableAssets = new Dictionary<string, GameObject>();
         // cache a list of all the systems that are running in this scene, for
         // alerting when object properties change
-        allSystems = CroquetBridge.Instance.gameObject.GetComponents<CroquetSystem>();
     }
     
     private void Start()
     {
         CroquetBridge.Instance.RegisterSystem(this);
+        allSystems = CroquetBridge.Instance.gameObject.GetComponents<CroquetSystem>();
         StartCoroutine(LoadAddressableAssetsWithLabel(CroquetBridge.Instance.appName));
     }
     
