@@ -1036,7 +1036,7 @@ gamePawnMixins.Avatar = PM_GameAvatar;
 // actor-side declaration of pawn classes.
 class GamePawnManager extends PawnManager {
     newPawn(actor) {
-        return actor.gamePawnType ? this.newGamePawn(actor) : super.newPawn(actor);
+        return actor.gamePawnType !== undefined ? this.newGamePawn(actor) : super.newPawn(actor);
     }
 
     newGamePawn(actor) {
@@ -1050,18 +1050,24 @@ class GamePawnManager extends PawnManager {
 
         if (!this._gameViewManager) this._gameViewManager = GetViewService("GameViewManager");
 
-        const { gamePawnType } = actor;
-        const manifest = this._gameViewManager.assetManifestForType(gamePawnType);
-        if (!manifest) {
-            console.warn(`no manifest for gamePawnType "${gamePawnType}"`);
-            return null;
-        }
+        let p;
 
-        const mixinNames = manifest.mixins; // can be empty
-        const mixins = ['Base'].concat(mixinNames).map(n => gamePawnMixins[n]);
-        const PawnClass = mix(Pawn).with(...mixins);
-        const p = new PawnClass(actor);
-        p.initialize(actor); // new: 2-phase init, so all constructors run to completion first
+        const { gamePawnType } = actor;
+        if (gamePawnType === "") {
+            p = new Pawn(actor);
+        } else {
+            const manifest = this._gameViewManager.assetManifestForType(gamePawnType);
+            if (!manifest) {
+                console.warn(`no manifest for gamePawnType "${gamePawnType}"`);
+                return null;
+            }
+
+            const mixinNames = manifest.mixins; // can be empty
+            const mixins = ['Base'].concat(mixinNames).map(n => gamePawnMixins[n]);
+            const PawnClass = mix(Pawn).with(...mixins);
+            p = new PawnClass(actor);
+            p.initialize(actor); // new: 2-phase init, so all constructors run to completion first
+        }
 
         this.pawns.set(actor.id, p);
         return p;
