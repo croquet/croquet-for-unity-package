@@ -702,7 +702,8 @@ export const PM_GameRendered = superclass => class extends superclass {
         (statics.concat(watched)).forEach(propName => {
             const value = actor[propName];
             if (value === undefined) {
-                console.warn(`found undefined value for ${propName}`, this);
+                console.log(`property ${propName} not found on ${actor.constructor.name} (possible prefab/class mismatch)`);
+                return;
             }
             const stringyValue = theGameEngineBridge.encodeValueAsString(value);
             propertyStrings.push(propName, stringyValue);
@@ -838,14 +839,6 @@ export const PM_GameMaterial = superclass => class extends superclass {
     constructor(actor) {
         super(actor);
         this.componentNames.add('CroquetMaterialComponent');
-        this.listen("colorSet", this.onColorSet);
-        this.onColorSet();
-    }
-
-    onColorSet() {
-        // don't try to set a colour if the actor doesn't have one
-        const { color } = this.actor;
-        if (color) this.sendToUnity('setColor', color);
     }
 };
 gamePawnMixins.Material = PM_GameMaterial;

@@ -18,6 +18,8 @@ public class CroquetEntitySystem : CroquetSystem
     private Dictionary<string, GameObject> addressableAssets;
     public string assetManifestString;
     public bool addressablesReady = false; // make public read or emit event to inform other systems that the assets are loaded
+
+    private CroquetSystem[] allSystems;
     
     // Create Singleton Reference
     public static CroquetEntitySystem Instance { get; private set; }
@@ -91,6 +93,9 @@ public class CroquetEntitySystem : CroquetSystem
         }
         
         addressableAssets = new Dictionary<string, GameObject>();
+        // cache a list of all the systems that are running in this scene, for
+        // alerting when object properties change
+        allSystems = CroquetBridge.Instance.gameObject.GetComponents<CroquetSystem>();
     }
     
     private void Start()
@@ -281,8 +286,20 @@ public class CroquetEntitySystem : CroquetSystem
             string[] props = spec.ps;
             for (int i = 0; i < props.Length; i += 2)
             {
-                // Debug.Log($"setting {props[i]} to {props[i + 1]}");
-                entity.actorProperties[props[i]] = props[i + 1]; // in its encoded form
+                SetPropertyValueString(entity, props[i], props[i + 1]);
+            }
+        }
+        
+        CroquetActorManifest manifest = gameObjectToMake.GetComponent<CroquetActorManifest>();
+        if (manifest != null)
+        {
+            foreach (string propName in manifest.watchedProperties)
+            {
+                string eventName = propName + "Set";
+                Croquet.Listen(gameObjectToMake, eventName, (string stringyVal) =>
+                {
+                    SetPropertyValueString(entity, propName, stringyVal);
+                });
             }
         }
         
@@ -307,6 +324,20 @@ public class CroquetEntitySystem : CroquetSystem
         }
     }
 
+    private void SetPropertyValueString(CroquetEntityComponent entity, string propertyName, string stringyValue)
+    {
+        // Debug.Log($"setting {propertyName} to {stringyValue}");
+        entity.actorProperties[propertyName] = stringyValue;
+        GameObject go = entity.gameObject;
+        foreach (CroquetSystem system in allSystems)
+        {
+            if (system.KnowsObject(go))
+            {
+                system.ActorPropertySet(go, propertyName);
+            }
+        }
+    }
+    
     public string GetPropertyValueString(GameObject gameObject, string propertyName)
     {
         Dictionary<string, string> properties = gameObject.GetComponent<CroquetEntityComponent>().actorProperties;

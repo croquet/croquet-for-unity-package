@@ -24,6 +24,16 @@ public abstract class CroquetSystem : MonoBehaviour
     {
         components.Remove(component.gameObject.GetInstanceID());
     }
+
+    public bool KnowsObject(GameObject go)
+    {
+        return components.ContainsKey(go.GetInstanceID());
+    }
+
+    public virtual void ActorPropertySet(GameObject go, string propName)
+    {
+        // by default, nothing
+    }
     
     public virtual void ProcessCommand(string command, string[] args)
     {

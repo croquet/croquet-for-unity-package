@@ -5,10 +5,7 @@ using UnityEngine;
 
 public class CroquetMaterialSystem : CroquetSystem
 {
-    public override List<string> KnownCommands { get; } = new List<string>()
-    {
-        "setColor"
-    };
+    public override List<string> KnownCommands { get; } = new List<string>() { };
 
     protected override Dictionary<int, CroquetComponent> components { get; set; } = new Dictionary<int, CroquetComponent>();
     
@@ -27,7 +24,7 @@ public class CroquetMaterialSystem : CroquetSystem
             Instance = this;
         } 
     }
-        
+    
     public void Start()
     {
     //     // Scan scene for all Material Components
@@ -38,20 +35,23 @@ public class CroquetMaterialSystem : CroquetSystem
     //     }
     }
 
-    public override void ProcessCommand(string command, string[] args)
+    public override void ActorPropertySet(GameObject go, string propName)
     {
-        if (command == "setColor") SetColor(args);
-    }
-
-    private void SetColor(string[] args)
-    {
-        string croquetHandle = args[0];
-        string[] rgb = args[1].Split(",");
-        Color colorToSet = new Color(float.Parse(rgb[0]), float.Parse(rgb[1]), float.Parse(rgb[2]));
-        GameObject go = CroquetEntitySystem.Instance.GetGameObjectByCroquetHandle(croquetHandle);
-        if (go != null)
+        // we're being notified that a watched property on an object that we are
+        // known to have an interest in has changed.  right now, we only care
+        // about color.
+        if (propName == "color")
         {
+            float[] rgb = Croquet.ReadActorFloatArray(go, "color");
+            // as a convention, a red value of -1 means "don't change the color"
+            if (rgb[0] == -1)
+            {
+                return;
+            }
+            
+            Color colorToSet = new Color(rgb[0], rgb[1], rgb[2]);
             go.GetComponentInChildren<MeshRenderer>().materials[0].color = colorToSet;
+            // Debug.Log($"color set for {go} to {string.Join<float>(',', rgb)}");
         }
     }
 }
