@@ -30,6 +30,11 @@ public abstract class CroquetSystem : MonoBehaviour
         return components.ContainsKey(go.GetInstanceID());
     }
 
+    public virtual void PawnInitializationComplete(GameObject go)
+    {
+        // by default, nothing
+    }
+
     public virtual void ActorPropertySet(GameObject go, string propName)
     {
         // by default, nothing

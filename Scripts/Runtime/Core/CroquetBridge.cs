@@ -345,6 +345,7 @@ public class CroquetBridge : MonoBehaviour
     public void SendToCroquetSync(params string[] strings)
     {
         SendToCroquet(strings);
+        lastMessageSend = 0; // force to be immediate, even if we just sent something
         SendDeferredMessages();
     }
     
@@ -879,7 +880,7 @@ public class CroquetBridge : MonoBehaviour
     }
 
     // OUT: Logging System
-    void Log(string category, string msg)
+    public void Log(string category, string msg)
     {
         bool loggable;
         if (logOptions.TryGetValue(category, out loggable) && loggable)

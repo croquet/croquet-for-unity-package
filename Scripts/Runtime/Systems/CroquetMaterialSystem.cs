@@ -38,8 +38,8 @@ public class CroquetMaterialSystem : CroquetSystem
     public override void ActorPropertySet(GameObject go, string propName)
     {
         // we're being notified that a watched property on an object that we are
-        // known to have an interest in has changed.  right now, we only care
-        // about color.
+        // known to have an interest in has changed.  right now, this system
+        // only cares about color.
         if (propName == "color")
         {
             float[] rgb = Croquet.ReadActorFloatArray(go, "color");

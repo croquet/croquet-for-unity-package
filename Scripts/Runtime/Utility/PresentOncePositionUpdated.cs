@@ -3,8 +3,9 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class PresentOnFirstMove : MonoBehaviour
+public class PresentOncePositionUpdated : MonoBehaviour
 {
+    public bool waitUntilMove = false;
     private CroquetSpatialComponent sc;
     
     private void Start()
@@ -16,7 +17,7 @@ public class PresentOnFirstMove : MonoBehaviour
     {
         // or
         // if(CroquetSpatialSystem.Instance.hasObjectMoved(gameObject.GetInstanceID()))
-        if (sc.hasBeenMoved)
+        if (sc.hasBeenMoved || (!waitUntilMove && sc.hasBeenPlaced))
         {
             foreach (var renderer in GetComponentsInChildren<MeshRenderer>())
             {

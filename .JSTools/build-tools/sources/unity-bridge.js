@@ -295,11 +295,8 @@ export const GameViewManager = class extends ViewService {
 
         this.forwardedEventTopics = {}; // topic (scope:eventName) => handler
 
-        this.unityMessageThrottle = 45; // ms (every two updates at 26ms)
-        this.unityGeometryThrottle = 90; // ms (every four updates at 26ms)
+        this.unityMessageThrottle = 40; // ms (every two updates at 26ms, even if they get a little bunched up)
         this.lastMessageFlush = 0;
-        this.lastGeometryFlush = 0;
-
         this.assetManifests = {};
 
         theGameEngineBridge.setCommandHandler(this.handleUnityCommand.bind(this));
@@ -447,7 +444,6 @@ export const GameViewManager = class extends ViewService {
         // any time a new object is created, we ensure that there is minimal delay in
         // servicing the deferred messages and updating objects' geometries.
         this.expediteMessageFlush();
-        this.expediteGeometryFlush();
         return gameHandle;
     }
 
@@ -544,10 +540,6 @@ export const GameViewManager = class extends ViewService {
         if (now - (this.lastMessageFlush || 0) >= this.unityMessageThrottle) {
             this.lastMessageFlush = now;
             this.flushDeferredMessages();
-        }
-
-        if (now - (this.lastGeometryFlush || 0) >= this.unityGeometryThrottle) {
-            this.lastGeometryFlush = now;
             this.flushGeometries();
         }
     }
@@ -555,11 +547,6 @@ export const GameViewManager = class extends ViewService {
     expediteMessageFlush() {
         // guarantee that messages will flush on next update
         this.lastMessageFlush = null;
-    }
-
-    expediteGeometryFlush() {
-        // guarantee that geometries will flush on next update
-        this.lastGeometryFlush = null;
     }
 
     flushDeferredMessages() {
@@ -680,6 +667,8 @@ export const PM_GameRendered = superclass => class extends superclass {
     get gameViewManager() { return this._gameViewManager || (this._gameViewManager = GetViewService('GameViewManager' ))}
     get gameHandle() { return this._gameHandle || (this._gameHandle = this.gameViewManager.nextGameHandle()) }
     get componentNames() { return this._componentNames || (this._componentNames = new Set()) }
+    get extraStatics() { return this._extraStatics || (this._extraStatics = new Set()) }
+    get extraWatched() { return this._extraWatched || (this._extraWatched = new Set()) }
 
     constructor(actor) {
         super(actor);
@@ -694,26 +683,33 @@ export const PM_GameRendered = superclass => class extends superclass {
         // construction is complete, through all mixin layers
 
         const manifest = this.gameViewManager.assetManifestForType(actor.gamePawnType);
-        const { statics, watched } = manifest;
+        const statics = new Set(manifest.statics);
+        const watched = new Set(manifest.watched);
+        this.extraStatics.forEach(prop => statics.add(prop));
+        this.extraWatched.forEach(prop => watched.add(prop));
         // gather any statics into an argument on the initialisation message:
         // an array with pairs   propName1, propVal1, propName2,...
         const propertyStrings = [];
-        if (watched.length) this._watchedPropertyValues = {}; // propName => [val, stringyVal]
-        (statics.concat(watched)).forEach(propName => {
-            const value = actor[propName];
+        if (watched.size) this._watchedPropertyValues = {}; // propName => [val, stringyVal]
+        const merged = new Set([...statics, ...watched]);
+        merged.forEach(propName => {
+            let actorPropName = propName;
+            if (propName === "position") actorPropName = "translation";
+            const value = actor[actorPropName];
             if (value === undefined) {
                 console.log(`property ${propName} not found on ${actor.constructor.name} (possible prefab/class mismatch)`);
                 return;
             }
             const stringyValue = theGameEngineBridge.encodeValueAsString(value);
             propertyStrings.push(propName, stringyValue);
-            if (watched.includes(propName)) {
+            if (watched.has(propName)) {
                 this._watchedPropertyValues[propName] = [value, stringyValue];
             }
         });
         const initArgs = {
             type: actor.gamePawnType,
-            propertyValues: propertyStrings
+            propertyValues: propertyStrings,
+            watchers: [...watched]
         };
         this.setGameObject(initArgs); // args may be adjusted by mixins
     }
@@ -740,6 +736,7 @@ export const PM_GameRendered = superclass => class extends superclass {
             type: viewSpec.type,
             cs: allComponents,
             ps: viewSpec.propertyValues,
+            ws: viewSpec.watchers
         };
 // every pawn tracks the delay between its creation on the Croquet
 // side and receipt of a message from Unity confirming the corresponding
@@ -769,7 +766,11 @@ if (this.gameHandle % 100 === 0) {
         const { actor } = this;
         for (const [propName, valueAndString] of Object.entries(this._watchedPropertyValues)) {
             const [value, stringyValue] = valueAndString;
-            const newValue = actor[propName];
+
+            let actorPropName = propName;
+            if (propName === "position") actorPropName = "translation";
+
+            const newValue = actor[actorPropName];
             let changed, newStringyValue;
             if (Array.isArray(value)) {
                 // @@ would be nice if we can find a more efficient approach
@@ -927,6 +928,8 @@ export const PM_GameSmoothed = superclass => class extends PM_GameSpatial(superc
         this.tug = 0.2;
         this.throttle = 100; //ms
 
+        this.componentNames.add('PresentOncePositionUpdated');
+
         this.listenOnce("scaleSnap", this.onScaleSnap);
         this.listenOnce("rotationSnap", this.onRotationSnap);
         this.listenOnce("translationSnap", this.onTranslationSnap);
@@ -938,10 +941,6 @@ export const PM_GameSmoothed = superclass => class extends PM_GameSpatial(superc
 
     setGameObject(viewSpec) {
         viewSpec.waitToPresent = true;
-        const components = viewSpec.extraComponents ? viewSpec.extraComponents.split(',') : [];
-        if (!components.includes('PresentOnFirstMove')) {
-            viewSpec.extraComponents = (components.concat(['PresentOnFirstMove'])).join(',');
-        }
         super.setGameObject(viewSpec);
     }
 
@@ -988,6 +987,17 @@ export const PM_GameSmoothed = superclass => class extends PM_GameSpatial(superc
     }
 };
 gamePawnMixins.Smoothed = PM_GameSmoothed;
+
+export const PM_GameBallistic2D = superclass => class extends PM_GameSmoothed(superclass) {
+
+    constructor(actor) {
+        super(actor);
+        this.extraStatics.add('position').add('rotation').add('scale');
+        this.extraWatched.add('ballisticVelocity');
+    }
+
+};
+gamePawnMixins.Ballistic2D = PM_GameBallistic2D;
 
 export const PM_GameInteractable = superclass => class extends superclass {
 
