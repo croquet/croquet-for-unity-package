@@ -332,9 +332,6 @@ public class CroquetBuilder
 
     public static void EnteringPlayMode()
     {
-        Debug.LogWarning("PLAY MODE");
-        // PlayerPrefs.SetInt("sessionNameValue", CroquetBridge.defaultSessionName);
-
         // get build details, just to run the check that on Windows forces
         // useNodeJS to true unless CroquetRunner is set to wait for user launch
         GetSceneBuildDetails();
