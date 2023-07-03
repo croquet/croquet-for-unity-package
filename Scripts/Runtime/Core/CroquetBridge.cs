@@ -20,7 +20,7 @@ public class CroquetBridge : MonoBehaviour
     public bool useNodeJS;
     public bool croquetSessionRunning = false;
     public string croquetViewId;
-    
+
     HttpServer ws = null;
     WebSocketBehavior wsb = null; // not currently used
     static WebSocket clientSock = null;
@@ -33,7 +33,7 @@ public class CroquetBridge : MonoBehaviour
         public byte[] rawData;
         public string data;
     }
-    
+
     static ConcurrentQueue<QueuedMessage> messageQueue = new ConcurrentQueue<QueuedMessage>();
     static long estimatedDateNowAtReflectorZero = -1; // an impossible value
 
@@ -43,28 +43,28 @@ public class CroquetBridge : MonoBehaviour
 
     LoadingProgressDisplay loadingProgressDisplay;
     public bool loadingInProgress = true;
-    
+
     public static CroquetBridge Instance { get; private set; }
     private CroquetRunner croquetRunner;
 
     private CroquetSystem[] croquetSystems = new CroquetSystem[0];
-    
+
     // DEPRECATED
     public static void SendCroquet(params string[] strings)
     {
-        Instance.SendToCroquet(strings);    
+        Instance.SendToCroquet(strings);
     }
 
     // DEPRECATED
     public static void SendCroquetSync(params string[] strings)
     {
-        Instance.SendToCroquetSync(strings);   
+        Instance.SendToCroquetSync(strings);
     }
 
     private Dictionary<string, List<(GameObject, Action<string>)>> croquetSubscriptions = new Dictionary<string, List<(GameObject, Action<string>)>>();
     private Dictionary<GameObject, HashSet<string>> croquetSubscriptionsByGameObject =
         new Dictionary<GameObject, HashSet<string>>();
-        
+
     // settings for logging and measuring (on JS-side performance log).  absence of an entry for a
     // category is taken as false.
     Dictionary<string, bool> logOptions = new Dictionary<string, bool>();
@@ -81,20 +81,21 @@ public class CroquetBridge : MonoBehaviour
     long inBundleDelayMS = 0;
     float inProcessingTime = 0;
     float lastMessageDiagnostics; // realtimeSinceStartup
-    
-    
+
     void Awake()
     {
+
         // Create Singleton Accessor
         // If there is an instance, and it's not me, delete myself.
-        if (Instance != null && Instance != this) 
-        { 
+        if (Instance != null && Instance != this)
+        {
             Destroy(this);
         }
-        else 
-        { 
-            Instance = this; 
-        } 
+        else
+        {
+            Instance = this;
+        }
+
         croquetRunner = gameObject.GetComponent<CroquetRunner>();
         LoadingProgressDisplay loadingObj = FindObjectOfType<LoadingProgressDisplay>();
         if (loadingObj != null)
@@ -102,7 +103,7 @@ public class CroquetBridge : MonoBehaviour
             loadingProgressDisplay = loadingObj.GetComponent<LoadingProgressDisplay>();
         }
         croquetSystems = gameObject.GetComponents<CroquetSystem>();
-        
+
         SetCSharpLogOptions("info,session");
         SetCSharpMeasureOptions("bundle,geom"); // @@ typically useful for development
     }
@@ -118,12 +119,12 @@ public class CroquetBridge : MonoBehaviour
         Application.targetFrameRate = 60;
 
         SetLoadingStage(0, "Starting...");
-        
+
         lastMessageDiagnostics = Time.realtimeSinceStartup;
-        
+
         // StartWS will be called to set up the websocket, and hence the session
     }
-    
+
     private void OnDestroy()
     {
         if (ws != null)
@@ -153,7 +154,7 @@ public class CroquetBridge : MonoBehaviour
             string sessionName = Instance.sessionName.ToString();
             string assetManifests = CroquetEntitySystem.Instance.assetManifestString;
             string earlySubscriptionTopics = Instance.EarlySubscriptionTopicsAsString();
-            
+
             string[] command = new string[] {
                 "readyForSession",
                 apiKey,
@@ -166,7 +167,7 @@ public class CroquetBridge : MonoBehaviour
             // send the message directly (bypassing the deferred-message queue)
             string msg = String.Join('\x01', command);
             clientSock.Send(msg);
-            
+
             Instance.SetLoadingStage(0.50f, "bridge connected");
         }
 
@@ -185,7 +186,7 @@ public class CroquetBridge : MonoBehaviour
     private bool hasStartedWS = false;
     public int defaultSessionName = 123;
     public int sessionName = 0;
-    
+
     public bool simulateNetworkGlitch = false;
     public float networkGlitchDuration = 3.0f;
 
@@ -224,11 +225,11 @@ public class CroquetBridge : MonoBehaviour
                 wsAttempt.AddWebSocketService<CroquetBridgeWS>("/Bridge", s => wsb = s);
                 wsAttempt.KeepClean = false; // see comment in https://github.com/sta/websocket-sharp/issues/43
                 wsAttempt.DocumentRootPath = Application.streamingAssetsPath; // set now, before Start()
-                
+
                 wsAttempt.Start();
 
                 goodPortFound = true;
-                ws = wsAttempt; 
+                ws = wsAttempt;
             }
             catch (Exception e)
             {
@@ -251,13 +252,13 @@ public class CroquetBridge : MonoBehaviour
         ws.OnGet += OnGetHandler;
 
         Log("session", $"started HTTP/WS Server on port {port}");
-        
+
 #if UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
         string pathToNode = appProperties.pathToNode; // doesn't exist on Windows
 #elif UNITY_EDITOR_WIN
         string pathToNode = CroquetBuilder.NodeExeInPackage;
 #elif UNITY_STANDALONE_WIN || UNITY_WSA
-        string pathToNode = CroquetBuilder.NodeExeInBuild;        
+        string pathToNode = CroquetBuilder.NodeExeInBuild;
 #else
         string pathToNode = ""; // not available
 #endif
@@ -332,7 +333,7 @@ public class CroquetBridge : MonoBehaviour
         QueuedMessage qm = new QueuedMessage();
         qm.queueTime = DateTimeOffset.Now.ToUnixTimeMilliseconds();
         qm.isBinary = e.IsBinary;
-        if (e.IsBinary) qm.rawData = e.RawData; 
+        if (e.IsBinary) qm.rawData = e.RawData;
         else qm.data = e.Data;
         messageQueue.Enqueue(qm);
     }
@@ -348,7 +349,7 @@ public class CroquetBridge : MonoBehaviour
         lastMessageSend = 0; // force to be immediate, even if we just sent something
         SendDeferredMessages();
     }
-    
+
     public string PackCroquetMessage(string[] strings)
     {
         return String.Join('\x01', strings);
@@ -393,16 +394,16 @@ public class CroquetBridge : MonoBehaviour
 
                 int milliseconds = (int) (networkGlitchDuration * 1000f);
                 if (milliseconds == 0) return;
-                
+
                 SendToCroquetSync("simulateNetworkGlitch", milliseconds.ToString());
             }
         }
     }
-    
+
     void FixedUpdate()
     {
         long start = DateTimeOffset.Now.ToUnixTimeMilliseconds(); // in case we'll be reporting to Croquet
-        
+
         ProcessCroquetMessages();
 
         SendDeferredMessages();
@@ -451,9 +452,9 @@ public class CroquetBridge : MonoBehaviour
                     string[] strings = System.Text.Encoding.UTF8.GetString(timeAndCmdBytes).Split('\x02');
                     string command = strings[1];
                     int count = 0;
-                    
+
                     ProcessCroquetMessage(command, rawData, sepPos + 1);
-                    
+
                     long sendTime = long.Parse(strings[0]);
                     long transmissionDelay = nowWhenQueued - sendTime;
                     long nowAfterProcessing = DateTimeOffset.Now.ToUnixTimeMilliseconds();
@@ -491,7 +492,7 @@ public class CroquetBridge : MonoBehaviour
             {
                 // single message
                 ProcessCroquetMessage(messages[0]);
-            }            
+            }
         }
         inProcessingTime += Time.realtimeSinceStartup - start;
     }
@@ -515,7 +516,7 @@ public class CroquetBridge : MonoBehaviour
         }
 
         bool messageWasProcessed = false;
-        
+
         foreach (CroquetSystem system in croquetSystems)
         {
             if (system.KnownCommands.Contains(command))
@@ -573,7 +574,7 @@ public class CroquetBridge : MonoBehaviour
         }
         croquetSubscriptions[topic].Add((null, handler));
     }
-    
+
     public void ListenForCroquetEvent(GameObject subscriber, string scope, string eventName, Action<string> handler)
     {
         // if this has been invoked before the object has its croquetActorId,
@@ -595,10 +596,10 @@ public class CroquetBridge : MonoBehaviour
 
         croquetSubscriptions[topic].Add((subscriber, handler));
     }
-    
+
     private string EarlySubscriptionTopicsAsString()
     {
-        // gameObjects and scripts that start up before the Croquet view has been built are 
+        // gameObjects and scripts that start up before the Croquet view has been built are
         // allowed to request subscriptions to Croquet events.  when the bridge connection is
         // first made, we gather all existing subscriptions that have a null subscriber (i.e.,
         // are not pawn-specific Listens) and tell Croquet to be ready to send those events as
@@ -624,7 +625,7 @@ public class CroquetBridge : MonoBehaviour
         }
         return joinedTopics;
     }
-    
+
     public void UnsubscribeFromCroquetEvent(GameObject gameObject, string scope, string eventName,
         Action<string> forwarder)
     {
@@ -709,7 +710,7 @@ public class CroquetBridge : MonoBehaviour
             }
         }
     }
-    
+
     public void RemoveCroquetSubscriptionsFor(GameObject subscriber)
     {
         if (croquetSubscriptionsByGameObject.ContainsKey(subscriber))
@@ -736,7 +737,7 @@ public class CroquetBridge : MonoBehaviour
             croquetSubscriptionsByGameObject.Remove(subscriber);
         }
     }
-    
+
     void ProcessCroquetPublish(string[] args)
     {
         // args are
@@ -756,7 +757,7 @@ public class CroquetBridge : MonoBehaviour
             }
         }
     }
-    
+
     void HandleCroquetPing(string time)
     {
         Log("diagnostics", "PING");
@@ -782,11 +783,11 @@ public class CroquetBridge : MonoBehaviour
             }
         }
     }
-    
+
     public float CroquetSessionTime()
     {
         if (estimatedDateNowAtReflectorZero == -1) return -1f;
-        
+
         return (DateTimeOffset.Now.ToUnixTimeMilliseconds() - estimatedDateNowAtReflectorZero) / 1000f;
     }
 
@@ -862,11 +863,11 @@ public class CroquetBridge : MonoBehaviour
         string[] cmdAndArgs = { "setJSLogForwarding", optionString };
         SendToCroquet(cmdAndArgs);
     }
-    
+
     void SetLoadingStage(float ratio, string msg)
     {
         if (loadingProgressDisplay == null) return;
-        
+
         loadingProgressDisplay.SetProgress(ratio, msg);
     }
 
