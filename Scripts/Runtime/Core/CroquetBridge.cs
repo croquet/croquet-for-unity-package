@@ -206,12 +206,12 @@ public class CroquetBridge : MonoBehaviour
         }
 #endif
         hasStartedWS = true; // even if it turns out to fail, don't try again
-        
-        // @@ assume that if this scene has a buildIndex greater than zero it was
-        // started from a session-name chooser and should use the recorded value
-        int buildIndex = SceneManager.GetActiveScene().buildIndex;
-        sessionName = buildIndex == 0 ? defaultSessionName : PlayerPrefs.GetInt("sessionNameValue", 1);
-        
+
+        // if the scene has an object that inherits from SessionNameChooser, assume that
+        // the user has been given an opportunity to set the session name.
+        SessionNameChooser chooser = FindObjectOfType<SessionNameChooser>();
+        sessionName = chooser == null ? defaultSessionName : PlayerPrefs.GetInt("sessionNameValue", 1);
+
         Log("session", "building WS Server on open port");
         int port = appProperties.preferredPort;
         int remainingTries = 9;
