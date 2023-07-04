@@ -288,7 +288,9 @@ export const GameViewManager = class extends ViewService {
         super(name || "GameViewManager");
 
         this.lastGameHandle = 0;
-        this.pawnsByGameHandle = {}; // handle => pawn
+        this.maxGameHandle = 999999; // our current spatial encoding gives us scope for 2^26 handles - around 67M - but 1M (with recycling) should be plenty
+        this.freedGameHandles = []; // handles that can be cleared once the associated destruction messages have definitely been sent to Unity
+        this.pawnsByGameHandle = {}; // integer handle => pawn
         this.deferredMessagesByGameHandle = new Map(); // handle => [msgs], iterable in the order the handles are mentioned
         this.deferredGeometriesByGameHandle = {}; // handle => msg; order not important
         this.deferredOtherMessages = []; // events etc, always sent after gameHandle-specific messages
@@ -327,7 +329,19 @@ export const GameViewManager = class extends ViewService {
     }
 
     nextGameHandle() {
-        return ++this.lastGameHandle;
+        let handle = this.lastGameHandle;
+        let tries = 1;
+        const max = this.maxGameHandle;
+        const pawns = this.pawnsByGameHandle;
+        while (true) {
+            handle++;
+            if (handle > max) handle = 1; // loop back
+            if (!pawns[handle]) break; // found one!
+            tries++;
+            if (tries === max) throw Error("Failed to find available game handle");
+        }
+        this.lastGameHandle = handle;
+        return handle;
     }
 
     unityId(gameHandle) {
@@ -457,8 +471,13 @@ export const GameViewManager = class extends ViewService {
     }
 
     unregisterPawn(gameHandle) {
-        delete this.pawnsByGameHandle[gameHandle];
+        this.freedGameHandles.push(gameHandle);
         this.deferredMessagesByGameHandle.delete(gameHandle); // if any
+    }
+
+    recycleFreedHandles() {
+        this.freedGameHandles.forEach(handle => delete this.pawnsByGameHandle[handle]);
+        this.freedGameHandles.length = 0;
     }
 
     setParent(childHandle, parentHandle) {
@@ -596,6 +615,8 @@ performance.measure(`to U (batch ${this.msgBatch}): ${numMessages} msgs in ${bat
         } else if (numMessages) {
             theGameEngineBridge.sendToUnity(messages[0]);
         }
+
+        if (numMessages) this.recycleFreedHandles();
     }
 
     flushGeometries() {
@@ -665,7 +686,7 @@ const buildStats = [], setupStats = [];
 export const PM_GameRendered = superclass => class extends superclass {
     // getters for gameViewManager and gameHandle allow them to be accessed even from super constructor
     get gameViewManager() { return this._gameViewManager || (this._gameViewManager = GetViewService('GameViewManager' ))}
-    get gameHandle() { return this._gameHandle || (this._gameHandle = this.gameViewManager.nextGameHandle()) }
+    get gameHandle() { return this._gameHandle || (this._gameHandle = this.gameViewManager.nextGameHandle()) } // integer
     get componentNames() { return this._componentNames || (this._componentNames = new Set()) }
     get extraStatics() { return this._extraStatics || (this._extraStatics = new Set()) }
     get extraWatched() { return this._extraWatched || (this._extraWatched = new Set()) }
@@ -761,7 +782,7 @@ if (this.gameHandle % 100 === 0) {
     }
 
     forwardPropertiesIfNeeded() {
-        if (!this._watchedPropertyValues) return;
+        if (!this._watchedPropertyValues || this.doomed) return;
 
         const { actor } = this;
         for (const [propName, valueAndString] of Object.entries(this._watchedPropertyValues)) {
@@ -866,7 +887,7 @@ export const PM_GameSpatial = superclass => class extends superclass {
         // for an avatar, filter out all updates other than the very first time,
         // or if some property has been snapped
         const avatarFiltering = this.driving && this.lastSentTranslation && !this._scaleSnapped && !this._rotationSnapped && !this._translationSnapped;
-        if (avatarFiltering || this.rigidBodyType === 'static' || !this._isViewReady || this.doomed) return null;
+        if (avatarFiltering || this.actor.rigidBodyType === 'static' || !this._isViewReady || this.doomed) return null;
 
         const updates = {};
         const { scale, rotation, translation } = this; // NB: the actor's direct property values
