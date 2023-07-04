@@ -37,8 +37,8 @@ public class CroquetBridge : MonoBehaviour
     static ConcurrentQueue<QueuedMessage> messageQueue = new ConcurrentQueue<QueuedMessage>();
     static long estimatedDateNowAtReflectorZero = -1; // an impossible value
 
-    List<string> deferredMessages = new List<string>();
-    static float messageThrottle = 0.05f; // 50ms
+    List<(string,string)> deferredMessages = new List<(string,string)>(); // messages with (optionally) a throttleId for removing duplicates
+    static float messageThrottle = 0.35f; // should result in deferred messages being sent on every other FixedUpdate tick
     float lastMessageSend = 0; // realtimeSinceStartup
 
     LoadingProgressDisplay loadingProgressDisplay;
@@ -105,7 +105,7 @@ public class CroquetBridge : MonoBehaviour
         croquetSystems = gameObject.GetComponents<CroquetSystem>();
 
         SetCSharpLogOptions("info,session");
-        SetCSharpMeasureOptions("bundle,geom"); // @@ typically useful for development
+        SetCSharpMeasureOptions("bundle"); // for now, just report handling of message batches from Croquet
     }
 
     public void RegisterSystem(CroquetSystem system)
@@ -340,7 +340,7 @@ public class CroquetBridge : MonoBehaviour
 
     public void SendToCroquet(params string[] strings)
     {
-        deferredMessages.Add(PackCroquetMessage(strings));
+        deferredMessages.Add(("", PackCroquetMessage(strings)));
     }
 
     public void SendToCroquetSync(params string[] strings)
@@ -348,6 +348,25 @@ public class CroquetBridge : MonoBehaviour
         SendToCroquet(strings);
         lastMessageSend = 0; // force to be immediate, even if we just sent something
         SendDeferredMessages();
+    }
+
+    public void SendThrottledToCroquet(string throttleId, params string[] strings)
+    {
+        int i = 0;
+        int foundIndex = -1;
+        foreach ((string throttle, string msg) entry in deferredMessages)
+        {
+            if (entry.throttle == throttleId)
+            {
+                foundIndex = i;
+                break;
+            }
+
+            i++;
+        }
+        if (foundIndex != -1) deferredMessages.RemoveAt(i);
+
+        deferredMessages.Add((throttleId, PackCroquetMessage(strings)));
     }
 
     public string PackCroquetMessage(string[] strings)
@@ -367,8 +386,13 @@ public class CroquetBridge : MonoBehaviour
         outMessageCount += deferredMessages.Count;
 
         // preface every bundle with the current time
-        deferredMessages.Insert(0, DateTimeOffset.Now.ToUnixTimeMilliseconds().ToString());
-        string[] msgs = deferredMessages.ToArray<string>();
+        deferredMessages.Insert(0, ("", DateTimeOffset.Now.ToUnixTimeMilliseconds().ToString()));
+        List<string> messageContents = new List<string>(); // strip out the throttle info
+        foreach ((string throttle, string msg) entry in deferredMessages)
+        {
+            messageContents.Add(entry.msg);
+        }
+        string[] msgs = messageContents.ToArray<string>();
         clientSock.Send(String.Join('\x02', msgs));
         deferredMessages.Clear();
     }
@@ -848,7 +872,10 @@ public class CroquetBridge : MonoBehaviour
     // OUT: Metrics system util
     void SetCSharpMeasureOptions(string options)
     {
-        // arg is a comma-separated list of the measure categories to send
+        // arg is a comma-separated list of the measure categories (currently
+        // available are bundle,geom,update) to send to Croquet to appear as
+        // marks in a Chrome performance plot.
+
         string[] wanted = options.Split(',');
         foreach (string cat in measureCategories)
         {

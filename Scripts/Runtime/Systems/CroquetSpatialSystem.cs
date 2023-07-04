@@ -353,7 +353,7 @@ public class CroquetSpatialSystem : CroquetSystem
             argList.Add(string.Join<float>(",", new[] { scale.Value.x, scale.Value.y, scale.Value.z }));
         }
 
-        CroquetBridge.Instance.SendToCroquet(argList.ToArray());
+        CroquetBridge.Instance.SendThrottledToCroquet("objectMoved_" + croquetHandle, argList.ToArray());
     }
 
     public override void ProcessCommand(string command, string[] args)
