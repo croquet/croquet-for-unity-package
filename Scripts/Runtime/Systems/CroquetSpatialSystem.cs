@@ -18,7 +18,7 @@ public class CroquetSpatialSystem : CroquetSystem
     {
         return components;
     }
-    
+
     // Create Singleton Reference
     public static CroquetSpatialSystem Instance { get; private set; }
 
@@ -26,13 +26,13 @@ public class CroquetSpatialSystem : CroquetSystem
     {
         // Create Singleton Accessor
         // If there is an instance, and it's not me, delete myself.
-        if (Instance != null && Instance != this) 
-        { 
-            Destroy(this); 
+        if (Instance != null && Instance != this)
+        {
+            Destroy(this);
         }
-        else 
-        { 
-            Instance = this; 
+        else
+        {
+            Instance = this;
         }
     }
 
@@ -50,7 +50,7 @@ public class CroquetSpatialSystem : CroquetSystem
             child.transform.SetParent(null);
         }
     }
-    
+
     void SetParent(string[] args)
     {
         GameObject child = CroquetEntitySystem.Instance.GetGameObjectByCroquetHandle(args[0]);
@@ -95,7 +95,7 @@ public class CroquetSpatialSystem : CroquetSystem
     }
 
     // private int telemetryDumpTrigger = -1;
-    
+
     /// <summary>
     /// Update the Unity Transform Components in the Scene to reflect the latest desired state.
     /// </summary>
@@ -105,7 +105,7 @@ public class CroquetSpatialSystem : CroquetSystem
         {
             CroquetSpatialComponent spatial = kvp.Value as CroquetSpatialComponent;
             Transform t = spatial.transform; // where the object is right now
-            
+
             if (Vector3.Distance(spatial.scale,t.localScale) > spatial.scaleDeltaEpsilon)
             {
                 t.localScale = Vector3.Lerp(t.localScale, spatial.scale, spatial.scaleLerpFactor);
@@ -189,7 +189,7 @@ public class CroquetSpatialSystem : CroquetSystem
     // {
     //     return $"[{vec.x.ToString("0.00")}, {vec.z.ToString("0.00")}]";
     // }
-    
+
     /// <summary>
     /// Processing messages from Croquet to update the spatial component
     /// </summary>
@@ -204,7 +204,7 @@ public class CroquetSpatialSystem : CroquetSystem
         const uint ROT_SNAP =   0b000100;
         const uint POS =        0b000010;
         const uint POS_SNAP =   0b000001;
-        
+
         int bufferPos = startPos; // byte index through the buffer
         while (bufferPos < rawData.Length)
         {
@@ -294,7 +294,7 @@ public class CroquetSpatialSystem : CroquetSystem
     {
         return (components[instanceID] as CroquetSpatialComponent).hasBeenMoved;
     }
-    
+
     public bool hasObjectMoved(string croquetHandle)
     {
         int instanceID = CroquetEntitySystem.GetInstanceIDByCroquetHandle(croquetHandle);
@@ -305,7 +305,7 @@ public class CroquetSpatialSystem : CroquetSystem
     {
         int instanceID = CroquetEntitySystem.GetInstanceIDByCroquetHandle(croquetHandle);
         if (instanceID == 0) return;
-        
+
         CroquetSpatialComponent spatial = components[instanceID] as CroquetSpatialComponent;
         Transform trans = spatial.transform;
 
@@ -334,7 +334,7 @@ public class CroquetSpatialSystem : CroquetSystem
         List<string> argList = new List<string>();
         argList.Add("objectMoved");
         argList.Add(croquetHandle);
-        
+
         if (position != null)
         {
             argList.Add("p");
@@ -375,9 +375,9 @@ public class CroquetSpatialSystem : CroquetSystem
         if (command.Equals("updateSpatial"))
         {
             UpdateSpatial(data, startIndex);// TODO ARAN: together fix the data format coming in
-        } 
+        }
     }
-    
+
     Quaternion QuaternionFromBuffer(byte[] rawData, int startPos)
     {
         return new Quaternion(
