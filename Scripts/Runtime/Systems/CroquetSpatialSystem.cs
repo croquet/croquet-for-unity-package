@@ -146,11 +146,11 @@ public class CroquetSpatialSystem : CroquetSystem
 
                 if (Mathf.Abs(offToSide) > 0.01f)
                 {
-                    // CroquetBridge.Instance.Log("info", $"{spatial.gameObject} closing gap of {offToSide}");
-                    float nudgeDist = offToSide * spatial.positionLerpFactor;
+                    float nudgeDist = -offToSide * spatial.positionLerpFactor;
                     Vector3 nudge = new Vector3(perpendicularUnit.x * nudgeDist, 0,
                         perpendicularUnit.y * nudgeDist);
                     t.localPosition += nudge;
+                    // CroquetBridge.Instance.Log("info", $"nudge by {nudge.ToString()}");
                 }
 
                 // string telemetryString =
