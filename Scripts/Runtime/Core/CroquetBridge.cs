@@ -38,7 +38,7 @@ public class CroquetBridge : MonoBehaviour
     static long estimatedDateNowAtReflectorZero = -1; // an impossible value
 
     List<(string,string)> deferredMessages = new List<(string,string)>(); // messages with (optionally) a throttleId for removing duplicates
-    static float messageThrottle = 0.35f; // should result in deferred messages being sent on every other FixedUpdate tick
+    static float messageThrottle = 0.035f; // should result in deferred messages being sent on every other FixedUpdate tick
     float lastMessageSend = 0; // realtimeSinceStartup
 
     LoadingProgressDisplay loadingProgressDisplay;
