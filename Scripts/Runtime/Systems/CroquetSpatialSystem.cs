@@ -18,7 +18,7 @@ public class CroquetSpatialSystem : CroquetSystem
     {
         return components;
     }
-    
+
     // Create Singleton Reference
     public static CroquetSpatialSystem Instance { get; private set; }
 
@@ -26,13 +26,13 @@ public class CroquetSpatialSystem : CroquetSystem
     {
         // Create Singleton Accessor
         // If there is an instance, and it's not me, delete myself.
-        if (Instance != null && Instance != this) 
-        { 
-            Destroy(this); 
+        if (Instance != null && Instance != this)
+        {
+            Destroy(this);
         }
-        else 
-        { 
-            Instance = this; 
+        else
+        {
+            Instance = this;
         }
     }
 
@@ -50,7 +50,7 @@ public class CroquetSpatialSystem : CroquetSystem
             child.transform.SetParent(null);
         }
     }
-    
+
     void SetParent(string[] args)
     {
         GameObject child = CroquetEntitySystem.Instance.GetGameObjectByCroquetHandle(args[0]);
@@ -60,7 +60,42 @@ public class CroquetSpatialSystem : CroquetSystem
             child.transform.SetParent(parent.transform, false); // false => ignore child's existing world position
         }
     }
-    
+
+    public override void PawnInitializationComplete(GameObject go)
+    {
+        CroquetActorManifest manifest = go.GetComponent<CroquetActorManifest>();
+        if (manifest != null && Array.IndexOf(manifest.mixins, "Ballistic2D") >= 0)
+        {
+            float[] p = Croquet.ReadActorFloatArray(go, "position");
+            Vector3 initialPos = new Vector3(p[0], p[1], p[2]);
+            float[] r = Croquet.ReadActorFloatArray(go, "rotation");
+            Quaternion initialRot = new Quaternion(r[0], r[1], r[2], r[3]);
+            float[] s = Croquet.ReadActorFloatArray(go, "scale");
+            Vector3 initialScale = new Vector3(s[0], s[1], s[2]);
+
+            string croquetHandle = go.GetComponent<CroquetEntityComponent>().croquetHandle;
+            SnapObjectTo(croquetHandle, initialPos, initialRot, initialScale);
+            // CroquetBridge.Instance.Log("info", $"spatial setup for {go}");
+        }
+    }
+
+    public override void ActorPropertySet(GameObject go, string propName)
+    {
+        // we're being notified that a watched property on an object that we are
+        // known to have an interest in has changed (or been set for the first time).
+        if (propName == "ballisticVelocity")
+        {
+            float[] v = Croquet.ReadActorFloatArray(go, "ballisticVelocity");
+            Vector3 velocity = new Vector3(v[0], v[1], v[2]);
+            CroquetSpatialComponent spatial = components[go.GetInstanceID()] as CroquetSpatialComponent;
+            spatial.ballisticVelocity = velocity;
+            spatial.currentLag = 0; // reset
+            // CroquetBridge.Instance.Log("info", $"set ballisticVelocity for {go} (magnitude {velocity.magnitude})");
+        }
+    }
+
+    // private int telemetryDumpTrigger = -1;
+
     /// <summary>
     /// Update the Unity Transform Components in the Scene to reflect the latest desired state.
     /// </summary>
@@ -68,22 +103,92 @@ public class CroquetSpatialSystem : CroquetSystem
     {
         foreach (KeyValuePair<int, CroquetComponent> kvp in components)
         {
-            CroquetSpatialComponent spatialComponent = kvp.Value as CroquetSpatialComponent;
-            
-            if (Vector3.Distance(spatialComponent.scale,spatialComponent.transform.localScale) > spatialComponent.scaleDeltaEpsilon)
+            CroquetSpatialComponent spatial = kvp.Value as CroquetSpatialComponent;
+            Transform t = spatial.transform; // where the object is right now
+
+            if (Vector3.Distance(spatial.scale,t.localScale) > spatial.scaleDeltaEpsilon)
             {
-                spatialComponent.transform.localScale = Vector3.Lerp(spatialComponent.transform.localScale, spatialComponent.scale, spatialComponent.scaleLerpFactor);
+                t.localScale = Vector3.Lerp(t.localScale, spatial.scale, spatial.scaleLerpFactor);
             }
-            if (Quaternion.Angle(spatialComponent.rotation,spatialComponent.transform.localRotation) > spatialComponent.rotationDeltaEpsilon)
+            if (Quaternion.Angle(spatial.rotation,t.localRotation) > spatial.rotationDeltaEpsilon)
             {
-                spatialComponent.transform.localRotation = Quaternion.Slerp(spatialComponent.transform.localRotation, spatialComponent.rotation, spatialComponent.rotationLerpFactor);
+                t.localRotation = Quaternion.Slerp(t.localRotation, spatial.rotation, spatial.rotationLerpFactor);
             }
-            if (Vector3.Distance(spatialComponent.position,spatialComponent.transform.localPosition) > spatialComponent.positionDeltaEpsilon)
+            if (spatial.ballisticVelocity != null)
             {
-                spatialComponent.transform.localPosition = Vector3.Lerp(spatialComponent.transform.localPosition, spatialComponent.position, spatialComponent.positionLerpFactor);
+                Vector3 modelPos = spatial.position;
+                float deltaTime = Time.deltaTime; // expected to be around 17ms
+                if (spatial.currentLag < spatial.desiredLag)
+                {
+                    // whenever ballisticVelocity is set, we immediately start calculating where
+                    // the object will have got to.  but because of the latency in the bridge,
+                    // we need to introduce a lag in our computation so that if the model
+                    // announces a change in velocity (say, a bounce), the object doesn't
+                    // overshoot during the time it takes to receive that announcement. here
+                    // we gradually lengthen the lag, up to the desired level (set as
+                    // defaultLag on the Spatial component, which defaults to 50ms).
+                    float lagDelta = deltaTime / 5;
+                    spatial.currentLag += lagDelta;
+                    // if (spatial.currentLag >= spatial.desiredLag) CroquetBridge.Instance.Log("info","hit desired lag");
+                    deltaTime -= lagDelta; // compute that much less of a move
+                }
+                Vector3 movement = deltaTime * spatial.ballisticVelocity.Value;
+                t.localPosition += movement;
+                // check in 2D for drift away from the desired path (typically arising from
+                // a bounce happening when the object was some distance from the bounce point)
+                Vector2 offsetFromModel =
+                    new Vector2(t.localPosition.x - modelPos.x, t.localPosition.z - modelPos.z);
+                Vector2 velocityUnit =
+                    new Vector2(spatial.ballisticVelocity.Value.x, spatial.ballisticVelocity.Value.z).normalized;
+                Vector2 perpendicularUnit = new Vector2(velocityUnit.y, -velocityUnit.x);
+                float aheadOnPath = Vector2.Dot(offsetFromModel, velocityUnit);
+                float offToSide = Vector2.Dot(offsetFromModel, perpendicularUnit);
+
+                if (Mathf.Abs(offToSide) > 0.01f)
+                {
+                    float nudgeDist = -offToSide * spatial.positionLerpFactor;
+                    Vector3 nudge = new Vector3(perpendicularUnit.x * nudgeDist, 0,
+                        perpendicularUnit.y * nudgeDist);
+                    t.localPosition += nudge;
+                    // CroquetBridge.Instance.Log("info", $"nudge by {nudge.ToString()}");
+                }
+
+                // string telemetryString =
+                //     $"{DateTimeOffset.Now.ToUnixTimeMilliseconds() % 100000}: bv={TmpFormatVector3(spatial.ballisticVelocity.Value)} model={TmpFormatVector3(modelPos)} localP={TmpFormatVector3(t.localPosition)} ahead={aheadOnPath.ToString("0.00")} side={offToSide.ToString("0.00")}";
+                // spatial.telemetry.Add(telemetryString);
+                // if (spatial.telemetry.Count > 20) spatial.telemetry.RemoveAt(0);
+                // if (Mathf.Abs(aheadOnPath) > 7f)
+                // {
+                //     if (telemetryDumpTrigger == -1) telemetryDumpTrigger = 6;
+                // }
+                //
+                // if (telemetryDumpTrigger > 0)
+                // {
+                //     telemetryDumpTrigger--;
+                //     if (telemetryDumpTrigger == 0)
+                //     {
+                //         Debug.Log("VVVVVVVVVVVVVVVVVVVV");
+                //         foreach (string s in spatial.telemetry)
+                //         {
+                //             Debug.Log(s);
+                //         }
+                //
+                //         Debug.Log("^^^^^^^^^^^^^^^^^^^^");
+                //     }
+                // }
+
+                spatial.hasBeenMoved = true;
+            } else if (Vector3.Distance(spatial.position,t.localPosition) > spatial.positionDeltaEpsilon)
+            {
+                t.localPosition = Vector3.Lerp(t.localPosition, spatial.position, spatial.positionLerpFactor);
             }
         }
     }
+
+    // string TmpFormatVector3(Vector3 vec)
+    // {
+    //     return $"[{vec.x.ToString("0.00")}, {vec.z.ToString("0.00")}]";
+    // }
 
     /// <summary>
     /// Processing messages from Croquet to update the spatial component
@@ -99,7 +204,7 @@ public class CroquetSpatialSystem : CroquetSystem
         const uint ROT_SNAP =   0b000100;
         const uint POS =        0b000010;
         const uint POS_SNAP =   0b000001;
-        
+
         int bufferPos = startPos; // byte index through the buffer
         while (bufferPos < rawData.Length)
         {
@@ -140,7 +245,13 @@ public class CroquetSpatialSystem : CroquetSystem
                 continue;
             }
 
-            spatialComponent.hasBeenMoved = true;
+            // first time through, set hasBeenPlaced
+            // second time, set hasBeenMoved
+            if (!spatialComponent.hasBeenMoved)
+            {
+                if (spatialComponent.hasBeenPlaced) spatialComponent.hasBeenMoved = true;
+                spatialComponent.hasBeenPlaced = true;
+            }
 
             if ((encodedId & SCALE) != 0)
             {
@@ -151,8 +262,6 @@ public class CroquetSpatialSystem : CroquetSystem
                     // immediately snap scale
                     trans.localScale = updatedScale;
                 }
-                
-                // update the components data regardless
                 spatialComponent.scale = updatedScale;
                 // Log("verbose", "scale: " + updatedScale.ToString());
             }
@@ -164,7 +273,6 @@ public class CroquetSpatialSystem : CroquetSystem
                 {
                     trans.localRotation = updatedQuatRot;
                 }
-                // update the components data regardless
                 spatialComponent.rotation = updatedQuatRot;
                 // Log("verbose", "rot: " + updatedQuatRot.ToString());
             }
@@ -176,7 +284,6 @@ public class CroquetSpatialSystem : CroquetSystem
                 {
                     trans.localPosition = updatedPosition;
                 }
-                // update the component's data regardless
                 spatialComponent.position = updatedPosition;
                 // Log("verbose", "pos: " + updatedPosition.ToString());
             }
@@ -187,7 +294,7 @@ public class CroquetSpatialSystem : CroquetSystem
     {
         return (components[instanceID] as CroquetSpatialComponent).hasBeenMoved;
     }
-    
+
     public bool hasObjectMoved(string croquetHandle)
     {
         int instanceID = CroquetEntitySystem.GetInstanceIDByCroquetHandle(croquetHandle);
@@ -198,26 +305,26 @@ public class CroquetSpatialSystem : CroquetSystem
     {
         int instanceID = CroquetEntitySystem.GetInstanceIDByCroquetHandle(croquetHandle);
         if (instanceID == 0) return;
-        
-        CroquetSpatialComponent spatialComponent = components[instanceID] as CroquetSpatialComponent;
-        Transform trans = spatialComponent.transform;
+
+        CroquetSpatialComponent spatial = components[instanceID] as CroquetSpatialComponent;
+        Transform trans = spatial.transform;
 
         if (position != null)
         {
             trans.localPosition = position.Value;
-            spatialComponent.position = position.Value;
+            spatial.position = position.Value;
         }
 
         if (rotation != null)
         {
             trans.localRotation = rotation.Value;
-            spatialComponent.rotation = rotation.Value;
+            spatial.rotation = rotation.Value;
         }
 
         if (scale != null)
         {
             trans.localScale = scale.Value;
-            spatialComponent.scale = scale.Value;
+            spatial.scale = scale.Value;
         }
     }
 
@@ -227,7 +334,7 @@ public class CroquetSpatialSystem : CroquetSystem
         List<string> argList = new List<string>();
         argList.Add("objectMoved");
         argList.Add(croquetHandle);
-        
+
         if (position != null)
         {
             argList.Add("p");
@@ -246,7 +353,7 @@ public class CroquetSpatialSystem : CroquetSystem
             argList.Add(string.Join<float>(",", new[] { scale.Value.x, scale.Value.y, scale.Value.z }));
         }
 
-        CroquetBridge.Instance.SendToCroquet(argList.ToArray());
+        CroquetBridge.Instance.SendThrottledToCroquet("objectMoved_" + croquetHandle, argList.ToArray());
     }
 
     public override void ProcessCommand(string command, string[] args)
@@ -268,9 +375,9 @@ public class CroquetSpatialSystem : CroquetSystem
         if (command.Equals("updateSpatial"))
         {
             UpdateSpatial(data, startIndex);// TODO ARAN: together fix the data format coming in
-        } 
+        }
     }
-    
+
     Quaternion QuaternionFromBuffer(byte[] rawData, int startPos)
     {
         return new Quaternion(

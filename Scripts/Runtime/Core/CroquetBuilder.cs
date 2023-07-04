@@ -27,7 +27,7 @@ public class CroquetBuilder
     private static CroquetBridge sceneBridgeComponent;
     private static CroquetRunner sceneRunnerComponent;
     private static string sceneAppName;
-    
+
     private const string ID_PROP = "JS Builder Id";
     private const string APP_PROP = "JS Builder App";
     private const string LOG_PROP = "JS Builder Log";
@@ -93,9 +93,9 @@ public class CroquetBuilder
             // executable using the settings object.  this is used for running
             // all JS build steps, and can also drive a scene if the user selects
             // the "Use Node JS" option.  it *cannot* be bundled into a build.
-            
+
             // for Windows, we include a version of node.exe in the package.
-            // it can be used for JS building, for running scenes in the editor, 
+            // it can be used for JS building, for running scenes in the editor,
             // and for inclusion in a Windows standalone build.
 #if UNITY_EDITOR_OSX
             string pathToNode = sceneBridgeComponent.appProperties.pathToNode;
@@ -118,7 +118,7 @@ public class CroquetBuilder
         JSBuildDetails details = GetSceneBuildDetails();
         return details.appName != "";
     }
-    
+
     public static void StartBuild(bool startWatcher)
     {
         if (oneTimeBuildProcess != null) return; // already building
@@ -196,7 +196,7 @@ public class CroquetBuilder
             // the build process has finished, but that doesn't necessarily mean that it succeeded.
             // webpack provides an exit code as described at https://github.com/webpack/webpack-cli#exit-codes-and-their-meanings.
             // if webpack runs, our script generates a line "webpack-exit=<n>" with that exit code.
-            
+
             // the expected completion states are therefore:
             //   - failed to run webpack (e.g., because it isn't installed).
             //     should see messages on stderr, and presumably no webpack-exit line.
@@ -250,7 +250,7 @@ public class CroquetBuilder
             }
         }
     }
-    
+
     public static void WaitUntilBuildComplete()
     {
         // if a one-time build is in progress, await its exit.
@@ -259,7 +259,7 @@ public class CroquetBuilder
         // to hold off from any action that needs the build until the console shows
         // that it has completed.  thereafter, rebuilds tend to happen so quickly
         // that there is effectively no chance for an incomplete build to be used.
-        
+
         // may 2023: because StartBuild is synchronous, and already includes a
         // WaitForExit, this method in fact never has anything to wait for.
         if (oneTimeBuildProcess != null)
@@ -274,15 +274,15 @@ public class CroquetBuilder
         string appName = EditorPrefs.GetString(APP_PROP, "");
         long lastFileLength = initialLength;
         // Debug.Log($"watching build log for {appName} from position {lastFileLength}");
-        
+
         while (true)
         {
             if (EditorPrefs.GetString(LOG_PROP, "") != filePath)
             {
                 // Debug.Log($"stopping log watcher for {appName}");
                 break;
-            } 
-            
+            }
+
             try
             {
                 FileInfo info = new FileInfo(filePath);
@@ -329,7 +329,7 @@ public class CroquetBuilder
             }
         }
     }
-    
+
     public static void EnteringPlayMode()
     {
         // get build details, just to run the check that on Windows forces
@@ -375,7 +375,7 @@ public class CroquetBuilder
 
         string logFile = EditorPrefs.GetString(LOG_PROP, "");
         if (logFile != "") FileUtil.DeleteFileOrDirectory(logFile);
-        
+
         EditorPrefs.SetInt(ID_PROP, -1);
         EditorPrefs.SetString(APP_PROP, "");
         EditorPrefs.SetString(LOG_PROP, "");
@@ -425,6 +425,6 @@ public class CroquetBuilder
         Process builderProcess = RunningWatcherProcess();
         return builderProcess == null ? "" : EditorPrefs.GetString(APP_PROP);
     }
-    
+
 #endif
 }

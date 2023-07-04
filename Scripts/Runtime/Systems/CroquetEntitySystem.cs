@@ -290,10 +290,10 @@ public class CroquetEntitySystem : CroquetSystem
             }
         }
         
-        CroquetActorManifest manifest = gameObjectToMake.GetComponent<CroquetActorManifest>();
-        if (manifest != null)
+        // watchers
+        if (spec.ws.Length != 0)
         {
-            foreach (string propName in manifest.watchedProperties)
+            foreach (string propName in spec.ws)
             {
                 string eventName = propName + "Set";
                 Croquet.Listen(gameObjectToMake, eventName, (string stringyVal) =>
@@ -312,20 +312,33 @@ public class CroquetEntitySystem : CroquetSystem
             }
         }
         
+        foreach (ICroquetDriven component in gameObjectToMake.GetComponents<ICroquetDriven>())
+        {
+            component.PawnInitializationComplete();
+        }
+        
+        foreach (CroquetSystem system in allSystems)
+        {
+            if (system.KnowsObject(gameObjectToMake))
+            {
+                system.PawnInitializationComplete(gameObjectToMake);
+            }
+        }
+
         // confirmCreation
         if (spec.cC)
         {
             CroquetBridge.Instance.SendToCroquet("objectCreated", spec.cH, DateTimeOffset.Now.ToUnixTimeMilliseconds().ToString());
         }
 
-        foreach (ICroquetDriven component in gameObjectToMake.GetComponents<ICroquetDriven>())
-        {
-            component.CroquetInitializationComplete();
-        }
     }
 
     private void SetPropertyValueString(CroquetEntityComponent entity, string propertyName, string stringyValue)
     {
+        // @@ messy that this takes a component, while GetPropertyValueString takes
+        // a game object.  but that is public, and this is private; around here we 
+        // know all about the components.
+
         // Debug.Log($"setting {propertyName} to {stringyValue}");
         entity.actorProperties[propertyName] = stringyValue;
         GameObject go = entity.gameObject;
@@ -340,7 +353,14 @@ public class CroquetEntitySystem : CroquetSystem
     
     public string GetPropertyValueString(GameObject gameObject, string propertyName)
     {
-        Dictionary<string, string> properties = gameObject.GetComponent<CroquetEntityComponent>().actorProperties;
+        CroquetEntityComponent entity = components[gameObject.GetInstanceID()] as CroquetEntityComponent;
+        if (entity == null)
+        {
+            Debug.LogWarning($"failed to find Entity component for {gameObject}");
+            return null;
+        }
+        
+        Dictionary<string, string> properties = entity.actorProperties;
         if (!properties.ContainsKey(propertyName))
         {
             Debug.LogWarning($"failed to find property {propertyName} in {gameObject}");
@@ -420,9 +440,10 @@ public class ObjectSpec
     public string type;
     public string cs; // comma-separated list of extra components
     public string[] ps; // actor properties and their values
+    public string[] ws; // actor properties to be watched
 }
 
 public interface ICroquetDriven
 {
-    void CroquetInitializationComplete();
+    void PawnInitializationComplete();
 }
