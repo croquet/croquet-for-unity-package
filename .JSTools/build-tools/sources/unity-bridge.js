@@ -67,9 +67,10 @@ console.log(`PORT ${portStr}`);
         sock.onclose = _evt => {
             globalThis.timedLog('bridge websocket closed');
             this.bridgeIsConnected = false;
-            session.leave();
+            if (session) session.leave();
             if (globalThis.CROQUET_NODE) process.exit(); // if on node, bail out
         };
+        sock.onerror = evt => console.error("bridge WebSocket error", evt);
     }
 
     sendCommand(...args) {

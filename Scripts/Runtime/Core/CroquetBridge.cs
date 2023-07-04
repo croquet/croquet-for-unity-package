@@ -138,6 +138,14 @@ public class CroquetBridge : MonoBehaviour
 
         protected override void OnOpen()
         {
+            if (clientSock != null)
+            {
+                Debug.LogWarning("Rejecting attempt to connect second client");
+                Context.WebSocket.Send(String.Join('\x01', new string[]{ "log", "Rejecting attempt to connect second client" }));
+                Context.WebSocket.Close(1011, "Rejecting duplicate connection");
+                return;
+            }
+
             // hint from https://github.com/sta/websocket-sharp/issues/236
             clientSock = Context.WebSocket;
 
