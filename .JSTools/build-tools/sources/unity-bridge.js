@@ -12,9 +12,10 @@
 import { mix, Pawn, ViewRoot, ViewService, GetViewService, StartWorldcore, PawnManager, v3_equals, q_equals } from "@croquet/worldcore-kernel";
 
 globalThis.timedLog = msg => {
+    // timing on the message itself is now added when forwarding
     const toLog = `${(globalThis.CroquetViewDate || Date).now() % 100000}: ${msg}`;
     performance.mark(toLog);
-    console.log(toLog);
+    console.log(msg);
 };
 
 // globalThis.WC_Left = true; // NB: this can affect behaviour of both models and views
@@ -234,12 +235,13 @@ console.log(`PORT ${portStr}`);
     setJSLogForwarding(toForward) {
         console.log("categories of JS log forwarded to Unity:", toForward);
         const isNode = globalThis.CROQUET_NODE;
-        const forwarder = (logType, logVals) => this.sendCommand('logFromJS', logType, `${(globalThis.CroquetViewDate || Date).now() % 100000}: ` + logVals.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
+        const timeStamper = logVals => `${(globalThis.CroquetViewDate || Date).now() % 100000}: ` + logVals.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+        const forwarder = (logType, logVals) => this.sendCommand('logFromJS', logType, timeStamper(logVals));
         ['log', 'warn', 'error'].forEach(logType => {
             if (isNode) {
                 // in Node, everything output to the console is (for now) automatically
                 // echoed to Unity.  so anything _not_ in the list needs to be suppressed.
-                if (toForward.includes(logType)) console[logType] = console[`q_${logType}`]; // use system default
+                if (toForward.includes(logType)) console[logType] = (...logVals) => console[`q_${logType}`](timeStamper(logVals)); // use native logger to write the output
                 else console[logType] = () => {}; // suppress
             } else {
                 // eslint-disable-next-line no-lonely-if
