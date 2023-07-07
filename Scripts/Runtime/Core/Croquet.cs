@@ -16,7 +16,7 @@ public static class Croquet
         string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
         CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName);
     }
-    
+
     /// <summary>
     /// Send an event with a string argument directly to the corresponding actor.
     /// </summary>
@@ -28,7 +28,7 @@ public static class Croquet
         string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
         CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, "s", argString);
     }
-    
+
     /// <summary>
     /// Send an event with a string-array argument directly to the corresponding actor.
     /// </summary>
@@ -38,9 +38,9 @@ public static class Croquet
     public static void Say(GameObject gameObject, string eventName, string[] argStrings)
     {
         string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
-        CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, "ss", string.Join('\x03', argStrings));    
+        CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, "ss", string.Join('\x03', argStrings));
     }
-    
+
     /// <summary>
     /// Send an event with a float argument directly to the corresponding actor.
     /// </summary>
@@ -52,7 +52,7 @@ public static class Croquet
         string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
         CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, "f", argFloat.ToString());
     }
-    
+
     /// <summary>
     /// Send an event with a float-array argument directly to the corresponding actor.
     /// </summary>
@@ -87,10 +87,10 @@ public static class Croquet
     {
         string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
         Action<string> forwarder = s => handler();
-        CroquetBridge.Instance.ListenForCroquetEvent(gameObject, scope, eventName, forwarder);
+        CroquetBridge.ListenForCroquetEvent(gameObject, scope, eventName, forwarder);
         return forwarder;
     }
-    
+
     /// <summary>
     /// Listen for a say event with string argument from the corresponding actor.
     /// </summary>
@@ -101,10 +101,10 @@ public static class Croquet
     {
         string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
         Action<string> forwarder = s => handler(s); // same type, but we want to ensure a unique handler
-        CroquetBridge.Instance.ListenForCroquetEvent(gameObject, scope, eventName, forwarder);
+        CroquetBridge.ListenForCroquetEvent(gameObject, scope, eventName, forwarder);
         return forwarder;
     }
-    
+
     /// <summary>
     /// Listen for a say event with string-array argument from the corresponding actor.
     /// </summary>
@@ -115,10 +115,10 @@ public static class Croquet
     {
         string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
         Action<string> forwarder = s => handler(s.Split('\x03'));
-        CroquetBridge.Instance.ListenForCroquetEvent(gameObject, scope, eventName, forwarder);
+        CroquetBridge.ListenForCroquetEvent(gameObject, scope, eventName, forwarder);
         return forwarder;
     }
-    
+
     /// <summary>
     /// Listen for a say event with float argument from the corresponding actor.
     /// </summary>
@@ -129,10 +129,10 @@ public static class Croquet
     {
         string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
         Action<string> forwarder = s => handler(float.Parse(s));
-        CroquetBridge.Instance.ListenForCroquetEvent(gameObject, scope, eventName, forwarder);
+        CroquetBridge.ListenForCroquetEvent(gameObject, scope, eventName, forwarder);
         return forwarder;
     }
-    
+
     /// <summary>
     /// Listen for a say event with float-array argument from the corresponding actor.
     /// </summary>
@@ -151,7 +151,7 @@ public static class Croquet
             }
             handler(floats.ToArray());
         };
-        CroquetBridge.Instance.ListenForCroquetEvent(gameObject, scope, eventName, forwarder);
+        CroquetBridge.ListenForCroquetEvent(gameObject, scope, eventName, forwarder);
         return forwarder;
     }
 
@@ -165,10 +165,10 @@ public static class Croquet
     {
         string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
         Action<string> forwarder = s => handler(bool.Parse(s));
-        CroquetBridge.Instance.ListenForCroquetEvent(gameObject, scope, eventName, forwarder);
+        CroquetBridge.ListenForCroquetEvent(gameObject, scope, eventName, forwarder);
         return forwarder;
     }
-    
+
     /// <summary>
     /// Cancel listen for say events
     /// </summary>
@@ -178,11 +178,11 @@ public static class Croquet
     public static void Ignore(GameObject gameObject, string eventName, Action<string> forwarder)
     {
         string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
-        CroquetBridge.Instance.UnsubscribeFromCroquetEvent(gameObject, scope, eventName, forwarder);
+        CroquetBridge.UnsubscribeFromCroquetEvent(gameObject, scope, eventName, forwarder);
     }
 
     #endregion
-    
+
     #region Publish and Subscribe Functions
 
     /// <summary>
@@ -194,7 +194,7 @@ public static class Croquet
     {
         CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName);
     }
-    
+
     /// <summary>
     /// Publish an event with explicit scope and string argument.
     /// </summary>
@@ -205,7 +205,7 @@ public static class Croquet
     {
         CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, "s", argString);
     }
-    
+
     /// <summary>
     /// Publish an event with explicit scope and string-array argument.
     /// </summary>
@@ -214,9 +214,9 @@ public static class Croquet
     /// <param name="argStrings"></param>
     public static void Publish(string scope, string eventName, string[] argStrings)
     {
-        CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, "ss", string.Join('\x03', argStrings));    
+        CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, "ss", string.Join('\x03', argStrings));
     }
-    
+
     /// <summary>
     /// Publish an event with explicit scope and float argument.
     /// </summary>
@@ -227,7 +227,7 @@ public static class Croquet
     {
         CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, "f", argFloat.ToString());
     }
-    
+
     /// <summary>
     /// Publish an event with explicit scope and float-array argument.
     /// </summary>
@@ -259,10 +259,10 @@ public static class Croquet
     public static Action<string> Subscribe(string scope, string eventName, Action handler)
     {
         Action<string> forwarder = s => handler();
-        CroquetBridge.Instance.SubscribeToCroquetEvent(scope, eventName, forwarder);
+        CroquetBridge.SubscribeToCroquetEvent(scope, eventName, forwarder);
         return forwarder;
     }
-    
+
     /// <summary>
     /// Listen for events sent with explicit scope and string argument.
     /// </summary>
@@ -272,10 +272,10 @@ public static class Croquet
     public static Action<string> Subscribe(string scope, string eventName, Action<string> handler)
     {
         Action<string> forwarder = s => handler(s); // same type, but we want to ensure a unique handler
-        CroquetBridge.Instance.SubscribeToCroquetEvent(scope, eventName, forwarder);
+        CroquetBridge.SubscribeToCroquetEvent(scope, eventName, forwarder);
         return forwarder;
     }
-    
+
     /// <summary>
     /// Listen for events sent with explicit scope and string-array argument.
     /// </summary>
@@ -285,10 +285,10 @@ public static class Croquet
     public static Action<string> Subscribe(string scope, string eventName, Action<string[]> handler)
     {
         Action<string> forwarder = s => handler(s.Split('\x03'));
-        CroquetBridge.Instance.SubscribeToCroquetEvent(scope, eventName, forwarder);
+        CroquetBridge.SubscribeToCroquetEvent(scope, eventName, forwarder);
         return forwarder;
     }
-    
+
     /// <summary>
     /// Listen for events sent with explicit scope and float argument.
     /// </summary>
@@ -298,10 +298,10 @@ public static class Croquet
     public static Action<string> Subscribe(string scope, string eventName, Action<float> handler)
     {
         Action<string> forwarder = s => handler(float.Parse(s));
-        CroquetBridge.Instance.SubscribeToCroquetEvent(scope, eventName, forwarder);
+        CroquetBridge.SubscribeToCroquetEvent(scope, eventName, forwarder);
         return forwarder;
     }
-    
+
     /// <summary>
     /// Listen for events sent with explicit scope and float-array argument.
     /// </summary>
@@ -319,7 +319,7 @@ public static class Croquet
             }
             handler(floats.ToArray());
         };
-        CroquetBridge.Instance.SubscribeToCroquetEvent(scope, eventName, forwarder);
+        CroquetBridge.SubscribeToCroquetEvent(scope, eventName, forwarder);
         return forwarder;
     }
 
@@ -332,7 +332,7 @@ public static class Croquet
     public static Action<string> Subscribe(string scope, string eventName, Action<bool> handler)
     {
         Action<string> forwarder = s => handler(bool.Parse(s));
-        CroquetBridge.Instance.SubscribeToCroquetEvent(scope, eventName, forwarder);
+        CroquetBridge.SubscribeToCroquetEvent(scope, eventName, forwarder);
         return forwarder;
     }
 
@@ -344,11 +344,11 @@ public static class Croquet
     /// <param name="forwarder"></param>
     public static void Unsubscribe(string scope, string eventName, Action<string> forwarder)
     {
-        CroquetBridge.Instance.UnsubscribeFromCroquetEvent(scope, eventName, forwarder);
+        CroquetBridge.UnsubscribeFromCroquetEvent(scope, eventName, forwarder);
     }
 
     #endregion
-    
+
     #region Actor Property Access
 
     public static string ReadActorString(GameObject gameObject, string propertyName)
@@ -356,7 +356,7 @@ public static class Croquet
         string stringVal = CroquetEntitySystem.Instance.GetPropertyValueString(gameObject, propertyName);
         return stringVal;
     }
-    
+
     public static string[] ReadActorStringArray(GameObject gameObject, string propertyName)
     {
         string stringVal = CroquetEntitySystem.Instance.GetPropertyValueString(gameObject, propertyName);
@@ -368,7 +368,7 @@ public static class Croquet
         string stringVal = CroquetEntitySystem.Instance.GetPropertyValueString(gameObject, propertyName);
         return float.Parse(stringVal);
     }
-    
+
     public static float[] ReadActorFloatArray(GameObject gameObject, string propertyName)
     {
         string stringVal = CroquetEntitySystem.Instance.GetPropertyValueString(gameObject, propertyName);
@@ -391,7 +391,7 @@ public static class Croquet
     public static float SessionTime()
     {
         // a time source (in seconds) that should be within a few ms across all clients.
-        // this is NOT the session's Teatime (which increases monotonically across 
+        // this is NOT the session's Teatime (which increases monotonically across
         // starts and stops over hours and days), but a measure of how long this
         // particular session has been running on its assigned reflector.
         // during game startup (at least until the Croquet session has started) this
@@ -399,4 +399,5 @@ public static class Croquet
         return CroquetBridge.Instance.CroquetSessionTime();
     }
 }
+
 

@@ -62,8 +62,8 @@ public class CroquetBridge : MonoBehaviour
 
     private CroquetSystem[] croquetSystems = new CroquetSystem[0];
 
-    private Dictionary<string, List<(GameObject, Action<string>)>> croquetSubscriptions = new Dictionary<string, List<(GameObject, Action<string>)>>();
-    private Dictionary<GameObject, HashSet<string>> croquetSubscriptionsByGameObject =
+    private static Dictionary<string, List<(GameObject, Action<string>)>> croquetSubscriptions = new Dictionary<string, List<(GameObject, Action<string>)>>();
+    private static Dictionary<GameObject, HashSet<string>> croquetSubscriptionsByGameObject =
         new Dictionary<GameObject, HashSet<string>>();
 
     // settings for logging and measuring (on JS-side performance log).  absence of an entry for a
@@ -616,18 +616,21 @@ public class CroquetBridge : MonoBehaviour
         }
     }
 
-    public void SubscribeToCroquetEvent(string scope, string eventName, Action<string> handler)
+    public static void SubscribeToCroquetEvent(string scope, string eventName, Action<string> handler)
     {
         string topic = scope + ":" + eventName;
         if (!croquetSubscriptions.ContainsKey(topic))
         {
             croquetSubscriptions[topic] = new List<(GameObject, Action<string>)>();
-            SendToCroquet("registerForEventTopic", topic);
+            if (Instance != null && Instance.croquetSessionRunning)
+            {
+                Instance.SendToCroquet("registerForEventTopic", topic);
+            }
         }
         croquetSubscriptions[topic].Add((null, handler));
     }
 
-    public void ListenForCroquetEvent(GameObject subscriber, string scope, string eventName, Action<string> handler)
+    public static void ListenForCroquetEvent(GameObject subscriber, string scope, string eventName, Action<string> handler)
     {
         // if this has been invoked before the object has its croquetActorId,
         // the scope will be an empty string.  in that case we still record the subscription,
@@ -678,7 +681,7 @@ public class CroquetBridge : MonoBehaviour
         return joinedTopics;
     }
 
-    public void UnsubscribeFromCroquetEvent(GameObject gameObject, string scope, string eventName,
+    public static void UnsubscribeFromCroquetEvent(GameObject gameObject, string scope, string eventName,
         Action<string> forwarder)
     {
         // gameObject will be null for non-Listen subscriptions.
@@ -701,7 +704,10 @@ public class CroquetBridge : MonoBehaviour
                         // no remaining subscriptions for this topic at all
                         // Debug.Log($"removed last subscription for {topic}");
                         croquetSubscriptions.Remove(topic);
-                        SendToCroquet("unregisterEventTopic", topic);
+                        if (Instance != null && Instance.croquetSessionRunning)
+                        {
+                            Instance.SendToCroquet("unregisterEventTopic", topic);
+                        }
                     }
                 }
                 else if (gameObject != null && sub.gameObject.Equals(gameObject))
@@ -718,7 +724,7 @@ public class CroquetBridge : MonoBehaviour
         }
     }
 
-    public void UnsubscribeFromCroquetEvent(string scope, string eventName, Action<string> forwarder)
+    public static void UnsubscribeFromCroquetEvent(string scope, string eventName, Action<string> forwarder)
     {
         UnsubscribeFromCroquetEvent(null, scope, eventName, forwarder);
     }
