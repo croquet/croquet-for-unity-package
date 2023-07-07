@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Networking;
 using UnityEngine.SceneManagement;
 using WebSocketSharp;
 using WebSocketSharp.Server;
@@ -16,10 +17,21 @@ using WebSocketSharp.Net;
 public class CroquetBridge : MonoBehaviour
 {
     public CroquetSettings appProperties;
+
+    [Header("Session Configuration")]
     public string appName;
+    public int defaultSessionName = 123;
     public bool useNodeJS;
-    public bool croquetSessionRunning = false;
+    public CroquetDebugTypes debugLoggingFlags;
+
+    [Header("Session State")]
+    public bool sessionRunning = false;
+    public int sessionName = 0;
     public string croquetViewId;
+
+    [Header("Network Glitch Simulator (in external browser or Node)")]
+    public bool triggerGlitchNow = false;
+    public float glitchDuration = 3.0f;
 
     HttpServer ws = null;
     WebSocketBehavior wsb = null; // not currently used
@@ -38,11 +50,12 @@ public class CroquetBridge : MonoBehaviour
     static long estimatedDateNowAtReflectorZero = -1; // an impossible value
 
     List<(string,string)> deferredMessages = new List<(string,string)>(); // messages with (optionally) a throttleId for removing duplicates
-    static float messageThrottle = 0.035f; // should result in deferred messages being sent on every other FixedUpdate tick
-    float lastMessageSend = 0; // realtimeSinceStartup
+    // static float messageThrottle = 0.035f; // should result in deferred messages being sent on every other FixedUpdate tick (20ms)
+    // static float tickThrottle = 0.015f; // if not a bunch of messages, at least send a tick every 20ms
+    // private float lastMessageSend = 0; // realtimeSinceStartup
+    private bool sentOnLastUpdate = false;
 
     LoadingProgressDisplay loadingProgressDisplay;
-    public bool loadingInProgress = true;
 
     public static CroquetBridge Instance { get; private set; }
     private CroquetRunner croquetRunner;
@@ -139,17 +152,14 @@ public class CroquetBridge : MonoBehaviour
 
             Instance.Log("session", "server socket opened");
 
-            // if not running externally, set JS warnings and errors to be logged here
-            if (!Instance.croquetRunner.waitForUserLaunch)
-            {
-                Instance.SetJSLogForwarding("warn,error");
-            }
-
             string apiKey = Instance.appProperties.apiKey;
             string appId = Instance.appProperties.appPrefix + "." + Instance.appName;
             string sessionName = Instance.sessionName.ToString();
             string assetManifests = CroquetEntitySystem.Instance.assetManifestString;
             string earlySubscriptionTopics = Instance.EarlySubscriptionTopicsAsString();
+            string debugLogTypes = Instance.debugLoggingFlags.ToString();
+
+            bool waitForUserLaunch = Instance.croquetRunner.waitForUserLaunch;
 
             string[] command = new string[] {
                 "readyForSession",
@@ -157,8 +167,17 @@ public class CroquetBridge : MonoBehaviour
                 appId,
                 sessionName,
                 assetManifests,
-                earlySubscriptionTopics
+                earlySubscriptionTopics,
+                debugLogTypes,
+                waitForUserLaunch ? "userLaunch" : "autoLaunch"
             };
+
+            // issue a warning if Croquet debug logging is enabled when not using an
+            // external browser
+            if (!waitForUserLaunch && debugLogTypes != "")
+            {
+                Debug.LogWarning($"Croquet debug logging is set to \"{debugLogTypes}\"");
+            }
 
             // send the message directly (bypassing the deferred-message queue)
             string msg = String.Join('\x01', command);
@@ -180,11 +199,6 @@ public class CroquetBridge : MonoBehaviour
     }
 
     private bool hasStartedWS = false;
-    public int defaultSessionName = 123;
-    public int sessionName = 0;
-
-    public bool simulateNetworkGlitch = false;
-    public float networkGlitchDuration = 3.0f;
 
     void StartWS()
     {
@@ -192,6 +206,8 @@ public class CroquetBridge : MonoBehaviour
         // https://github.com/sta/websocket-sharp/issues/327
         //var listener = typeof(WebSocketServer).GetField("_listener", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(ws) as System.Net.Sockets.TcpListener;
         //listener.Server.NoDelay = true;
+        // ...but I don't know how to apply this now that we're using HttpServer (plus WS service)
+        // rather than WebSocketServer
 
 #if UNITY_EDITOR
         if (appProperties.apiKey == "" || appProperties.apiKey == "PUT_YOUR_API_KEY_HERE")
@@ -336,14 +352,23 @@ public class CroquetBridge : MonoBehaviour
 
     public void SendToCroquet(params string[] strings)
     {
+        if (!sessionRunning)
+        {
+            Debug.LogWarning($"attempt to send when Croquet session is not running: {string.Join(',', strings)}");
+            return;
+        }
         deferredMessages.Add(("", PackCroquetMessage(strings)));
     }
 
     public void SendToCroquetSync(params string[] strings)
     {
+        if (!sessionRunning)
+        {
+            Debug.LogWarning($"attempt to send when Croquet session is not running: {string.Join(',', strings)}");
+            return;
+        }
         SendToCroquet(strings);
-        lastMessageSend = 0; // force to be immediate, even if we just sent something
-        SendDeferredMessages();
+        sentOnLastUpdate = false; // force to send on next tick
     }
 
     public void SendThrottledToCroquet(string throttleId, params string[] strings)
@@ -372,11 +397,25 @@ public class CroquetBridge : MonoBehaviour
 
     void SendDeferredMessages()
     {
-        if (clientSock == null || clientSock.ReadyState != WebSocketState.Open || deferredMessages.Count == 0) return;
-        float now = Time.realtimeSinceStartup;
-        if (now - lastMessageSend < messageThrottle) return;
+        if (clientSock == null || clientSock.ReadyState != WebSocketState.Open) return;
 
-        lastMessageSend = now;
+        // we expect this to be called 50 times per second.  usually on every other call we send
+        // deferred messages if there are any, otherwise send a tick.  expediting message sends
+        // is therefore a matter of clearing the sentOnLastUpdate flag.
+
+        if (sentOnLastUpdate)
+        {
+            sentOnLastUpdate = false;
+            return;
+        }
+
+        sentOnLastUpdate = true;
+
+        if (deferredMessages.Count == 0)
+        {
+            clientSock.Send("tick");
+            return;
+        }
 
         outBundleCount++;
         outMessageCount += deferredMessages.Count;
@@ -400,19 +439,15 @@ public class CroquetBridge : MonoBehaviour
         {
             StartWS();
         }
-        if (!loadingInProgress && croquetSessionRunning)
+
+        if (sessionRunning)
         {
-            if (loadingProgressDisplay)
+            // things to check periodically while the session is supposedly in full flow
+            if (triggerGlitchNow)
             {
-                // @@ ought to do this just once
-                loadingProgressDisplay.Hide();
-            }
+                triggerGlitchNow = false; // cancel the request
 
-            if (simulateNetworkGlitch)
-            {
-                simulateNetworkGlitch = false; // cancel the request
-
-                int milliseconds = (int) (networkGlitchDuration * 1000f);
+                int milliseconds = (int) (glitchDuration * 1000f);
                 if (milliseconds == 0) return;
 
                 SendToCroquetSync("simulateNetworkGlitch", milliseconds.ToString());
@@ -430,7 +465,7 @@ public class CroquetBridge : MonoBehaviour
 
         long duration = DateTimeOffset.Now.ToUnixTimeMilliseconds() - start;
         if (duration == 0) duration++;
-        if (croquetSessionRunning) Measure("update", start.ToString(), duration.ToString());
+        if (sessionRunning) Measure("update", start.ToString(), duration.ToString());
 
         float now = Time.realtimeSinceStartup;
         if (now - lastMessageDiagnostics > 1f)
@@ -667,7 +702,7 @@ public class CroquetBridge : MonoBehaviour
                     if (croquetSubscriptions[topic].Count == 0)
                     {
                         // no remaining subscriptions for this topic at all
-                        Debug.Log($"removed last subscription for {topic}");
+                        // Debug.Log($"removed last subscription for {topic}");
                         croquetSubscriptions.Remove(topic);
                         if (Instance != null && Instance.croquetSessionRunning)
                         {
@@ -748,7 +783,11 @@ public class CroquetBridge : MonoBehaviour
                         {
                             // Debug.Log($"removed last subscription for {topic}");
                             croquetSubscriptions.Remove(topic);
-                            SendToCroquet("unregisterEventTopic", topic);
+                            if (sessionRunning)
+                            {
+                                // don't even try to send if this is happening as part of a teardown
+                                SendToCroquet("unregisterEventTopic", topic);
+                            }
                         }
                     }
                 }
@@ -833,21 +872,30 @@ public class CroquetBridge : MonoBehaviour
 
     void HandleJoinProgress(string ratio)
     {
+        if (sessionRunning) return; // loading has finished; this is probably just a delayed message
+
         SetLoadingProgress(float.Parse(ratio));
     }
 
     void HandleSessionRunning(string[] args)
     {
+        // this is dispatched from the Croquet session's ViewRoot constructor
         Log("session", "Croquet session running!");
-        croquetSessionRunning = true;
+        sessionRunning = true;
         croquetViewId = args[0];
-        loadingInProgress = false;
+        estimatedDateNowAtReflectorZero = -1; // reset, to accept first value from new view
+        if (loadingProgressDisplay != null) loadingProgressDisplay.Hide();
     }
 
     void TearDownSession()
     {
-        Log("session", "Croquet session teardown now happening!");
-        croquetSessionRunning = false;
+        Log("session", "Croquet session teardown!");
+        deferredMessages.Clear();
+        sessionRunning = false; // suppresses sending of any further messages over the bridge
+        foreach (CroquetSystem system in croquetSystems)
+        {
+            system.TearDownSession();
+        }
     }
 
     // OUT: Logger Util
@@ -879,8 +927,14 @@ public class CroquetBridge : MonoBehaviour
         }
     }
 
+    // NOT USED
     void SetJSLogForwarding(string optionString)
     {
+        // @@ this was previously sent during processing of the socket open, but turned out to be the only
+        // instance of message that was being sent before the Croquet session was in progress.  to clean that
+        // up, equivalent behaviour is for now handled on the Croquet side... but eventually we should make
+        // it a user-configurable session setting that Unity forwards.
+
         // arg is a comma-separated list of the log types (log,warn,error) that we want
         // the JS side to send for logging here
         string[] cmdAndArgs = { "setJSLogForwarding", optionString };
@@ -900,6 +954,7 @@ public class CroquetBridge : MonoBehaviour
 
         // fast-forward progress 0=>1 is mapped onto bar 50=>100%
         float barRatio = loadRatio * 0.5f + 0.5f;
+        loadingProgressDisplay.Show(); // make sure it's visible (especially on a reload)
         loadingProgressDisplay.SetProgress(barRatio, $"Loading... ({loadRatio * 100:#0.0}%)");
     }
 
@@ -936,3 +991,33 @@ public class CroquetBridge : MonoBehaviour
 
 }
 
+
+[System.Serializable]
+public class CroquetDebugTypes
+{
+    public bool session;
+    public bool messages;
+    public bool sends;
+    public bool snapshot;
+    public bool data;
+    public bool hashing;
+    public bool subscribe;
+    public bool classes;
+    public bool ticks;
+
+    public override string ToString()
+    {
+        List<string> flags = new List<string>();
+        if (session) flags.Add("session");
+        if (messages) flags.Add("messages");
+        if (sends) flags.Add("sends");
+        if (snapshot) flags.Add("snapshot");
+        if (data) flags.Add("data");
+        if (hashing) flags.Add("hashing");
+        if (subscribe) flags.Add("subscribe");
+        if (classes) flags.Add("classes");
+        if (ticks) flags.Add("ticks");
+
+        return string.Join(',', flags.ToArray());
+    }
+}

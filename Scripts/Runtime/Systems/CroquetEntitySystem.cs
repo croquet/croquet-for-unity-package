@@ -20,17 +20,16 @@ public class CroquetEntitySystem : CroquetSystem
     public bool addressablesReady = false; // make public read or emit event to inform other systems that the assets are loaded
 
     private CroquetSystem[] allSystems;
-    
+
     // Create Singleton Reference
     public static CroquetEntitySystem Instance { get; private set; }
 
     public override List<string> KnownCommands { get; } = new List<string>()
     {
         "makeObject",
-        "destroyObject",
-        "tearDownSession"
+        "destroyObject"
     };
-    
+
     protected override Dictionary<int, CroquetComponent> components { get; set; } =
         new Dictionary<int, CroquetComponent>();
 
@@ -40,12 +39,12 @@ public class CroquetEntitySystem : CroquetSystem
     {
         CroquetHandleToInstanceID.Add(croquetHandle, id);
     }
-    
+
     private void DisassociateCroquetHandleToInstanceID(string croquetHandle)
     {
         CroquetHandleToInstanceID.Remove(croquetHandle);
     }
-    
+
     /// <summary>
     /// Get GameObject with a specific Croquet Handle
     /// </summary>
@@ -83,27 +82,27 @@ public class CroquetEntitySystem : CroquetSystem
     {
         // Create Singleton Accessor
         // If there is an instance, and it's not me, delete myself.
-        if (Instance != null && Instance != this) 
-        { 
+        if (Instance != null && Instance != this)
+        {
             Destroy(this);
         }
         else
-        { 
-            Instance = this; 
+        {
+            Instance = this;
         }
-        
+
         addressableAssets = new Dictionary<string, GameObject>();
         // cache a list of all the systems that are running in this scene, for
         // alerting when object properties change
     }
-    
+
     private void Start()
     {
         CroquetBridge.Instance.RegisterSystem(this);
         allSystems = CroquetBridge.Instance.gameObject.GetComponents<CroquetSystem>();
         StartCoroutine(LoadAddressableAssetsWithLabel(CroquetBridge.Instance.appName));
     }
-    
+
     IEnumerator LoadAddressableAssetsWithLabel(string label)
     {
         // @@ LoadAssetsAsync throws an error - asynchronously - if there are
@@ -137,7 +136,7 @@ public class CroquetEntitySystem : CroquetSystem
                     addressableAssets.Add(go.name.ToLower(), go); // @@ remove case-sensitivity
                 }
                 addressablesReady = true;
-                // prepare this now, because trying within the Socket's OnOpen 
+                // prepare this now, because trying within the Socket's OnOpen
                 // fails.  presumably a thread issue.
                 assetManifestString = AssetManifestsAsString();
             };
@@ -191,12 +190,8 @@ public class CroquetEntitySystem : CroquetSystem
         {
             DestroyObject(args[0]);
         }
-        else if (command.Equals("tearDownSession"))
-        {
-            TearDownSession();
-        }
     }
-    
+
     void MakeObject(string[] args)
     {
         ObjectSpec spec = JsonUtility.FromJson<ObjectSpec>(args[0]);
@@ -230,7 +225,7 @@ public class CroquetEntitySystem : CroquetSystem
         if (gameObjectToMake.GetComponent<CroquetEntityComponent>() == null){
             gameObjectToMake.AddComponent<CroquetEntityComponent>();
         }
-        
+
         CroquetEntityComponent entity = gameObjectToMake.GetComponent<CroquetEntityComponent>();
         entity.croquetHandle = spec.cH;
         int instanceID = gameObjectToMake.GetInstanceID();
@@ -242,7 +237,7 @@ public class CroquetEntitySystem : CroquetSystem
             entity.croquetActorId = spec.cN;
             CroquetBridge.Instance.FixUpEarlyListens(gameObjectToMake, entity.croquetActorId);
         }
-        
+
         // allComponents
         if (spec.cs != "")
         {
@@ -289,7 +284,7 @@ public class CroquetEntitySystem : CroquetSystem
                 SetPropertyValueString(entity, props[i], props[i + 1]);
             }
         }
-        
+
         // watchers
         if (spec.ws.Length != 0)
         {
@@ -302,7 +297,7 @@ public class CroquetEntitySystem : CroquetSystem
                 });
             }
         }
-        
+
         // waitToPresent
         if (spec.wTP)
         {
@@ -311,12 +306,12 @@ public class CroquetEntitySystem : CroquetSystem
                 renderer.enabled = false;
             }
         }
-        
+
         foreach (ICroquetDriven component in gameObjectToMake.GetComponents<ICroquetDriven>())
         {
             component.PawnInitializationComplete();
         }
-        
+
         foreach (CroquetSystem system in allSystems)
         {
             if (system.KnowsObject(gameObjectToMake))
@@ -336,7 +331,7 @@ public class CroquetEntitySystem : CroquetSystem
     private void SetPropertyValueString(CroquetEntityComponent entity, string propertyName, string stringyValue)
     {
         // @@ messy that this takes a component, while GetPropertyValueString takes
-        // a game object.  but that is public, and this is private; around here we 
+        // a game object.  but that is public, and this is private; around here we
         // know all about the components.
 
         // Debug.Log($"setting {propertyName} to {stringyValue}");
@@ -350,7 +345,7 @@ public class CroquetEntitySystem : CroquetSystem
             }
         }
     }
-    
+
     public string GetPropertyValueString(GameObject gameObject, string propertyName)
     {
         CroquetEntityComponent entity = components[gameObject.GetInstanceID()] as CroquetEntityComponent;
@@ -359,7 +354,7 @@ public class CroquetEntitySystem : CroquetSystem
             Debug.LogWarning($"failed to find Entity component for {gameObject}");
             return null;
         }
-        
+
         Dictionary<string, string> properties = entity.actorProperties;
         if (!properties.ContainsKey(propertyName))
         {
@@ -368,7 +363,7 @@ public class CroquetEntitySystem : CroquetSystem
         }
         return properties[propertyName];
     }
-    
+
     void DestroyObject(string croquetHandle)
     {
         // Debug.Log( "Destroying Object " + croquetHandle.ToString());
@@ -377,7 +372,7 @@ public class CroquetEntitySystem : CroquetSystem
         {
             int instanceID = CroquetHandleToInstanceID[croquetHandle];
             //components.Remove(instanceID);
-            
+
             // INFORM OTHER COMPONENT'S SYSTEMS THEY ARE TO BE UNREGISTERED
             GameObject go = GetGameObjectByCroquetHandle(croquetHandle);
             CroquetComponent[] componentsToUnregister  = go.GetComponents<CroquetComponent>();
@@ -386,11 +381,11 @@ public class CroquetEntitySystem : CroquetSystem
                 CroquetSystem system = componentToUnregister.croquetSystem;
                 system.UnregisterComponent(componentToUnregister); //crosses fingers
             }
-            
-            
+
+
             CroquetBridge.Instance.RemoveCroquetSubscriptionsFor(go);
-            
-            
+
+
             DisassociateCroquetHandleToInstanceID(croquetHandle);
 
             Destroy(go);
@@ -403,11 +398,11 @@ public class CroquetEntitySystem : CroquetSystem
         }
     }
 
-    void TearDownSession()
+    public override void TearDownSession()
     {
         // destroy everything in the scene for the purposes of rebuilding when the
         // connection is reestablished.
-        
+
         List<CroquetComponent> componentsToDelete = components.Values.ToList();
         foreach (CroquetComponent component in componentsToDelete)
         {
@@ -418,7 +413,7 @@ public class CroquetEntitySystem : CroquetSystem
             }
         }
     }
-    
+
     GameObject CreateCroquetPrimitive(PrimitiveType type, Color color)
     {
         GameObject go = new GameObject();
@@ -435,7 +430,7 @@ public class ObjectSpec
 {
     public string cH; // croquet handle: currently an integer, but no point converting all the time
     public string cN; // Croquet name (generally, the model id)
-    public bool cC; // confirmCreation: whether Croquet is waiting for a confirmCreation message for this 
+    public bool cC; // confirmCreation: whether Croquet is waiting for a confirmCreation message for this
     public bool wTP; // waitToPresent:  whether to make visible immediately
     public string type;
     public string cs; // comma-separated list of extra components

@@ -9,12 +9,6 @@
                 background: rgb(30, 30, 30);
             }
         </style>
-        <script id="timerWorker" type="text/js-worker">
-            onmessage = ({ data }) => {
-                if (data.interval) setInterval(() => postMessage('interval'), data.interval);
-                else setTimeout(() => postMessage(data.id), data.duration);
-            };
-        </script>
     </head>
     <body>
     </body>
