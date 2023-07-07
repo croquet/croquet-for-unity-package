@@ -61,7 +61,8 @@ console.log(`PORT ${portStr}`);
             this.resetMessageStats();
             sock.onmessage = event => {
                 const msg = event.data;
-                this.handleUnityMessageOrBundle(msg);
+                if (msg !== 'tick') this.handleUnityMessageOrBundle(msg);
+                if (ticker) ticker();
             };
         };
         sock.onclose = _evt => {
@@ -137,16 +138,12 @@ console.log(`PORT ${portStr}`);
                 // args[0] is comma-separated list of log types (log,warn,error)
                 // that are to be sent over to Unity
                 const toForward = args[0].split(',');
-                const forwarder = (logType, logVals) => this.sendCommand('logFromJS', logType, logVals.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
-                ['log', 'warn', 'error'].forEach(logType => {
-                    if (toForward.includes(logType)) console[logType] = (...logVals) => forwarder(logType, logVals);
-                    else console[logType] = console[`q_${logType}`];
-                });
+                this.setJSLogForwarding(toForward);
                 break;
             }
             case 'readyForSession': {
-                // args are [apiKey, appId, sessionName, assetManifests. earlySubscriptionTopics ]
-                const [apiKey, appId, sessionName, assetManifestString, earlySubscriptionTopics ] = args;
+                // args are [apiKey, appId, sessionName, assetManifests. earlySubscriptionTopics, debugLogTypes, launchType ]
+                const [apiKey, appId, sessionName, assetManifestString, earlySubscriptionTopics, debugLogTypes, launchType] = args;
                 globalThis.timedLog(`starting session of ${appId} with key ${apiKey}`);
                 this.apiKey = apiKey;
                 this.appId = appId;
@@ -154,12 +151,16 @@ console.log(`PORT ${portStr}`);
                 // console.log({earlySubscriptionTopics});
                 this.assetManifestString = assetManifestString;
                 this.earlySubscriptionTopics = earlySubscriptionTopics; // comma-separated list
+                this.debugLogTypes = debugLogTypes; // ditto
+                // if this is an auto-launched session (i.e., not an external browser), set up logging so that warnings and errors appear in the Unity console.  for an external browser, we forward nothing.
+                // @@ should be configurable (especially so it can be turned off
+                // for a build).
+                this.setJSLogForwarding(launchType === 'autoLaunch' ? ['warn', 'error'] : []);
                 this.setReady();
                 break;
             }
             case 'event': {
-                // DEPRECATED
-                // args[0] is event type (currently screenTap, screenDouble)
+                // used for all interaction events (keyDown, keyUp, pointerHit etc)
                 if (theGameInputManager) theGameInputManager.handleEvent(args);
                 break;
             }
@@ -230,6 +231,24 @@ console.log(`PORT ${portStr}`);
         }
     }
 
+    setJSLogForwarding(toForward) {
+        console.log("categories of JS log forwarded to Unity:", toForward);
+        const isNode = globalThis.CROQUET_NODE;
+        const forwarder = (logType, logVals) => this.sendCommand('logFromJS', logType, `${(globalThis.CroquetViewDate || Date).now() % 100000}: ` + logVals.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
+        ['log', 'warn', 'error'].forEach(logType => {
+            if (isNode) {
+                // in Node, everything output to the console is (for now) automatically
+                // echoed to Unity.  so anything _not_ in the list needs to be suppressed.
+                if (toForward.includes(logType)) console[logType] = console[`q_${logType}`]; // use system default
+                else console[logType] = () => {}; // suppress
+            } else {
+                // eslint-disable-next-line no-lonely-if
+                if (toForward.includes(logType)) console[logType] = (...logVals) => forwarder(logType, logVals);
+                else console[logType] = console[`q_${logType}`]; // use system default
+            }
+        });
+    }
+
     update(_time) {
         // sent by the gameViewManager on each update()
         const now = Date.now();
@@ -264,10 +283,11 @@ console.log(`PORT ${portStr}`);
     }
 
     simulateNetworkGlitch(milliseconds) {
+        console.warn(`simulating network glitch of ${milliseconds}ms`);
         const vm = globalThis.CROQUETVM; // @@ privileged information
         vm.controller.connection.reconnectDelay = milliseconds;
         vm.controller.connection.socket.close(4000, 'simulate glitch');
-        setTimeout(() => vm.controller.connection.reconnectDelay = 0, 500);
+        timerClient.setTimeout(() => vm.controller.connection.reconnectDelay = 0, 500);
     }
 
 showSetupStats() {
@@ -1136,6 +1156,8 @@ export class GameViewRoot extends ViewRoot {
 
 }
 
+// GameInputManager is a ViewService, and therefore created and destroyed along with
+// the ViewRoot.
 export class GameInputManager extends ViewService {
     get gameViewManager() { return this._gameViewManager || (this._gameViewManager = GetViewService('GameViewManager')) }
 
@@ -1145,6 +1167,11 @@ export class GameInputManager extends ViewService {
         this.customEventHandlers = {};
 
         theGameInputManager = this;
+    }
+
+    destroy() {
+        super.destroy();
+        theGameInputManager = null;
     }
 
     addEventHandlers(handlers) {
@@ -1213,51 +1240,108 @@ export class GameInputManager extends ViewService {
     }
 }
 
+// a linked list for holding timeout records
+class TimeList {
+    constructor() {
+        this.firstNode = null;
+    }
 
-// simplified interval handling for game-engine apps
+    insert(delay, id) {
+        const now = performance.now();
+        const newNode = { triggerTime: now + delay, id };
+        if (!this.firstNode) {
+            this.firstNode = newNode;
+            // this.walkList();
+            return;
+        }
 
-export const TimerClient = class {
+        let n = this.firstNode;
+        let prev = null;
+        while (n && n.triggerTime <= newNode.triggerTime) {
+            prev = n;
+            n = n.next;
+        }
+        // either n is a node with a time > ours, or
+        // we've reached the end of the list
+        if (prev) prev.next = newNode;
+        else this.firstNode = newNode;
+
+        newNode.next = n; // maybe empty
+
+        // this.walkList();
+    }
+
+    walkList() {
+        // for debug
+        const times = [];
+        let n = this.firstNode;
+        while (n) {
+            times.push(Math.round(n.triggerTime));
+            n = n.next;
+        }
+        console.log("times", times.join(","));
+    }
+
+    processUpTo(timeLimit, processor) {
+        if (!this.firstNode) return;
+
+        let n = this.firstNode;
+        while (n && n.triggerTime <= timeLimit) {
+            processor(n.id);
+            n = n.next;
+        }
+        this.firstNode = n; // maybe empty
+    }
+}
+
+let serviceTimeouts;
+class TimerClient {
     constructor() {
         this.timeouts = {};
-        // https://stackoverflow.com/questions/69148796/how-to-load-webworker-from-local-in-wkwebview
-        this.timerWorker = new Worker(window.URL.createObjectURL(
-            new Blob([document.getElementById("timerWorker").textContent], {
-                type: "application/javascript",
-            })
-        ));
-        // this.timerWorker = new Worker(new URL('timer-worker.js', import.meta.url));
-        this.timerIntervalSubscribers = {};
-        this.timerWorker.onmessage = ({ data: intervalOrId }) => {
-            if (intervalOrId === 'interval') {
-                Object.values(this.timerIntervalSubscribers).forEach(fn => fn());
-            } else {
-                const record = this.timeouts[intervalOrId];
-                if (record) {
-                    const { callback } = record;
-                    if (callback) callback();
-                    delete this.timeouts[intervalOrId];
-                }
-            }
-        };
+
+        this.timeList = new TimeList();
+        serviceTimeouts = () => this.serviceTimeouts();
+
+        globalThis.setTimeout = (c, d) => this.setTimeout(c, d);
+        globalThis.clearTimeout = id => this.clearTimeout(id);
     }
+
     setTimeout(callback, duration) {
+        return this._setTimeout(callback, duration);
+
+        // const target = Date.now() + duration;
+        // return this._setTimeout(() => {
+        //     console.log(`duration: ${duration} diff: ${Date.now() - target}`);
+        //     callback();
+        // }, duration);
+    }
+    _setTimeout(callback, duration) {
         const id = Math.random().toString();
         this.timeouts[id] = { callback };
-        this.timerWorker.postMessage({ id, duration });
+        this.timeList.insert(duration, id);
         return id;
     }
+
     clearTimeout(id) {
+        this._clearTimeout(id);
+    }
+    _clearTimeout(id) {
         delete this.timeouts[id];
     }
-    setInterval(callback, interval, name = 'interval') {
-        // NB: for now, the worker only runs a single interval timer.  all subscribed clients must be happy being triggered with the same period.
-        this.timerIntervalSubscribers[name] = callback;
-        this.timerWorker.postMessage({ interval });
+
+    serviceTimeouts() {
+        if (!this.timeList.firstNode) return; // nothing to even check
+
+        Promise.resolve().then(() => this.timeList.processUpTo(performance.now(), id => {
+            const record = this.timeouts[id];
+            if (record) {
+                const { callback } = record;
+                if (callback) callback();
+                delete this.timeouts[id];
+            }
+        }));
     }
-    clearInterval(name = 'interval') {
-        delete this.timerIntervalSubscribers[name];
-    }
-};
+}
 
 const timerClient = globalThis.CROQUET_NODE ? globalThis : new TimerClient();
 if (globalThis.CROQUET_NODE) {
@@ -1392,13 +1476,13 @@ class SessionOffsetEstimator {
 }
 
 
-let session, sessionOffsetEstimator;
+let session, sessionOffsetEstimator, ticker;
 export async function StartSession(model, view) {
     // console.profile();
     // setTimeout(() => console.profileEnd(), 10000);
     await theGameEngineBridge.readyP;
     globalThis.timedLog("bridge ready");
-    const { apiKey, appId, sessionName } = theGameEngineBridge;
+    const { apiKey, appId, sessionName, debugLogTypes } = theGameEngineBridge;
     const name = `${sessionName}`;
     const password = 'password';
     session = await StartWorldcore({
@@ -1407,11 +1491,11 @@ export async function StartSession(model, view) {
         name,
         password,
         step: 'manual',
-        tps: 20,
+        tps: 33, // deliberately out of phase with 25Hz ticks from Unity, aiming for decent stepping coverage in WebView sessions
         autoSleep: false,
         expectedSimFPS: 0, // 0 => don't attempt to load-balance simulation
         flags: ['unity', 'rawtime'],
-        // debug: globalThis.CROQUET_NODE ? ['session'] : ['session', 'messages'],
+        debug: debugLogTypes,
         model,
         view,
         progressReporter: ratio => {
@@ -1425,19 +1509,32 @@ export async function StartSession(model, view) {
     const STEP_DELAY = 26; // aiming to ensure that there will be a new 50ms physics update on every other step
     let stepHandler = null;
     let stepCount = 0;
-    timerClient.setInterval(() => {
-        performance.mark(`STEP${++stepCount}`);
-        if (stepHandler) stepHandler();
-    }, STEP_DELAY);
-
     let lastStep = 0;
     stepHandler = () => {
         if (!session.view) return; // don't try stepping after leaving session (including during a rejoin)
 
-        const now = Date.now();
+        const now = performance.now() | 0;
+
         // don't try to service ticks that have bunched up
         if (now - lastStep < STEP_DELAY / 2) return;
+
         lastStep = now;
-        session.step(now);
+        performance.mark(`STEP${++stepCount}`);
+
+        Promise.resolve().then(() => session.step(now));
     };
+
+    if (globalThis.CROQUET_NODE) {
+        setInterval(stepHandler, STEP_DELAY); // as simple as that
+    } else {
+        ticker = () => {
+            // NB: this is called from a tickHook and a websocket message handler -
+            // so if there's anything heavy to do, schedule it asynchronously.
+
+            if (serviceTimeouts) serviceTimeouts(); // very cheap if there aren't any
+
+            stepHandler();
+        };
+        session.view.realm.vm.controller.tickHook = ticker;
+    }
 }
