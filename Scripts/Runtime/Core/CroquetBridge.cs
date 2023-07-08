@@ -622,7 +622,7 @@ public class CroquetBridge : MonoBehaviour
         if (!croquetSubscriptions.ContainsKey(topic))
         {
             croquetSubscriptions[topic] = new List<(GameObject, Action<string>)>();
-            if (Instance != null && Instance.croquetSessionRunning)
+            if (Instance != null && Instance.sessionRunning)
             {
                 Instance.SendToCroquet("registerForEventTopic", topic);
             }
@@ -704,7 +704,7 @@ public class CroquetBridge : MonoBehaviour
                         // no remaining subscriptions for this topic at all
                         // Debug.Log($"removed last subscription for {topic}");
                         croquetSubscriptions.Remove(topic);
-                        if (Instance != null && Instance.croquetSessionRunning)
+                        if (Instance != null && Instance.sessionRunning)
                         {
                             Instance.SendToCroquet("unregisterEventTopic", topic);
                         }
