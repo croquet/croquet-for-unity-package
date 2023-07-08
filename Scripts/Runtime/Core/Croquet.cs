@@ -13,7 +13,7 @@ public static class Croquet
     /// <param name="eventName"></param>
     public static void Say(GameObject gameObject, string eventName)
     {
-        string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
+        string scope = GetActorIdIfAvailable(gameObject);
         CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName);
     }
 
@@ -25,7 +25,7 @@ public static class Croquet
     /// <param name="argString"></param>
     public static void Say(GameObject gameObject, string eventName, string argString)
     {
-        string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
+        string scope = GetActorIdIfAvailable(gameObject);
         CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, "s", argString);
     }
 
@@ -37,7 +37,7 @@ public static class Croquet
     /// <param name="argStrings"></param>
     public static void Say(GameObject gameObject, string eventName, string[] argStrings)
     {
-        string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
+        string scope = GetActorIdIfAvailable(gameObject);
         CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, "ss", string.Join('\x03', argStrings));
     }
 
@@ -49,7 +49,7 @@ public static class Croquet
     /// <param name="argFloat"></param>
     public static void Say(GameObject gameObject, string eventName, float argFloat)
     {
-        string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
+        string scope = GetActorIdIfAvailable(gameObject);
         CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, "f", argFloat.ToString());
     }
 
@@ -61,7 +61,7 @@ public static class Croquet
     /// <param name="argFloats"></param>
     public static void Say(GameObject gameObject, string eventName, float[] argFloats)
     {
-        string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
+        string scope = GetActorIdIfAvailable(gameObject);
         CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, "ff", string.Join<float>('\x03', argFloats));
     }
 
@@ -73,7 +73,7 @@ public static class Croquet
     /// <param name="argBool"></param>
     public static void Say(GameObject gameObject, string eventName, bool argBool)
     {
-        string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
+        string scope = GetActorIdIfAvailable(gameObject);
         CroquetBridge.Instance.SendToCroquetSync("publish", scope, eventName, "b", argBool.ToString());
     }
 
@@ -85,7 +85,7 @@ public static class Croquet
     /// <param name="handler"></param>
     public static Action<string> Listen(GameObject gameObject, string eventName, Action handler)
     {
-        string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
+        string scope = GetActorIdIfAvailable(gameObject);
         Action<string> forwarder = s => handler();
         CroquetBridge.ListenForCroquetEvent(gameObject, scope, eventName, forwarder);
         return forwarder;
@@ -99,7 +99,7 @@ public static class Croquet
     /// <param name="handler"></param>
     public static Action<string> Listen(GameObject gameObject, string eventName, Action<string> handler)
     {
-        string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
+        string scope = GetActorIdIfAvailable(gameObject);
         Action<string> forwarder = s => handler(s); // same type, but we want to ensure a unique handler
         CroquetBridge.ListenForCroquetEvent(gameObject, scope, eventName, forwarder);
         return forwarder;
@@ -113,7 +113,7 @@ public static class Croquet
     /// <param name="handler"></param>
     public static Action<string> Listen(GameObject gameObject, string eventName, Action<string[]> handler)
     {
-        string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
+        string scope = GetActorIdIfAvailable(gameObject);
         Action<string> forwarder = s => handler(s.Split('\x03'));
         CroquetBridge.ListenForCroquetEvent(gameObject, scope, eventName, forwarder);
         return forwarder;
@@ -127,7 +127,7 @@ public static class Croquet
     /// <param name="handler"></param>
     public static Action<string> Listen(GameObject gameObject, string eventName, Action<float> handler)
     {
-        string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
+        string scope = GetActorIdIfAvailable(gameObject);
         Action<string> forwarder = s => handler(float.Parse(s));
         CroquetBridge.ListenForCroquetEvent(gameObject, scope, eventName, forwarder);
         return forwarder;
@@ -141,7 +141,7 @@ public static class Croquet
     /// <param name="handler"></param>
     public static Action<string> Listen(GameObject gameObject, string eventName, Action<float[]> handler)
     {
-        string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
+        string scope = GetActorIdIfAvailable(gameObject);
         Action<string> forwarder = s =>
         {
             List<float> floats = new List<float>();
@@ -163,7 +163,7 @@ public static class Croquet
     /// <param name="handler"></param>
     public static Action<string> Listen(GameObject gameObject, string eventName, Action<bool> handler)
     {
-        string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
+        string scope = GetActorIdIfAvailable(gameObject);
         Action<string> forwarder = s => handler(bool.Parse(s));
         CroquetBridge.ListenForCroquetEvent(gameObject, scope, eventName, forwarder);
         return forwarder;
@@ -177,8 +177,14 @@ public static class Croquet
     /// <param name="forwarder"></param>
     public static void Ignore(GameObject gameObject, string eventName, Action<string> forwarder)
     {
-        string scope = gameObject.GetComponent<CroquetEntityComponent>().croquetActorId;
+        string scope = GetActorIdIfAvailable(gameObject);
         CroquetBridge.UnsubscribeFromCroquetEvent(gameObject, scope, eventName, forwarder);
+    }
+
+    private static string GetActorIdIfAvailable(GameObject gameObject)
+    {
+        CroquetEntityComponent entity = gameObject.GetComponent<CroquetEntityComponent>();
+        return entity == null ? "" : entity.croquetActorId;
     }
 
     #endregion
