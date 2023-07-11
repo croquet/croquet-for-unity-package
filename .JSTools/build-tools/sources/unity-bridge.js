@@ -347,6 +347,8 @@ export const GameViewManager = class extends ViewService {
     }
 
     destroy() {
+        // use a specialised command rather than the cross-bridge event mechanism,
+        // because the latter is being torn down
         if (theGameEngineBridge.bridgeIsConnected) theGameEngineBridge.sendCommand('tearDownSession');
         theGameEngineBridge.setCommandHandler(null);
     }
@@ -1151,8 +1153,9 @@ export class GameViewRoot extends ViewRoot {
         if (sessionOffsetEstimator) sessionOffsetEstimator.initReflectorOffsets();
 
         // we treat the construction of the view as a signal that the session is
-        // ready to talk across the bridge
-        theGameEngineBridge.sendCommand('croquetSessionRunning', this.viewId);
+        // ready to talk across the bridge.  that means that the event mechanism
+        // is ready, too.
+        this.publish("croquet", "sessionRunning", this.viewId);
         globalThis.timedLog("session running");
     }
 

@@ -105,6 +105,8 @@ public class CroquetBridge : MonoBehaviour
         }
         croquetSystems = gameObject.GetComponents<CroquetSystem>();
 
+        Croquet.Subscribe("croquet", "sessionRunning", HandleSessionRunning);
+
         SetCSharpLogOptions("info,session");
         SetCSharpMeasureOptions("bundle"); // for now, just report handling of message batches from Croquet
     }
@@ -586,8 +588,7 @@ public class CroquetBridge : MonoBehaviour
         else if (command == "setLogOptions") SetCSharpLogOptions(args[0]);  //OUT:LOGGER
         else if (command == "setMeasureOptions") SetCSharpMeasureOptions(args[0]);//OUT:METRICS
         else if (command == "joinProgress") HandleJoinProgress(args[0]);
-        else if (command == "croquetSessionRunning") HandleSessionRunning(args);
-        else if (command == "tearDownSession") TearDownSession();
+        else if (command == "tearDownSession") HandleSessionTeardown();
         else if (command == "croquetTime") HandleCroquetReflectorTime(args[0]);
         else if (!messageWasProcessed)
         {
@@ -797,6 +798,12 @@ public class CroquetBridge : MonoBehaviour
         }
     }
 
+    // might be useful at some point
+    // void SimulateCroquetPublish(params string[] args)
+    // {
+    //     ProcessCroquetPublish(args);
+    // }
+
     void ProcessCroquetPublish(string[] args)
     {
         // args are
@@ -877,17 +884,17 @@ public class CroquetBridge : MonoBehaviour
         SetLoadingProgress(float.Parse(ratio));
     }
 
-    void HandleSessionRunning(string[] args)
+    void HandleSessionRunning(string viewId)
     {
         // this is dispatched from the Croquet session's ViewRoot constructor
         Log("session", "Croquet session running!");
         sessionRunning = true;
-        croquetViewId = args[0];
+        croquetViewId = viewId;
         estimatedDateNowAtReflectorZero = -1; // reset, to accept first value from new view
         if (loadingProgressDisplay != null) loadingProgressDisplay.Hide();
     }
 
-    void TearDownSession()
+    void HandleSessionTeardown()
     {
         Log("session", "Croquet session teardown!");
         deferredMessages.Clear();

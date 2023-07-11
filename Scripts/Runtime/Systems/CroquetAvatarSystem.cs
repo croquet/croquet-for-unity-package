@@ -11,26 +11,26 @@ public class CroquetAvatarSystem : CroquetSystem
 
     protected override Dictionary<int, CroquetComponent> components { get; set; } =
         new Dictionary<int, CroquetComponent>();
-    
+
     // Create Singleton Reference
     public static CroquetAvatarSystem Instance { get; private set; }
- 
+
     private CroquetAvatarComponent lastKnownActiveAvatar;
 
     private void Awake()
     {
         // Create Singleton Accessor
         // If there is an instance, and it's not me, delete myself.
-        if (Instance != null && Instance != this) 
-        { 
-            Destroy(this); 
+        if (Instance != null && Instance != this)
+        {
+            Destroy(this);
         }
-        else 
-        { 
-            Instance = this; 
+        else
+        {
+            Instance = this;
         }
     }
-    
+
     void CheckForActiveAvatar()
     {
         // find the avatar component, if any, whose gameObject's actor's "driver" value
@@ -61,7 +61,7 @@ public class CroquetAvatarSystem : CroquetSystem
                     {
                         if (Croquet.ReadActorString(c.gameObject, "driver") == croquetViewId)
                         {
-                            Debug.Log("found active avatar");
+                            // Debug.Log("found active avatar");
                             c.isActiveAvatar = true;
                             lastKnownActiveAvatar = c;
                             return;
