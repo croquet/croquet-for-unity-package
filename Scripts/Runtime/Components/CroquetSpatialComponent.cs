@@ -12,9 +12,9 @@ public class CroquetSpatialComponent : CroquetComponent
     public bool hasBeenPlaced = false;
     public bool hasBeenMoved = false;
     public Vector3 position = Vector3.zero;
-    public Quaternion rotation = Quaternion.identity ; 
+    public Quaternion rotation = Quaternion.identity ;
     public Vector3 scale = Vector3.one;
-    
+
     [Header("Options")]
     public bool initializeWithSceneTransform = false;
     [Space(10)]
@@ -22,18 +22,20 @@ public class CroquetSpatialComponent : CroquetComponent
     public float rotationDeltaEpsilon = 0.01f;
     public float scaleDeltaEpsilon = 0.01f;
     [Space(10)]
-    public bool linearInterpolation = false;
-    public float positionLerpFactor = 0.2f;
+    public float positionSmoothTime = 0.25f; // used by SmoothDamp
+    public Vector3 dampedVelocity = Vector3.zero; // used by SmoothDamp
     public float rotationLerpFactor = 0.2f;
     public float scaleLerpFactor = 0.2f;
 
     [Header("Ballistic motion")]
-    public float desiredLag = 0.05f; // seconds behind 
+    public float desiredLag = 0.05f; // seconds behind
     public float currentLag = 0f;
     public Vector3? ballisticVelocity = null;
+    public float ballisticNudgeLerp = 0.2f; // adjustments to "ballistic" movement
 
-    // public List<string> telemetry = new List<string>(); for testing
+    // public List<string> telemetry = new List<string>(); // for testing
+    // public int telemetryDumpTrigger = -1;
 
     //TODO: lerpCurve support
-    
+
 }

@@ -146,7 +146,7 @@ public class CroquetSpatialSystem : CroquetSystem
 
                 if (Mathf.Abs(offToSide) > 0.01f)
                 {
-                    float nudgeDist = -offToSide * spatial.positionLerpFactor;
+                    float nudgeDist = -offToSide * spatial.ballisticNudgeLerp;
                     Vector3 nudge = new Vector3(perpendicularUnit.x * nudgeDist, 0,
                         perpendicularUnit.y * nudgeDist);
                     t.localPosition += nudge;
@@ -180,7 +180,10 @@ public class CroquetSpatialSystem : CroquetSystem
                 spatial.hasBeenMoved = true;
             } else if (Vector3.Distance(spatial.position,t.localPosition) > spatial.positionDeltaEpsilon)
             {
-                t.localPosition = Vector3.Lerp(t.localPosition, spatial.position, spatial.positionLerpFactor);
+                // SmoothDamp seems better suited to our needs than a constant lerp
+                t.localPosition = Vector3.SmoothDamp(t.localPosition, spatial.position,
+                        ref spatial.dampedVelocity, spatial.positionSmoothTime);
+                // Vector3.Lerp(t.localPosition, spatial.position, spatial.positionLerpFactor);
             }
         }
     }
