@@ -29,7 +29,7 @@ public class CroquetBridge : MonoBehaviour
     public int sessionName = 0;
     public string croquetViewId;
 
-    [Header("Network Glitch Simulator (in external browser or Node)")]
+    [Header("Network Glitch Simulator")]
     public bool triggerGlitchNow = false;
     public float glitchDuration = 3.0f;
 
