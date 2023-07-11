@@ -508,7 +508,6 @@ public class CroquetBridge : MonoBehaviour
                     Array.Copy(rawData, timeAndCmdBytes, sepPos);
                     string[] strings = System.Text.Encoding.UTF8.GetString(timeAndCmdBytes).Split('\x02');
                     string command = strings[1];
-                    int count = 0;
 
                     ProcessCroquetMessage(command, rawData, sepPos + 1);
 
@@ -517,7 +516,7 @@ public class CroquetBridge : MonoBehaviour
                     long nowAfterProcessing = DateTimeOffset.Now.ToUnixTimeMilliseconds();
                     long processing = nowAfterProcessing - nowWhenDequeued;
                     long totalTime = nowAfterProcessing - sendTime;
-                    string annotation = $"{count} objects, {rawData.Length - sepPos - 1} bytes. sock={transmissionDelay}ms, queue={queueDelay}ms, process={processing}ms";
+                    string annotation = $"{rawData.Length - sepPos - 1} bytes. sock={transmissionDelay}ms, queue={queueDelay}ms, process={processing}ms";
                     Measure("geom", sendTime.ToString(), totalTime.ToString(), annotation); // @@ assumed to be geometry
                 }
                 continue;
