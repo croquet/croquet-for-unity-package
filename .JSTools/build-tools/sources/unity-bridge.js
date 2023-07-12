@@ -1151,9 +1151,23 @@ export class GameViewRoot extends ViewRoot {
         // ready to talk across the bridge.  that means that the event mechanism
         // is ready, too.
         this.publish("croquet", "sessionRunning", this.viewId);
+        this.lastViewCount = null;
+        this.announceViewCount();
+
         globalThis.timedLog("session running");
     }
 
+    announceViewCount() {
+        const { viewCount } = this.model;
+        if (viewCount !== this.lastViewCount) this.publish("croquet", "viewCount", viewCount);
+        this.lastViewCount = viewCount;
+    }
+
+    update(time, delta) {
+        super.update(time, delta);
+
+        this.announceViewCount();
+    }
 }
 
 // GameInputManager is a ViewService, and therefore created and destroyed along with

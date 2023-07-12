@@ -28,6 +28,7 @@ public class CroquetBridge : MonoBehaviour
     public bool sessionRunning = false;
     public int sessionName = 0;
     public string croquetViewId;
+    public int croquetViewCount;
 
     [Header("Network Glitch Simulator")]
     public bool triggerGlitchNow = false;
@@ -106,6 +107,7 @@ public class CroquetBridge : MonoBehaviour
         croquetSystems = gameObject.GetComponents<CroquetSystem>();
 
         Croquet.Subscribe("croquet", "sessionRunning", HandleSessionRunning);
+        Croquet.Subscribe("croquet", "viewCount", HandleViewCount);
 
         SetCSharpLogOptions("info,session");
         SetCSharpMeasureOptions("bundle"); // for now, just report handling of message batches from Croquet
@@ -902,6 +904,11 @@ public class CroquetBridge : MonoBehaviour
         {
             system.TearDownSession();
         }
+    }
+
+    void HandleViewCount(float viewCount)
+    {
+        croquetViewCount = (int)viewCount;
     }
 
     // OUT: Logger Util
