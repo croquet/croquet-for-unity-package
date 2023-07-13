@@ -320,7 +320,7 @@ export const GameViewManager = class extends ViewService {
 
         this.forwardedEventTopics = {}; // topic (scope:eventName) => handler
 
-        this.unityMessageThrottle = 40; // ms (every two updates at 26ms, even if they get a little bunched up)
+        this.unityMessageThrottle = 40; // ms between updates sent to Unity (every two updates at 26ms, even if they get a little bunched up)
         this.lastMessageFlush = 0;
         this.assetManifests = {};
 
@@ -719,7 +719,7 @@ export const PM_GameRendered = superclass => class extends superclass {
     constructor(actor) {
         super(actor);
 
-        this._throttleFromUnity = 100; // ms
+        this._throttleFromUnity = 75; // ms between forwarding to the session position updates sent from Unity (e.g., for an avatar).  we expect Unity updates at 25Hz (40ms); for now we aim to forward half of those.
         this._messagesAwaitingCreation = []; // removed once creation is requested
         this._geometryAwaitingCreation = null; // can be written by PM_Spatial and its subclasses
         this._isViewReady = false;
@@ -971,8 +971,7 @@ export const PM_GameSmoothed = superclass => class extends PM_GameSpatial(superc
 
     constructor(actor) {
         super(actor);
-        this.tug = 0.2;
-        this.throttle = 100; //ms
+        this.throttle = 100; // ms between updates sent from Croquet view (though we're not expecting there to be any)
 
         this.componentNames.add('PresentOncePositionUpdated');
 
@@ -980,10 +979,6 @@ export const PM_GameSmoothed = superclass => class extends PM_GameSpatial(superc
         this.listenOnce("rotationSnap", this.onRotationSnap);
         this.listenOnce("translationSnap", this.onTranslationSnap);
     }
-
-    // $$$ should send the tug value across the bridge, and update when it changes
-    set tug(t) { this._tug = t }
-    get tug() { return this._tug }
 
     setGameObject(viewSpec) {
         viewSpec.waitToPresent = true;
@@ -1156,9 +1151,23 @@ export class GameViewRoot extends ViewRoot {
         // ready to talk across the bridge.  that means that the event mechanism
         // is ready, too.
         this.publish("croquet", "sessionRunning", this.viewId);
+        this.lastViewCount = null;
+        this.announceViewCount();
+
         globalThis.timedLog("session running");
     }
 
+    announceViewCount() {
+        const { viewCount } = this.model;
+        if (viewCount !== this.lastViewCount) this.publish("croquet", "viewCount", viewCount);
+        this.lastViewCount = viewCount;
+    }
+
+    update(time, delta) {
+        super.update(time, delta);
+
+        this.announceViewCount();
+    }
 }
 
 // GameInputManager is a ViewService, and therefore created and destroyed along with
@@ -1521,7 +1530,7 @@ export async function StartSession(model, view) {
         const now = performance.now() | 0;
 
         // don't try to service ticks that have bunched up
-        if (now - lastStep < STEP_DELAY / 2) return;
+        if (now - lastStep < STEP_DELAY / 4) return;
 
         lastStep = now;
         performance.mark(`STEP${++stepCount}`);

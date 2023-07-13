@@ -28,8 +28,9 @@ public class CroquetBridge : MonoBehaviour
     public bool sessionRunning = false;
     public int sessionName = 0;
     public string croquetViewId;
+    public int croquetViewCount;
 
-    [Header("Network Glitch Simulator (in external browser or Node)")]
+    [Header("Network Glitch Simulator")]
     public bool triggerGlitchNow = false;
     public float glitchDuration = 3.0f;
 
@@ -106,6 +107,7 @@ public class CroquetBridge : MonoBehaviour
         croquetSystems = gameObject.GetComponents<CroquetSystem>();
 
         Croquet.Subscribe("croquet", "sessionRunning", HandleSessionRunning);
+        Croquet.Subscribe("croquet", "viewCount", HandleViewCount);
 
         SetCSharpLogOptions("info,session");
         SetCSharpMeasureOptions("bundle"); // for now, just report handling of message batches from Croquet
@@ -508,7 +510,6 @@ public class CroquetBridge : MonoBehaviour
                     Array.Copy(rawData, timeAndCmdBytes, sepPos);
                     string[] strings = System.Text.Encoding.UTF8.GetString(timeAndCmdBytes).Split('\x02');
                     string command = strings[1];
-                    int count = 0;
 
                     ProcessCroquetMessage(command, rawData, sepPos + 1);
 
@@ -517,7 +518,7 @@ public class CroquetBridge : MonoBehaviour
                     long nowAfterProcessing = DateTimeOffset.Now.ToUnixTimeMilliseconds();
                     long processing = nowAfterProcessing - nowWhenDequeued;
                     long totalTime = nowAfterProcessing - sendTime;
-                    string annotation = $"{count} objects, {rawData.Length - sepPos - 1} bytes. sock={transmissionDelay}ms, queue={queueDelay}ms, process={processing}ms";
+                    string annotation = $"{rawData.Length - sepPos - 1} bytes. sock={transmissionDelay}ms, queue={queueDelay}ms, process={processing}ms";
                     Measure("geom", sendTime.ToString(), totalTime.ToString(), annotation); // @@ assumed to be geometry
                 }
                 continue;
@@ -903,6 +904,11 @@ public class CroquetBridge : MonoBehaviour
         {
             system.TearDownSession();
         }
+    }
+
+    void HandleViewCount(float viewCount)
+    {
+        croquetViewCount = (int)viewCount;
     }
 
     // OUT: Logger Util

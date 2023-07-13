@@ -146,7 +146,7 @@ public class CroquetSpatialSystem : CroquetSystem
 
                 if (Mathf.Abs(offToSide) > 0.01f)
                 {
-                    float nudgeDist = -offToSide * spatial.positionLerpFactor;
+                    float nudgeDist = -offToSide * spatial.ballisticNudgeLerp;
                     Vector3 nudge = new Vector3(perpendicularUnit.x * nudgeDist, 0,
                         perpendicularUnit.y * nudgeDist);
                     t.localPosition += nudge;
@@ -180,7 +180,10 @@ public class CroquetSpatialSystem : CroquetSystem
                 spatial.hasBeenMoved = true;
             } else if (Vector3.Distance(spatial.position,t.localPosition) > spatial.positionDeltaEpsilon)
             {
-                t.localPosition = Vector3.Lerp(t.localPosition, spatial.position, spatial.positionLerpFactor);
+                // SmoothDamp seems better suited to our needs than a constant lerp
+                t.localPosition = Vector3.SmoothDamp(t.localPosition, spatial.position,
+                        ref spatial.dampedVelocity, spatial.positionSmoothTime);
+                // Vector3.Lerp(t.localPosition, spatial.position, spatial.positionLerpFactor);
             }
         }
     }
@@ -210,9 +213,10 @@ public class CroquetSpatialSystem : CroquetSystem
         {
             // first number encodes object id and (in bits 0-5) whether there is an update (with/without
             // a snap) for each of scale, rotation, translation.  this leaves room for 2**26
-            // possible ids - i.e., around 67 million.  that seems more than enough for any given
-            // instant, but if some app creates and destroys thousands of entities per second, we
-            // would need some kind of id recycling so we don't run out.
+            // possible ids - i.e., around 67 million.
+            // jul 2023: we now implement id recycling: the next id after 999,999 is 1 (or the first
+            // handle after 1 that's not still being used by a pawn).  if a million handles available
+            // at once isn't enough, we can increase it.
             UInt32 encodedId = BitConverter.ToUInt32(rawData, bufferPos);
             bufferPos += 4;
             string croquetHandle = (encodedId >> 6).ToString();
