@@ -1,6 +1,6 @@
 {
     "name":"com.croquet.multiplayer",
-    "version":"0.7.5",
+    "version":"0.7.6",
     "displayName":"Croquet Multiplayer",
     "description": "A simple multiplayer framework built using Croquet Synchronized Computation Architecture",
     "unity":"2021.3",
