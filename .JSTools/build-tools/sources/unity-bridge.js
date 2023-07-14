@@ -1055,6 +1055,7 @@ export const PM_GameAvatar = superclass => class extends superclass {
     constructor(actor) {
         super(actor);
         this.componentNames.add('CroquetAvatarComponent');
+        this.extraWatched.add('driver');
         this.onDriverSet();
         this.listenOnce("driverSet", this.onDriverSet);
     }
