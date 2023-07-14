@@ -677,7 +677,7 @@ public class CroquetBridge : MonoBehaviour
         string joinedTopics = "";
         if (topics.Count > 0)
         {
-            Debug.Log($"sending {topics.Count} early-subscription topics");
+            // Debug.Log($"sending {topics.Count} early-subscription topics");
             joinedTopics = string.Join(',', topics.ToArray());
         }
         return joinedTopics;

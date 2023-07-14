@@ -1064,9 +1064,6 @@ export const PM_GameAvatar = superclass => class extends superclass {
     }
 
     onDriverSet() {
-        // on creation, this method is sending a message to Unity that precedes
-        // the makeGameObject message itself.  however, it will automatically be held
-        // back until immediately after makeGameObject has been sent.
         if (this.isMyAvatar) {
             this.driving = true;
             this.drive();
@@ -1076,6 +1073,7 @@ export const PM_GameAvatar = superclass => class extends superclass {
         }
     }
 
+    // park and drive are available for override if needed
     park() { }
     drive() { }
 
