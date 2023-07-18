@@ -209,29 +209,18 @@ public class CroquetBuilder
 
             oneTimeBuildProcess = null;
 
+            LogProcessOutput(output, errors, "JS builder");
+
             int webpackExit = -1;
             string exitPrefix = "webpack-exit=";
             string[] newLines = output.Split('\n');
             foreach (string line in newLines)
             {
-                if (!string.IsNullOrWhiteSpace(line))
+                if (!string.IsNullOrWhiteSpace(line) && line.StartsWith(exitPrefix))
                 {
-                    if (line.StartsWith(exitPrefix)) webpackExit = int.Parse(line.Substring(exitPrefix.Length));
-                    else
-                    {
-                        string labeledLine = "JS builder: " + line;
-                        if (line.Contains("ERROR")) Debug.LogError(labeledLine);
-                        else if (line.Contains("WARNING")) Debug.LogWarning(labeledLine);
-                        else Debug.Log(labeledLine);
-                    }
+                    webpackExit = int.Parse(line.Substring(exitPrefix.Length));
                 }
             }
-            newLines = errors.Split('\n');
-            foreach (string line in newLines)
-            {
-                if (!string.IsNullOrWhiteSpace(line)) Debug.LogError("JS builder error: " + line);
-            }
-
             if (webpackExit != 0) throw new Exception("JS build failed.");
         }
         else
@@ -425,5 +414,25 @@ public class CroquetBuilder
         return builderProcess == null ? "" : EditorPrefs.GetString(APP_PROP);
     }
 
+    public static void LogProcessOutput(string stdout, string stderr, string prefix)
+    {
+        string[] newLines = stdout.Split('\n');
+        foreach (string line in newLines)
+        {
+            if (!string.IsNullOrWhiteSpace(line))
+            {
+                string labeledLine = $"{prefix}: {line}";
+                if (line.Contains("ERROR")) Debug.LogError(labeledLine);
+                else if (line.Contains("WARNING")) Debug.LogWarning(labeledLine);
+                else Debug.Log(labeledLine);
+            }
+        }
+        newLines = stderr.Split('\n');
+        foreach (string line in newLines)
+        {
+            if (!string.IsNullOrWhiteSpace(line)) Debug.LogError($"{prefix} error: {line}");
+        }
+
+    }
 #endif
 }

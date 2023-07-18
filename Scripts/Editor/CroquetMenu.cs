@@ -3,8 +3,10 @@ using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using System.IO;
+using System.Diagnostics;
 using UnityEditor.SceneManagement;
 using UnityEngine.SceneManagement;
+using Debug = UnityEngine.Debug;
 
 class CroquetBuildPreprocess : IPreprocessBuildWithReport
 {
@@ -85,7 +87,7 @@ public class CroquetMenu
     private const string StopperItemHere = "Croquet/Stop JS Watcher (this scene)";
     private const string StopperItemOther = "Croquet/Stop JS Watcher (other scene)";
 
-    private const string CopyJSItem = "Croquet/Copy JS Build Tools";
+    private const string InstallJSToolsItem = "Croquet/Install JS Build Tools";
 
     [MenuItem(BuildNowItem, false, 100)]
     private static void BuildNow()
@@ -171,12 +173,21 @@ public class CroquetMenu
 #endif
 
 
-    [MenuItem(CopyJSItem, false, 200)]
-    private static void CopyJS()
+    [MenuItem(InstallJSToolsItem, false, 200)]
+    private static void InstallJSTools()
     {
+        string nodeExecutable = CroquetBuilder.GetSceneBuildDetails().nodeExecutable;
+        if (string.IsNullOrWhiteSpace(nodeExecutable) || !File.Exists(nodeExecutable))
+        {
+            Debug.LogError("Cannot find Node executable; did you remember to set the path in the Settings object?");
+            return;
+        }
+        string nodePath = Path.GetDirectoryName(nodeExecutable);
+
         string toolsRoot = CroquetBuilder.CroquetBuildToolsInPackage;
         string unityParentFolder = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "..", ".."));
         string jsFolder = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS"));
+        if (!Directory.Exists(jsFolder)) Directory.CreateDirectory(jsFolder);
 
         // package.json and .eslintrc to parent of the entire Unity project
         string[] files = new string[] { "package.json", ".eslintrc.json" };
@@ -184,7 +195,7 @@ public class CroquetMenu
         {
             string fsrc = Path.GetFullPath(Path.Combine(toolsRoot, file));
             string fdest = Path.GetFullPath(Path.Combine(unityParentFolder, file));
-            Debug.Log($"replacing {fdest} with {fsrc}");
+            Debug.Log($"writing {fdest}"); // with {fsrc}");
             FileUtil.ReplaceFile(fsrc, fdest);
         }
 
@@ -192,7 +203,33 @@ public class CroquetMenu
         string dir = "build-tools";
         string dsrc = Path.GetFullPath(Path.Combine(toolsRoot, dir));
         string ddest = Path.GetFullPath(Path.Combine(jsFolder, dir));
-        Debug.Log($"replacing {ddest} with {dsrc}");
+        Debug.Log($"writing directory {ddest}"); // with {dsrc}");
         FileUtil.ReplaceDirectory(dsrc, ddest);
+
+        string scriptPath = Path.GetFullPath(Path.Combine(toolsRoot, "runNPM.sh"));
+        string installDir = unityParentFolder;
+        Process p = new Process();
+        p.StartInfo.UseShellExecute = false;
+        p.StartInfo.FileName = scriptPath;
+        p.StartInfo.Arguments = nodePath;
+        p.StartInfo.WorkingDirectory = installDir;
+
+        p.StartInfo.RedirectStandardOutput = true;
+        p.StartInfo.RedirectStandardError = true;
+
+        p.Start();
+
+        string output = p.StandardOutput.ReadToEnd();
+        string errors = p.StandardError.ReadToEnd();
+
+        p.WaitForExit();
+
+        CroquetBuilder.LogProcessOutput(output, errors, "npm install");
+    }
+
+    [MenuItem(InstallJSToolsItem, true)]
+    private static bool ValidateInstallJSTools()
+    {
+        return CroquetBuilder.KnowHowToBuildJS();
     }
 }
