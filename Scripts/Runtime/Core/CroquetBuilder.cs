@@ -6,6 +6,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEditor;
 using Debug = UnityEngine.Debug;
+using Object = UnityEngine.Object;
 
 public class CroquetBuilder
 {
@@ -44,15 +45,13 @@ public class CroquetBuilder
         CroquetBridge bridgeComp = null;
         CroquetRunner runnerComp = null;
         GameObject[] roots = scene.GetRootGameObjects();
-        // we assume that the bridge has the tag Bridge (presumably faster than trying
-        // GetComponent() on every object)
-        // ...but note that this doesn't guarantee that it has, specifically, a
-        // CroquetBridge component.
-        GameObject bridge = Array.Find<GameObject>(roots, o => o.CompareTag("Bridge"));
+        
+        CroquetBridge bridge = Object.FindObjectOfType<CroquetBridge>();
+        
         if (bridge != null)
         {
-            bridgeComp = bridge.GetComponent<CroquetBridge>();
-            runnerComp = bridge.GetComponent<CroquetRunner>();
+            bridgeComp = bridge;
+            runnerComp = bridge.gameObject.GetComponent<CroquetRunner>();
         }
 
         sceneName = scene.name;

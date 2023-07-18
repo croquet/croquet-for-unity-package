@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 5552111265146463839}
   m_Layer: 0
   m_Name: CroquetBridge
-  m_TagString: Bridge
+  m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -47,12 +47,24 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   appProperties: {fileID: 11400000, guid: d8a4c352ae9b743efa34611f46d63ff2, type: 2}
   appName: 
-  builderPath: 
+  defaultSessionName: 123
   useNodeJS: 0
-  croquetSessionReady: 0
-  showRigidbodyStateHighlight: 0
-  localAvatarId: 
-  cameraOwnerId: 
+  debugLoggingFlags:
+    session: 0
+    messages: 0
+    sends: 0
+    snapshot: 0
+    data: 0
+    hashing: 0
+    subscribe: 0
+    classes: 0
+    ticks: 0
+  sessionRunning: 0
+  sessionName: 0
+  croquetViewId: 
+  croquetViewCount: 0
+  triggerGlitchNow: 0
+  glitchDuration: 3
 --- !u!114 &5552111265146463839
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -66,4 +78,5 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   waitForUserLaunch: 0
+  localReflector: 
   showWebview: 0
