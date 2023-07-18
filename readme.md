@@ -2,8 +2,8 @@
 
 This repo contains all Croquet functionality as a unitypackage ready to be dropped into a new project. This is for starting your own project. For usage examples please see our tutorials or other demo repos.
 
-NOTE: IF YOU HAVE NOT EXPLICITLY BEEN PERMITTED INTO THE CROQUET FOR UNITY BETA, THIS REPO IS STILL AVAILABLE FOR YOU TO HACK AROUND WITH. THERE IS NO GUARANTEE THAT FEATURES WILL NOT INTRODUCE BREAKING CHANGES, UNTIL WE REACH A 1.0 RELEASE. WE WILL BEGIN ADMITTING SMALL BATCHES OF DEVELOPERS INTO THE BETA, AT WHICH POINT WE WILL PROVIDE SUPPORT FOR THOSE DEVELOPERS IN OUR DISCORD.
-If you believe yourself to have a critical need to be in the early beta participants, and can accept that major changes are in progress, please DM Lazarus#7304 via the Croquet Discord.
+# Questions
+Please feel free to ask questions on our [discord](https://croquet.io/discord).
 
 
 # Setup
@@ -25,7 +25,7 @@ TODO: Link sample gitignore files (for Unity and Croquet general files)
 #### WebSocket
 If you do not already have NuGet installed, add this to the package manager:
 ```
-https://github.com/GlitchEnzo/NuGetForUnity
+https://github.com/GlitchEnzo/NuGetForUnity.git?path=/src/NuGetForUnity
 ```
 Then use the NuGet Menu item to search for and install `WebSocketSharp-netstandard`
 
@@ -122,11 +122,12 @@ Select it and click "Make this the active input map"
 
 Skip this step if you want to use your own completely custom set of input events.
 
-# Usage
-
 
 # Contribution
+Contributions to the project are welcome as these projects are open source and we encourage community involvement.
 
-
-# License
+1. Base your `feature/my-feature-name` branch off of `develop` branch
+2. Make your changes
+3. Open a PR against the `develop` branch
+4. Discuss and Review the PR with the team
 
