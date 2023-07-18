@@ -25,7 +25,7 @@ TODO: Link sample gitignore files (for Unity and Croquet general files)
 #### WebSocket
 If you do not already have NuGet installed, add this to the package manager:
 ```
-https://github.com/GlitchEnzo/NuGetForUnity
+https://github.com/GlitchEnzo/NuGetForUnity.git?path=/src/NuGetForUnity
 ```
 Then use the NuGet Menu item to search for and install `WebSocketSharp-netstandard`
 
