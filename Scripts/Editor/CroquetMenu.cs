@@ -3,8 +3,6 @@ using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using System.IO;
-using System.Diagnostics;
-using System.Threading.Tasks;
 using UnityEditor.SceneManagement;
 using UnityEngine.SceneManagement;
 using Debug = UnityEngine.Debug;
@@ -174,96 +172,10 @@ public class CroquetMenu
 #endif
 
     [MenuItem(InstallJSToolsItem, false, 200)]
-    private static void InstallJSTools()
+    private static async void InstallJSTools()
     {
-        string nodePath = "";
-#if UNITY_EDITOR_OSX
-        string nodeExecutable = CroquetBuilder.GetSceneBuildDetails().nodeExecutable;
-        if (string.IsNullOrWhiteSpace(nodeExecutable) || !File.Exists(nodeExecutable))
-        {
-            Debug.LogError("Cannot find Node executable; did you remember to set the path in the Settings object?");
-            return;
-        }
-        nodePath = Path.GetDirectoryName(nodeExecutable);
-#endif
-
-        // copy the various files
-        string toolsRoot = CroquetBuilder.CroquetBuildToolsInPackage;
-        string unityParentFolder = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "..", ".."));
-        string jsFolder = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS"));
-        if (!Directory.Exists(jsFolder)) Directory.CreateDirectory(jsFolder);
-
-        // package.json and .eslintrc to parent of the entire Unity project
-        string[] files = new string[] { "package.json", ".eslintrc.json" };
-        foreach (var file in files)
-        {
-            string fsrc = Path.GetFullPath(Path.Combine(toolsRoot, file));
-            string fdest = Path.GetFullPath(Path.Combine(unityParentFolder, file));
-            Debug.Log($"writing {fdest}"); // with {fsrc}");
-            FileUtil.ReplaceFile(fsrc, fdest);
-        }
-
-        // build-tools to Assets/CroquetJS/
-        string dir = "build-tools";
-        string dsrc = Path.GetFullPath(Path.Combine(toolsRoot, dir));
-        string ddest = Path.GetFullPath(Path.Combine(jsFolder, dir));
-        Debug.Log($"writing directory {ddest}"); // with {dsrc}");
-        FileUtil.ReplaceDirectory(dsrc, ddest);
-
-        // now get ready to start the npm install.
-        // introducing even a minimal delay gives the console a chance to show the above messages
-        Debug.Log("Installing JavaScript Build Tools...");
-        if (Application.platform == RuntimePlatform.OSXEditor)
-        {
-            Task.Delay(1).ContinueWith(t => InstallOSX(unityParentFolder, toolsRoot, nodePath));
-        }
-        else
-        {
-            Task.Delay(1).ContinueWith(t => InstallWin(unityParentFolder, toolsRoot));
-        }
-    }
-
-    private static void InstallOSX(string installDir, string toolsRoot, string nodePath) {
-        string scriptPath = Path.GetFullPath(Path.Combine(toolsRoot, "runNPM.sh"));
-        Process p = new Process();
-        p.StartInfo.UseShellExecute = false;
-        p.StartInfo.FileName = scriptPath;
-        p.StartInfo.Arguments = nodePath;
-        p.StartInfo.WorkingDirectory = installDir;
-
-        p.StartInfo.RedirectStandardOutput = true;
-        p.StartInfo.RedirectStandardError = true;
-
-        p.Start();
-
-        string output = p.StandardOutput.ReadToEnd();
-        string errors = p.StandardError.ReadToEnd();
-
-        p.WaitForExit();
-
-        CroquetBuilder.LogProcessOutput(output, errors, "npm install");
-    }
-
-    private static void InstallWin(string installDir, string toolsRoot)
-    {
-        string scriptPath = Path.GetFullPath(Path.Combine(toolsRoot, "runNPM.ps1"));
-        string stdoutFile = Path.GetTempFileName();
-        string stderrFile = Path.GetTempFileName();
-        Process p = new Process();
-        p.StartInfo.UseShellExecute = true;
-        p.StartInfo.FileName = "powershell.exe";
-        p.StartInfo.Arguments = $"-NoProfile -file \"{scriptPath}\" \"{stdoutFile}\" \"{stderrFile}\" ";
-        p.StartInfo.WorkingDirectory = installDir;
-        p.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
-
-        p.Start();
-        p.WaitForExit();
-
-        string output = File.ReadAllText(stdoutFile);
-        File.Delete(stdoutFile);
-        string errors = File.ReadAllText(stderrFile);
-        File.Delete(stderrFile);
-        CroquetBuilder.LogProcessOutput(output, errors, "npm install");
+        await CroquetBuilder.InstallJSTools(true); // true => force update
+        Debug.Log("InstallJSTools finished");
     }
 
     [MenuItem(InstallJSToolsItem, true)]

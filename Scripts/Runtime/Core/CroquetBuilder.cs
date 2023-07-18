@@ -1,10 +1,14 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Diagnostics;
+using System.Threading.Tasks;
 using System.Text;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEditor;
+// using UnityEditor.PackageManager.Requests;
+using UnityEditor.PackageManager;
 using Debug = UnityEngine.Debug;
 using Object = UnityEngine.Object;
 
@@ -26,7 +30,7 @@ public class CroquetBuilder
     public static Process oneTimeBuildProcess;
     private static string sceneName;
     private static CroquetBridge sceneBridgeComponent;
-    private static CroquetRunner sceneRunnerComponent;
+    private static CroquetRunner sceneRunnerComponent; // used in WIN editor
     private static string sceneAppName;
 
     private const string ID_PROP = "JS Builder Id";
@@ -414,7 +418,142 @@ public class CroquetBuilder
         return builderProcess == null ? "" : EditorPrefs.GetString(APP_PROP);
     }
 
-    public static void LogProcessOutput(string stdout, string stderr, string prefix)
+    public static string FindCroquetPackageVersion()
+    {
+        string[] packageJsons = AssetDatabase.FindAssets("package");
+        foreach (string guid1 in packageJsons)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid1);
+            if (path.Contains("croquet.multiplayer"))
+            {
+                UnityEditor.PackageManager.PackageInfo info = UnityEditor.PackageManager.PackageInfo.FindForAssetPath(path);
+                return info.version;
+            }
+        }
+        return "";
+    }
+
+    public static async Task InstallJSTools(bool forceUpdate)
+    {
+        string nodePath = "";
+#if UNITY_EDITOR_OSX
+        string nodeExecutable = GetSceneBuildDetails().nodeExecutable;
+        if (string.IsNullOrWhiteSpace(nodeExecutable) || !File.Exists(nodeExecutable))
+        {
+            Debug.LogError("Cannot find Node executable; did you remember to set the path in the Settings object?");
+            return;
+        }
+        nodePath = Path.GetDirectoryName(nodeExecutable);
+#endif
+
+        string packageVersion = FindCroquetPackageVersion();
+        if (packageVersion == "")
+        {
+            Debug.LogError("Croquet Multiplayer package not found");
+            return;
+        }
+
+        string unityParentFolder = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "..", ".."));
+
+        // $$$ WIP - need some way to decide whether the version has changed.
+        // the internal package.json does NOT (currently) include the version.
+        // bool doUpdate = forceUpdate;
+        // if (true || !doUpdate) // $$$
+        // {
+        //     string packageJsonPath = Path.Combine(unityParentFolder, "package.json");
+        //     if (!File.Exists(packageJsonPath))
+        //     {
+        //         doUpdate = true;
+        //     }
+        //     else
+        //     {
+        //         string packageJsonContents = File.ReadAllText(packageJsonPath);
+        //         PackageJson packageJson = JsonUtility.FromJson<PackageJson>(packageJsonContents);
+        //         Debug.Log($"prev package version {packageJson.version}");
+        //     }
+        // }
+        //
+        // if (!doUpdate) return;
+
+        // copy the various files
+        string toolsRoot = CroquetBuildToolsInPackage;
+        string jsFolder = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS"));
+        if (!Directory.Exists(jsFolder)) Directory.CreateDirectory(jsFolder);
+
+        // package.json and .eslintrc to parent of the entire Unity project
+        string[] files = new string[] { "package.json", ".eslintrc.json" };
+        foreach (var file in files)
+        {
+            string fsrc = Path.GetFullPath(Path.Combine(toolsRoot, file));
+            string fdest = Path.GetFullPath(Path.Combine(unityParentFolder, file));
+            Debug.Log($"writing {fdest}"); // with {fsrc}");
+            FileUtil.ReplaceFile(fsrc, fdest);
+        }
+
+        // build-tools to Assets/CroquetJS/
+        string dir = "build-tools";
+        string dsrc = Path.GetFullPath(Path.Combine(toolsRoot, dir));
+        string ddest = Path.GetFullPath(Path.Combine(jsFolder, dir));
+        Debug.Log($"writing directory {ddest}"); // with {dsrc}");
+        FileUtil.ReplaceDirectory(dsrc, ddest);
+
+        // now get ready to start the npm install.
+        Debug.Log("Running npm install...");
+
+        // introducing even a short delay gives the console a chance to show the logged messages
+        await Task.Delay(100);
+
+        Task task = (Application.platform == RuntimePlatform.OSXEditor)
+            ? new Task(() => InstallOSX(unityParentFolder, toolsRoot, nodePath))
+            : new Task(() => InstallWin(unityParentFolder, toolsRoot));
+        task.Start();
+        task.Wait();
+    }
+
+    private static void InstallOSX(string installDir, string toolsRoot, string nodePath) {
+        string scriptPath = Path.GetFullPath(Path.Combine(toolsRoot, "runNPM.sh"));
+        Process p = new Process();
+        p.StartInfo.UseShellExecute = false;
+        p.StartInfo.FileName = scriptPath;
+        p.StartInfo.Arguments = nodePath;
+        p.StartInfo.WorkingDirectory = installDir;
+
+        p.StartInfo.RedirectStandardOutput = true;
+        p.StartInfo.RedirectStandardError = true;
+
+        p.Start();
+
+        string output = p.StandardOutput.ReadToEnd();
+        string errors = p.StandardError.ReadToEnd();
+
+        p.WaitForExit();
+
+        LogProcessOutput(output, errors, "npm install");
+    }
+
+    private static void InstallWin(string installDir, string toolsRoot)
+    {
+        string scriptPath = Path.GetFullPath(Path.Combine(toolsRoot, "runNPM.ps1"));
+        string stdoutFile = Path.GetTempFileName();
+        string stderrFile = Path.GetTempFileName();
+        Process p = new Process();
+        p.StartInfo.UseShellExecute = true;
+        p.StartInfo.FileName = "powershell.exe";
+        p.StartInfo.Arguments = $"-NoProfile -file \"{scriptPath}\" \"{stdoutFile}\" \"{stderrFile}\" ";
+        p.StartInfo.WorkingDirectory = installDir;
+        p.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
+
+        p.Start();
+        p.WaitForExit();
+
+        string output = File.ReadAllText(stdoutFile);
+        File.Delete(stdoutFile);
+        string errors = File.ReadAllText(stderrFile);
+        File.Delete(stderrFile);
+        LogProcessOutput(output, errors, "npm install");
+    }
+
+    private static void LogProcessOutput(string stdout, string stderr, string prefix)
     {
         string[] newLines = stdout.Split('\n');
         foreach (string line in newLines)
@@ -434,5 +573,13 @@ public class CroquetBuilder
         }
 
     }
+// this whole class is only defined when in the editor
 #endif
 }
+
+// [System.Serializable]
+// public class PackageJson
+// {
+//     public string version;
+// }
+
