@@ -4,6 +4,7 @@ using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using System.IO;
 using System.Diagnostics;
+using System.Threading.Tasks;
 using UnityEditor.SceneManagement;
 using UnityEngine.SceneManagement;
 using Debug = UnityEngine.Debug;
@@ -172,18 +173,21 @@ public class CroquetMenu
     }
 #endif
 
-
     [MenuItem(InstallJSToolsItem, false, 200)]
     private static void InstallJSTools()
     {
+        string nodePath = "";
+#if UNITY_EDITOR_OSX
         string nodeExecutable = CroquetBuilder.GetSceneBuildDetails().nodeExecutable;
         if (string.IsNullOrWhiteSpace(nodeExecutable) || !File.Exists(nodeExecutable))
         {
             Debug.LogError("Cannot find Node executable; did you remember to set the path in the Settings object?");
             return;
         }
-        string nodePath = Path.GetDirectoryName(nodeExecutable);
+        nodePath = Path.GetDirectoryName(nodeExecutable);
+#endif
 
+        // copy the various files
         string toolsRoot = CroquetBuilder.CroquetBuildToolsInPackage;
         string unityParentFolder = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "..", ".."));
         string jsFolder = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS"));
@@ -206,8 +210,21 @@ public class CroquetMenu
         Debug.Log($"writing directory {ddest}"); // with {dsrc}");
         FileUtil.ReplaceDirectory(dsrc, ddest);
 
+        // now get ready to start the npm install.
+        // introducing even a minimal delay gives the console a chance to show the above messages
+        Debug.Log("Installing JavaScript Build Tools...");
+        if (Application.platform == RuntimePlatform.OSXEditor)
+        {
+            Task.Delay(1).ContinueWith(t => InstallOSX(unityParentFolder, toolsRoot, nodePath));
+        }
+        else
+        {
+            Task.Delay(1).ContinueWith(t => InstallWin(unityParentFolder, toolsRoot));
+        }
+    }
+
+    private static void InstallOSX(string installDir, string toolsRoot, string nodePath) {
         string scriptPath = Path.GetFullPath(Path.Combine(toolsRoot, "runNPM.sh"));
-        string installDir = unityParentFolder;
         Process p = new Process();
         p.StartInfo.UseShellExecute = false;
         p.StartInfo.FileName = scriptPath;
@@ -224,6 +241,28 @@ public class CroquetMenu
 
         p.WaitForExit();
 
+        CroquetBuilder.LogProcessOutput(output, errors, "npm install");
+    }
+
+    private static void InstallWin(string installDir, string toolsRoot)
+    {
+        string scriptPath = Path.GetFullPath(Path.Combine(toolsRoot, "runNPM.ps1"));
+        string stdoutFile = Path.GetTempFileName();
+        string stderrFile = Path.GetTempFileName();
+        Process p = new Process();
+        p.StartInfo.UseShellExecute = true;
+        p.StartInfo.FileName = "powershell.exe";
+        p.StartInfo.Arguments = $"-NoProfile -file \"{scriptPath}\" \"{stdoutFile}\" \"{stderrFile}\" ";
+        p.StartInfo.WorkingDirectory = installDir;
+        p.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
+
+        p.Start();
+        p.WaitForExit();
+
+        string output = File.ReadAllText(stdoutFile);
+        File.Delete(stdoutFile);
+        string errors = File.ReadAllText(stderrFile);
+        File.Delete(stderrFile);
         CroquetBuilder.LogProcessOutput(output, errors, "npm install");
     }
 
