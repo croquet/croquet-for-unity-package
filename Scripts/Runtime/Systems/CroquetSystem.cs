@@ -40,11 +40,6 @@ public abstract class CroquetSystem : MonoBehaviour
         // by default, nothing
     }
 
-    public virtual void TearDownSession()
-    {
-        // by default, nothing
-    }
-
     public virtual void ProcessCommand(string command, string[] args)
     {
         throw new NotImplementedException();
@@ -55,9 +50,23 @@ public abstract class CroquetSystem : MonoBehaviour
         throw new NotImplementedException();
     }
 
-    //TODO: implement
-    //public abstract void OnSessionDisconnect();
+    public virtual void LeavingScene()
+    {
+        // by default, nothing
+    }
 
+    public virtual void LoadingScene(string sceneName)
+    {
+        // by default, nothing
+    }
 
+    public virtual bool ReadyToRunScene()
+    {
+        return true;
+    }
 
+    public virtual void TearDownSession()
+    {
+        // by default, nothing
+    }
 }

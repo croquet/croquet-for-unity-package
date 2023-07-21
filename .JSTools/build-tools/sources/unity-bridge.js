@@ -9,7 +9,9 @@
 //   \x04 currently unused
 //   \x05 to mark the start of the data argument in a binary-encoded message, such as updateSpatial.
 
-import { mix, Pawn, ViewRoot, ViewService, GetViewService, StartWorldcore, PawnManager, v3_equals, q_equals } from "@croquet/worldcore-kernel";
+
+import { ModelService, GetModelService, Actor, RegisterMixin, mix, Pawn, View, ViewRoot, ViewService, GetViewService, StartWorldcore, PawnManager, v3_equals, q_equals } from "@croquet/worldcore-kernel";
+
 
 globalThis.timedLog = msg => {
     // timing on the message itself is now added when forwarding
@@ -21,14 +23,20 @@ globalThis.timedLog = msg => {
 // globalThis.WC_Left = true; // NB: this can affect behaviour of both models and views
 globalThis.CROQUET_NODE = typeof window === 'undefined';
 
+
 let theGameInputManager;
 
 // theGameEngineBridge is a singleton instance of BridgeToUnity, built immediately
 // on loading of this file.  it is never rebuilt.
 class BridgeToUnity {
+    get preloadingView() { return session?.view }
+
     constructor() {
         this.bridgeIsConnected = false;
         this.startWS();
+        // readyP is resolved on receipt of the readyForSession command from
+        // Unity, which will have included the apiKey, appId etc needed to
+        // join a Croquet session.
         this.readyP = new Promise(resolve => this.setReady = resolve);
         this.measureIndex = 0;
     }
@@ -143,21 +151,56 @@ console.log(`PORT ${portStr}`);
                 break;
             }
             case 'readyForSession': {
-                // args are [apiKey, appId, sessionName, assetManifests. earlySubscriptionTopics, debugLogTypes, launchType ]
-                const [apiKey, appId, sessionName, assetManifestString, earlySubscriptionTopics, debugLogTypes, launchType] = args;
+                const [apiKey, appId, sessionName, debugLogTypes, waitForUserLaunchStr] = args;
                 globalThis.timedLog(`starting session of ${appId} with key ${apiKey}`);
                 this.apiKey = apiKey;
                 this.appId = appId;
                 this.sessionName = sessionName;
-                // console.log({earlySubscriptionTopics});
-                this.assetManifestString = assetManifestString;
-                this.earlySubscriptionTopics = earlySubscriptionTopics; // comma-separated list
-                this.debugLogTypes = debugLogTypes; // ditto
+                this.debugLogTypes = debugLogTypes; // comma-separated list
                 // if this is an auto-launched session (i.e., not an external browser), set up logging so that warnings and errors appear in the Unity console.  for an external browser, we forward nothing.
                 // @@ should be configurable (especially so it can be turned off
                 // for a build).
-                this.setJSLogForwarding(launchType === 'autoLaunch' ? ['warn', 'error'] : []);
+                this.setJSLogForwarding(waitForUserLaunchStr === 'false' ? ['warn', 'error'] : []);
                 this.setReady();
+                break;
+            }
+            case 'requestToLoadScene': {
+                // args are
+                //   scene name - if different from model's existing scene, request will always be accepted
+                //   forceFlag - "true" or "false", determining whether init can override *same* scene in model
+                if (this.preloadingView) {
+                    const sceneName = args[0];
+                    const forceFlag = args[1] === 'true';
+                    this.preloadingView.publishRequestToLoadScene(sceneName, forceFlag);
+                } else console.warn(`requestToLoadScene but no preloadingView!`);
+                break;
+            }
+            case 'defineScene': {
+                // args are
+                //   scene name - if different from model's existing scene, init will always be accepted
+                //   earlySubscriptionTopics
+                //   assetManifestString
+                //   object string 1 (string  prop1:val1|prop2:val2...)
+                //   object string 2
+                //   etc
+                const [sceneName, ...initStrings] = args;
+                this.readySceneInUnity = sceneName;
+                if (this.preloadingView) {
+                    this.preloadingView.readyToBuildSceneInUnity(sceneName);
+                    this.preloadingView.attemptToPublishInitialization(sceneName, initStrings);
+                } else console.warn(`defineScene but no preloadingView!`);
+                break;
+            }
+            case 'readyForRunningScene': {
+                // the unity side has read the prefab assets that are available
+                // for the specified scene, and is thus ready to make pawns for
+                // the scene's actors.
+                // tell the PreloadingViewRoot that we're ready to build the
+                // real root.
+                const sceneName = args[0];
+                this.readySceneInUnity = sceneName;
+                if (this.preloadingView) this.preloadingView?.readyToBuildSceneInUnity(sceneName);
+                else console.warn(`readyForRunningScene but no preloadingView!`);
                 break;
             }
             case 'event': {
@@ -232,6 +275,12 @@ console.log(`PORT ${portStr}`);
         }
     }
 
+    setSceneConstructionProperties(data) {
+        const { earlySubscriptionTopics, assetManifestString } = data;
+        this.earlySubscriptionTopics = earlySubscriptionTopics;
+        this.assetManifestString = assetManifestString;
+    }
+
     setJSLogForwarding(toForward) {
         console.log("categories of JS log forwarded to Unity:", toForward);
         const isNode = globalThis.CROQUET_NODE;
@@ -300,6 +349,195 @@ showSetupStats() {
 }
 export const theGameEngineBridge = new BridgeToUnity();
 
+// InitializationManager is a model service that knows how to instantiate a set of actors from an init chunk
+export class InitializationManager extends ModelService {
+
+    init() {
+        super.init('InitializationManager');
+        this.activeScene = ""; // the scene we're running, or getting ready to run
+        this.activeSceneState = ""; // preload, initializing, running
+        this.initializingView = ""; // the view that has permission from us to provide the data for activeScene
+
+        this.client = null; // needs to handle onInitializationStart, onObjectInitialization
+        this.initBufferCollector = [];
+        this.lastInitString = null; // if activeSceneState is running, this is the string that was used to initialise it.  we can reload the scene instantly by reusing this.
+
+        this.subscribe(this.sessionId, 'requestToLoadScene', this.handleRequestToLoadScene);
+        this.subscribe(this.sessionId, 'requestToInitScene', this.handleRequestToInitScene);
+        this.subscribe(this.sessionId, 'sceneInitChunk', this.sceneInitChunk);
+        this.subscribe(this.sessionId, 'view-exit', this.handleViewExit);
+    }
+
+    setClient(model) {
+        this.client = model;
+    }
+
+    announceInitialSceneState() {
+        // the local PreloadingViewRoot is up and running, and wants to tell
+        // Unity what scene (if any) has been loaded into this session.
+
+        // if scene state is 'running', we need to provide all the details for PVR to supply to the bridge so it can start the real viewRoot.
+        // if scene state is 'loading' we don't need to do anything; eventually it will hit 'running', and we can inform unity then.
+        // if scene state is 'preload', in principle we could sit back like for 'loading'.  but maybe one day we'll be in preload state with no other client in a position to help.  in case of that, for preload we do tell unity.
+
+        const { activeSceneState } = this;
+        if (activeSceneState === 'loading') return;
+
+        let args = {};
+        if (activeSceneState === 'running') {
+            const [earlySubscriptionTopics, assetManifestString] = this.lastInitString.split('\x01'); // wasteful to split the whole thing, but only happens once
+            args = { earlySubscriptionTopics, assetManifestString };
+        }
+        this.publishSceneState(args);
+    }
+
+    handleRequestToLoadScene({ sceneName, forceFlag }) {
+        // this comes from a view (unity or otherwise), for example when a user presses a button to advance to the next level
+
+        // if sceneName is the same as activeScene, and the state is 'preload' or 'loading', ignore.  it's already being dealt with.
+        // else if sceneName is the same as activeScene (so the state must be 'running'), then iff forceFlag is true accept the request and reset state to 'loading', otherwise ignore
+        // else (new scene name) accept by setting a new activeScene and state 'preload'
+
+        const { activeScene, activeSceneState } = this;
+        if (sceneName === activeScene) {
+            if (activeSceneState === 'preload' || activeSceneState === 'loading' || !forceFlag) return;
+
+            this.activeSceneState = 'loading'; // since we already have the initString
+            this.publishSceneState(); // immediately trigger the PreloadingViewRoot to ditch the main viewRoot
+            this.loadFromString(this.lastInitString);
+        } else {
+            this.activeScene = sceneName;
+            this.lastInitString = null;
+            this.activeSceneState = 'preload';
+            this.publishSceneState();
+        }
+    }
+
+    handleRequestToInitScene({ viewId, sceneName }) {
+        if (!this.client) {
+            console.warn("Attempt to initialize scene without an appointed AM_InitializationClient object");
+            return;
+        }
+
+        // it's possible that this is an out-of-date request to init a scene that we're no longer interested in.
+        // if sceneName is not the same as our activeScene, or if activeSceneState is anything other than 'preload', or there is already an initializingView, the request is rejected.
+        const { activeScene, initializingView } = this;
+        if (sceneName !== activeScene || this.activeSceneState !== 'preload' || initializingView) return;
+
+        console.log(`granting ${viewId} permission to init ${sceneName}`);
+        this.activeSceneState = 'loading';
+        this.initializingView = viewId;
+        this.publishSceneState();
+        this.publish(this.sessionId, 'requestToInitGranted', viewId);
+    }
+
+    sceneInitChunk({ viewId, sceneName, isFirst, isLast, buf }) {
+        // check that we haven't switched to loading something else
+        const { activeScene, initializingView } = this;
+        if (sceneName !== activeScene || viewId !== initializingView) return;
+
+        if (isFirst) this.initBufferCollector = [];
+        this.initBufferCollector.push(buf);
+        if (isLast) {
+            // turn the array of chunks into a single buffer
+            const bufs = this.initBufferCollector;
+            const len = bufs.reduce((acc, cur) => acc + cur.length, 0);
+            const all = new Uint8Array(len);
+            let ind = 0;
+            for (let i = 0; i < bufs.length; i++) {
+                all.set(bufs[i], ind);
+                ind += bufs[i].length;
+            }
+
+            const initString = new TextDecoder("utf-8").decode(all);
+            console.log(`received string of length ${initString.length}`);
+            this.lastInitString = initString;
+            this.initBufferCollector = [];
+            this.initializingView = null;
+            this.loadFromString(initString);
+        }
+    }
+
+    loadFromString(initString) {
+        this.client.onInitializationStart();
+
+        const [earlySubscriptionTopics, assetManifestString, ...entities] = initString.split('\x01');
+        entities.forEach(entityString => {
+            // console.log(entityString);
+            const propertyStrings = entityString.split('|');
+            let cls;
+            const props = {};
+            propertyStrings.forEach(propAndValue => {
+                const [propName, value] = propAndValue.split(':');
+                switch (propName) {
+                    // case 'ID':
+                    //     props.creatingId = value;
+                    //     break;
+                    case 'ACTOR':
+                        try { cls = Actor.classFromID(value) }
+                        catch (e) {
+                            console.warn(`Actor class not found for init string: ${entityString}`);
+                            cls = false; // mark that we tried and failed
+                        }
+                        break;
+                    case 'position':
+                        props.translation = value.split(',').map(Number); // note name change
+                        break;
+                    case 'rotation':
+                    case 'scale':
+                        props[propName] = value.split(',').map(Number);
+                        break;
+                    default:
+                        props[propName] = value;
+                }
+            });
+
+            if (!cls) {
+                if (cls !== false) console.warn(`No actor specified in init string: ${entityString}`);
+                return;
+            }
+
+            this.client.onObjectInitialization(cls, props);
+        });
+
+        this.activeSceneState = 'running';
+        this.publishSceneState({ earlySubscriptionTopics, assetManifestString });
+    }
+
+    handleViewExit(viewId) {
+        // if the view that has left was in the middle of sending a scene
+        // initialisation, reset the scene to 'preload' and look for another
+        // initialiser.
+        if (viewId === this.initializingView) {
+            this.initializingView = null;
+            this.activeSceneState = 'preload';
+            this.publishSceneState(); // $$$ probably not enough to trigger a new view to load
+        }
+    }
+
+    publishSceneState(args = {}) {
+        this.publish(this.sessionId, 'sceneStateUpdated', args);
+    }
+
+}
+InitializationManager.register('InitializationManager');
+
+export const AM_InitializationClient = superclass => class extends superclass {
+
+    init(...args) {
+        super.init(...args);
+        this.initializationManager = this.service('InitializationManager');
+        this.initializationManager.setClient(this);
+    }
+
+    onInitializationStart() { }
+
+    onObjectInitialization(cls, props) { }
+
+};
+RegisterMixin(AM_InitializationClient);
+
+
 // GameViewManager is a new kind of service, created specifically for
 // the bridge to Unity, handling the creation and management of Unity-side
 // gameObjects that track the Croquet pawns.
@@ -326,12 +564,10 @@ export const GameViewManager = class extends ViewService {
 
         theGameEngineBridge.setCommandHandler(this.handleUnityCommand.bind(this));
 
-        const earlySubs = theGameEngineBridge.earlySubscriptionTopics;
-        if (earlySubs) {
-            earlySubs.split(',').forEach(topic => this.registerTopicForForwarding(topic));
+        const { earlySubscriptionTopics, assetManifestString } = theGameEngineBridge;
+        if (earlySubscriptionTopics) {
+            earlySubscriptionTopics.split(',').forEach(topic => this.registerTopicForForwarding(topic));
         }
-
-        const { assetManifestString } = theGameEngineBridge;
         if (assetManifestString) {
             const parseArray = str => str.split(',').filter(Boolean); // remove empties
             const manifestStrings = assetManifestString.split('\x03');
@@ -1129,6 +1365,11 @@ class GamePawnManager extends PawnManager {
     }
 }
 
+// GameViewRoot is the real root view.  The developer can use it as-is or can
+// subclass it and pass the subclass on the StartSession call.  When the session
+// is started, the ViewRoot passed into the session is instead the PreloadingViewRoot
+// defined below.  The instance of PreloadingViewRoot decides when to load the real
+// root, once the Unity side is ready to work with it.
 export class GameViewRoot extends ViewRoot {
 
     static viewServices() {
@@ -1146,14 +1387,10 @@ export class GameViewRoot extends ViewRoot {
 
         if (sessionOffsetEstimator) sessionOffsetEstimator.initReflectorOffsets();
 
-        // we treat the construction of the view as a signal that the session is
-        // ready to talk across the bridge.  that means that the event mechanism
-        // is ready, too.
-        this.publish("croquet", "sessionRunning", this.viewId);
         this.lastViewCount = null;
         this.announceViewCount();
 
-        globalThis.timedLog("session running");
+        globalThis.timedLog("scene running");
     }
 
     announceViewCount() {
@@ -1166,6 +1403,137 @@ export class GameViewRoot extends ViewRoot {
         super.update(time, delta);
 
         this.announceViewCount();
+    }
+}
+
+// as described above, PreloadingViewRoot provides a layer between the model and the actual GameViewRoot (or subclass thereof).
+class PreloadingViewRoot extends View {
+    static viewServices() { return [] }
+
+    constructor(model) {
+        console.log("building PreloadingViewRoot");
+        super(model);
+        this.model = model;
+        this.im = GetModelService('InitializationManager');
+
+        this.subscribe(this.sessionId, { event: 'sceneStateUpdated', handling: 'immediate'}, this.handleSceneState);
+        this.subscribe(this.sessionId, 'requestToInitGranted', this.handleRequestToInitGranted);
+
+        // we treat the construction of this view as a signal that the session
+        // is ready to talk across the bridge.  but without a real viewRoot,
+        // the event mechanism is not yet available.
+        theGameEngineBridge.sendCommand('sessionRunning', this.viewId);
+
+        // force the InitializationManager to let us know what state the
+        // session is in
+        this.im.announceInitialSceneState();
+    }
+
+    readyToBuildSceneInUnity(sceneName) {
+        // the bridge is telling us that the unity side is ready to build
+        // the scene (which is the case as soon as it has loaded the scene
+        // and fetched the scene-relevant assets).
+        // if
+        const { activeScene, activeSceneState } = this.im;
+        if (sceneName !== activeScene) {
+            console.warn(`bridge is ready for scene ${sceneName}, but we're running ${activeScene}`);
+            return;
+        }
+
+        this.buildRealViewRootIfReady();
+    }
+
+    handleSceneState(data) {
+        const { activeScene, activeSceneState } = this.im;
+
+        // tell unity through a command (because in the state where there is no running viewRoot, publish to unity isn't available)
+        theGameEngineBridge.sendCommand('sceneStateUpdated', activeScene, activeSceneState);
+
+        if (activeSceneState === 'running') {
+            // whenever sceneState is 'running', the init manager adds
+            // the manifests and early subs to the event being handled here.
+            // we pass those into
+            // the bridge for use in starting up the real viewRoot... though
+            // that has to wait until the unity side is ready for (i.e., has
+            // the assets for) the scene in question.
+            theGameEngineBridge.setSceneConstructionProperties(data);
+            this.buildRealViewRootIfReady();
+        }
+    }
+
+    handleRequestToInitGranted(viewId) {
+        // the InitializationManager has granted some view's request to init.
+        // if it's us, go ahead.
+        if (viewId === this.viewId) this.onRequestToInitGranted?.();
+        this.onRequestToInitGranted = null;
+    }
+
+    buildRealViewRootIfReady() {
+        if (this.realViewRoot) return; // already running
+
+        const { activeScene, activeSceneState } = this.im;
+        if (activeSceneState === 'running' && theGameEngineBridge.readySceneInUnity === activeScene) {
+            console.log(`building real ViewRoot for scene ${activeScene}`);
+            this.realViewRoot = new ViewRootClass(this.model);
+        }
+    }
+
+    publishRequestToLoadScene(sceneName, forceFlag) {
+        this.publish(this.sessionId, 'requestToLoadScene', {sceneName, forceFlag});
+    }
+
+    async attemptToPublishInitialization(sceneName, initStrings) {
+        // don't interrupt if we're already sending
+        if (this.publishingInitP) await this.publishingInitP;
+
+        this.publishingInitP = new Promise(resolve => {
+            this.onRequestToInitGranted = () => {
+                this.publishInitializationInChunks(sceneName, initStrings)
+                    .then(() => {
+                        this.publishingInitP = null;
+                        resolve();
+                    });
+                };
+            this.publish(this.sessionId, 'requestToInitScene', { viewId: this.viewId, sceneName });
+        });
+    }
+
+    async publishInitializationInChunks(sceneName, initStrings) {
+        const { viewId } = this;
+        console.log("publishing init", { sceneName, viewId });
+
+        // lifted and slightly adapted from code.js in microverse
+        const sendString = initStrings.join('\x01');
+        const array = new TextEncoder().encode(sendString);
+        const CHUNK_SIZE = 2500;
+        // Croquet will complain if more than 20 messages are sent in 1 second.
+        // if we'll be sending more than 15 from here, introduce a throttle.
+        const useThrottle = array.length > CHUNK_SIZE * 15;
+        let ind = 0;
+        let isFirst = true;
+        let isLast;
+        while (ind < array.length) {
+            isLast = ind + CHUNK_SIZE >= array.length;
+            const buf = array.slice(ind, ind + CHUNK_SIZE);
+            this.publish(this.sessionId, 'sceneInitChunk', { viewId, sceneName, isFirst, isLast, buf });
+            ind += CHUNK_SIZE;
+            isFirst = false;
+
+            if (useThrottle) await new Promise(resolve => setTimeout(resolve, 50)); // eslint-disable-line no-await-in-loop
+        }
+    }
+
+    update(time, delta) {
+        if (this.realViewRoot) this.realViewRoot.update(time, delta);
+    }
+
+    detach() {
+        console.log("detaching PreloadingViewRoot");
+        if (this.realViewRoot) {
+            this.realViewRoot.detach();
+            delete this.realViewRoot;
+        }
+        super.detach();
     }
 }
 
@@ -1489,11 +1857,12 @@ class SessionOffsetEstimator {
 }
 
 
-let session, sessionOffsetEstimator, ticker;
+let session, ViewRootClass, sessionOffsetEstimator, ticker;
 export async function StartSession(model, view) {
+    ViewRootClass = view;
     // console.profile();
     // setTimeout(() => console.profileEnd(), 10000);
-    await theGameEngineBridge.readyP;
+    await theGameEngineBridge.readyP; // readyForSession has been received
     globalThis.timedLog("bridge ready");
     const { apiKey, appId, sessionName, debugLogTypes } = theGameEngineBridge;
     const name = `${sessionName}`;
@@ -1510,7 +1879,7 @@ export async function StartSession(model, view) {
         flags: ['unity', 'rawtime'],
         debug: debugLogTypes,
         model,
-        view,
+        view: PreloadingViewRoot,
         progressReporter: ratio => {
             globalThis.timedLog(`join progress: ${ratio}`);
             theGameEngineBridge.sendCommand('joinProgress', String(ratio));
