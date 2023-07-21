@@ -36,6 +36,16 @@ public class CroquetSpatialSystem : CroquetSystem
         }
     }
 
+    public override string InitializationStringForInstanceID(int instanceID)
+    {
+        CroquetSpatialComponent sc = components[instanceID] as CroquetSpatialComponent;
+        Vector3 position = sc.gameObject.transform.position; // read from the object, not the component
+        string posString = $"{position.x},{position.y},{position.z}";
+        Quaternion rotation = sc.gameObject.transform.rotation;
+        string rotString = $"{rotation.x},{rotation.y},{rotation.z},{rotation.w},";
+        return $"position:{posString}|rotation:{rotString}";
+    }
+
     private void Update()
     {
         // Update the transform (position, rotation, scale) in the scene

@@ -404,6 +404,11 @@ public static class Croquet
         // will return the default value -1f.
         return CroquetBridge.Instance.CroquetSessionTime();
     }
+
+    public static void RequestToLoadScene(string sceneName, bool forceReload)
+    {
+        CroquetBridge.Instance.RequestToLoadScene(sceneName, forceReload);
+    }
 }
 
 

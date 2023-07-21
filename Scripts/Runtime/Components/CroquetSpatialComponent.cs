@@ -16,8 +16,6 @@ public class CroquetSpatialComponent : CroquetComponent
     public Vector3 scale = Vector3.one;
 
     [Header("Options")]
-    public bool initializeWithSceneTransform = false;
-    [Space(10)]
     public float positionDeltaEpsilon = 0.01f;
     public float rotationDeltaEpsilon = 0.01f;
     public float scaleDeltaEpsilon = 0.01f;

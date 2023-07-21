@@ -191,7 +191,7 @@ console.log(`PORT ${portStr}`);
                 } else console.warn(`defineScene but no preloadingView!`);
                 break;
             }
-            case 'readyForRunningScene': {
+            case 'readyToRunScene': {
                 // the unity side has read the prefab assets that are available
                 // for the specified scene, and is thus ready to make pawns for
                 // the scene's actors.
@@ -200,7 +200,7 @@ console.log(`PORT ${portStr}`);
                 const sceneName = args[0];
                 this.readySceneInUnity = sceneName;
                 if (this.preloadingView) this.preloadingView?.readyToBuildSceneInUnity(sceneName);
-                else console.warn(`readyForRunningScene but no preloadingView!`);
+                else console.warn(`readyToRunScene but no preloadingView!`);
                 break;
             }
             case 'event': {
@@ -372,25 +372,6 @@ export class InitializationManager extends ModelService {
         this.client = model;
     }
 
-    announceInitialSceneState() {
-        // the local PreloadingViewRoot is up and running, and wants to tell
-        // Unity what scene (if any) has been loaded into this session.
-
-        // if scene state is 'running', we need to provide all the details for PVR to supply to the bridge so it can start the real viewRoot.
-        // if scene state is 'loading' we don't need to do anything; eventually it will hit 'running', and we can inform unity then.
-        // if scene state is 'preload', in principle we could sit back like for 'loading'.  but maybe one day we'll be in preload state with no other client in a position to help.  in case of that, for preload we do tell unity.
-
-        const { activeSceneState } = this;
-        if (activeSceneState === 'loading') return;
-
-        let args = {};
-        if (activeSceneState === 'running') {
-            const [earlySubscriptionTopics, assetManifestString] = this.lastInitString.split('\x01'); // wasteful to split the whole thing, but only happens once
-            args = { earlySubscriptionTopics, assetManifestString };
-        }
-        this.publishSceneState(args);
-    }
-
     handleRequestToLoadScene({ sceneName, forceFlag }) {
         // this comes from a view (unity or otherwise), for example when a user presses a button to advance to the next level
 
@@ -515,8 +496,17 @@ export class InitializationManager extends ModelService {
         }
     }
 
-    publishSceneState(args = {}) {
-        this.publish(this.sessionId, 'sceneStateUpdated', args);
+    publishSceneState() {
+        this.publish(this.sessionId, 'sceneStateUpdated');
+    }
+
+    getSceneConstructionProperties() {
+        if (this.activeSceneState !== 'running') {
+            throw Error("attempt to fetch construction properties for non-running scene");
+        }
+
+        const [earlySubscriptionTopics, assetManifestString] = this.lastInitString.split('\x01'); // wasteful to split the whole thing, but doesn't happen often
+        return { earlySubscriptionTopics, assetManifestString };
     }
 
 }
@@ -1414,7 +1404,7 @@ class PreloadingViewRoot extends View {
         console.log("building PreloadingViewRoot");
         super(model);
         this.model = model;
-        this.im = GetModelService('InitializationManager');
+        this.im = this.wellKnownModel('InitializationManager'); // can't use GetModelService, because this isn't a WorldCore ViewRoot
 
         this.subscribe(this.sessionId, { event: 'sceneStateUpdated', handling: 'immediate'}, this.handleSceneState);
         this.subscribe(this.sessionId, 'requestToInitGranted', this.handleRequestToInitGranted);
@@ -1424,17 +1414,15 @@ class PreloadingViewRoot extends View {
         // the event mechanism is not yet available.
         theGameEngineBridge.sendCommand('sessionRunning', this.viewId);
 
-        // force the InitializationManager to let us know what state the
-        // session is in
-        this.im.announceInitialSceneState();
+        // examine the InitializationManager to see what state the session is in
+        this.handleSceneState();
     }
 
     readyToBuildSceneInUnity(sceneName) {
         // the bridge is telling us that the unity side is ready to build
         // the scene (which is the case as soon as it has loaded the scene
         // and fetched the scene-relevant assets).
-        // if
-        const { activeScene, activeSceneState } = this.im;
+        const { activeScene } = this.im;
         if (sceneName !== activeScene) {
             console.warn(`bridge is ready for scene ${sceneName}, but we're running ${activeScene}`);
             return;
@@ -1443,20 +1431,20 @@ class PreloadingViewRoot extends View {
         this.buildRealViewRootIfReady();
     }
 
-    handleSceneState(data) {
+    handleSceneState() {
+        // NB: this is 'immediate', so synchronous with the publishing of the event
         const { activeScene, activeSceneState } = this.im;
 
         // tell unity through a command (because in the state where there is no running viewRoot, publish to unity isn't available)
         theGameEngineBridge.sendCommand('sceneStateUpdated', activeScene, activeSceneState);
 
         if (activeSceneState === 'running') {
-            // whenever sceneState is 'running', the init manager adds
-            // the manifests and early subs to the event being handled here.
-            // we pass those into
-            // the bridge for use in starting up the real viewRoot... though
-            // that has to wait until the unity side is ready for (i.e., has
+            // fetch from the init manager the manifests and early subs, and pass
+            // those into the bridge for use in starting up the real viewRoot...
+            // though that has to wait until the unity side is ready for (i.e., has
             // the assets for) the scene in question.
-            theGameEngineBridge.setSceneConstructionProperties(data);
+            const props = this.im.getSceneConstructionProperties();
+            theGameEngineBridge.setSceneConstructionProperties(props);
             this.buildRealViewRootIfReady();
         }
     }

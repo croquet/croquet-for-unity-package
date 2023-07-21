@@ -17,6 +17,7 @@ public abstract class CroquetSystem : MonoBehaviour
 
     public virtual void RegisterComponent(CroquetComponent component)
     {
+        Debug.Log($"register {component.gameObject} in {this}");
         components.Add(component.gameObject.GetInstanceID(), component);
     }
 
@@ -52,12 +53,13 @@ public abstract class CroquetSystem : MonoBehaviour
 
     public virtual void LeavingScene()
     {
-        // by default, nothing
+        components.Clear(); // $$$ reasonable?
     }
 
-    public virtual void LoadingScene(string sceneName)
+    public virtual void LoadedScene(string sceneName)
     {
-        // by default, nothing
+        if (components.Count != 0) Debug.Log($"clearing {components.Count} entries for {this}");
+        components.Clear(); // wipe out anything that registered as the scene came up
     }
 
     public virtual bool ReadyToRunScene()
@@ -68,5 +70,10 @@ public abstract class CroquetSystem : MonoBehaviour
     public virtual void TearDownSession()
     {
         // by default, nothing
+    }
+
+    public virtual string InitializationStringForInstanceID(int instanceID)
+    {
+        return "";
     }
 }

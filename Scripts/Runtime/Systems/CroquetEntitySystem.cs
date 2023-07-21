@@ -99,10 +99,12 @@ public class CroquetEntitySystem : CroquetSystem
     {
     }
 
-    public override void LoadingScene(string sceneName)
+    public override void LoadedScene(string sceneName)
     {
+        base.LoadedScene(sceneName);
+
         // this is sent *after* switching the scene
-        if (sceneName == assetScene) return; // already loaded (or loading)
+        if (sceneName == assetScene) return; // already loaded (or being searched for)
 
         assetScene = sceneName;
         StartCoroutine(LoadAddressableAssetsWithLabel(sceneName)); // NB: used to be the appName (despite what our docs said)
@@ -115,6 +117,7 @@ public class CroquetEntitySystem : CroquetSystem
 
     public override void LeavingScene()
     {
+        // no need to invoke base.LeavingScene since we're clearing the components here
         ClearScene(); // clear out everything we built in this scene
         assetScene = "";
         addressablesReady = false;
@@ -123,7 +126,7 @@ public class CroquetEntitySystem : CroquetSystem
 
     public override void TearDownSession()
     {
-        // destroy everything in the scene for the purposes of rebuilding when the
+        // destroy everything in the scene for the purposes of rebuilding the same scene when the
         // connection is reestablished.
         ClearScene();
     }
@@ -139,7 +142,30 @@ public class CroquetEntitySystem : CroquetSystem
                 DestroyObject(entityComponent.croquetHandle);
             }
         }
+        components.Clear();
     }
+
+    public List<GameObject> UninitializedObjectsInScene()
+    {
+        List<GameObject> needingInit = new List<GameObject>();
+        foreach (CroquetComponent c in components.Values)
+        {
+            CroquetEntityComponent ec = c as CroquetEntityComponent;
+            if (ec.croquetHandle.Equals(""))
+            {
+                needingInit.Add(ec.gameObject);
+            }
+        }
+
+        return needingInit;
+    }
+
+    // $$$ if the defaultActorClass comes from the manifest, we don't need anything here
+    // public override string InitializationStringForInstanceID(int instanceID)
+    // {
+    //     CroquetEntityComponent ec = components[instanceID] as CroquetEntityComponent;
+    //     return $"ACTOR:{ec.actorClassName}";
+    // }
 
     IEnumerator LoadAddressableAssetsWithLabel(string sceneName)
     {
