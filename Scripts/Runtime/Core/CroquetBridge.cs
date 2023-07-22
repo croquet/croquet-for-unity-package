@@ -21,6 +21,7 @@ public class CroquetBridge : MonoBehaviour
     [Header("Session Configuration")]
     public string appName;
     public string defaultSessionName = "ABCDE";
+    public string initialSceneName; // the scene that will be loaded in a new session
     public bool useNodeJS;
     public CroquetDebugTypes debugLoggingFlags;
 
@@ -1011,8 +1012,16 @@ public class CroquetBridge : MonoBehaviour
         if (croquetActiveScene == "")
         {
             // propose to Croquet that we load the first game scene
-            string firstSceneName = "demolition"; // $$$ why not SceneManager.GetSceneByBuildIndex(1).name;
-            RequestToLoadScene(firstSceneName, false);// false => don't force if scene's already loaded/loading
+            if (initialSceneName == "")
+            {
+                Debug.LogWarning("No initial scene name set; defaulting to buildIndex 1");
+                Croquet.RequestToLoadScene(1, false);
+            }
+            else
+            {
+                Croquet.RequestToLoadScene(initialSceneName,
+                    false); // false => don't force if scene's already loaded/loading
+            }
         }
         else if (croquetActiveScene != SceneManager.GetActiveScene().name)
         {

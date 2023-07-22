@@ -1,6 +1,8 @@
 using System;
 using UnityEngine;
 using System.Collections.Generic;
+using System.IO;
+using UnityEngine.SceneManagement;
 
 public static class Croquet
 {
@@ -403,6 +405,25 @@ public static class Croquet
         // during game startup (at least until the Croquet session has started) this
         // will return the default value -1f.
         return CroquetBridge.Instance.CroquetSessionTime();
+    }
+
+    public static void RequestToLoadScene(int sceneBuildIndex, bool forceReload)
+    {
+        string path = SceneUtility.GetScenePathByBuildIndex(sceneBuildIndex);
+        if (path == "")
+        {
+            Debug.LogError($"Failed to find scene with buildIndex {sceneBuildIndex}");
+            return;
+        }
+
+        string filename = Path.GetFileNameWithoutExtension(path);
+        if (filename == "")
+        {
+            Debug.LogError($"Failed to parse scene-file name for buildIndex {sceneBuildIndex} from {path}");
+            return;
+        }
+
+        CroquetBridge.Instance.RequestToLoadScene(filename, forceReload);
     }
 
     public static void RequestToLoadScene(string sceneName, bool forceReload)
