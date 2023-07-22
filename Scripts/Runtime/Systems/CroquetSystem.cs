@@ -58,7 +58,11 @@ public abstract class CroquetSystem : MonoBehaviour
 
     public virtual void LoadedScene(string sceneName)
     {
-        if (components.Count != 0) Debug.Log($"clearing {components.Count} entries for {this}");
+        // by default, nothing
+    }
+
+    public virtual void ClearPriorToRunningScene()
+    {
         components.Clear(); // wipe out anything that registered as the scene came up
     }
 

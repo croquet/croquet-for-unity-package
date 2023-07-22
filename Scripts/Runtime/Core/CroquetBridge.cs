@@ -482,6 +482,11 @@ public class CroquetBridge : MonoBehaviour
 
                 sceneRunning = true;
                 TellCroquetWeAreReadyForScene();
+
+                foreach (CroquetSystem system in croquetSystems)
+                {
+                    system.ClearPriorToRunningScene();
+                }
             }
 
             // things to check periodically while the session is supposedly in full flow
