@@ -115,24 +115,11 @@ public class CroquetEntitySystem : CroquetSystem
         return addressablesReady;
     }
 
-    public override void LeavingScene()
+    public override void TearDownScene()
     {
-        // no need to invoke base.LeavingScene since we're clearing the components here
-        ClearScene(); // clear out everything we built in this scene
-        assetScene = "";
-        addressablesReady = false;
-        addressableAssets.Clear();
-    }
+        // destroy everything in the scene, in preparation either for rebuilding the same scene after
+        // a connection glitch or for loading/reloading due to a requested scene change.
 
-    public override void TearDownSession()
-    {
-        // destroy everything in the scene for the purposes of rebuilding the same scene when the
-        // connection is reestablished.
-        ClearScene();
-    }
-
-    private void ClearScene()
-    {
         List<CroquetComponent> componentsToDelete = components.Values.ToList();
         foreach (CroquetComponent component in componentsToDelete)
         {
@@ -142,7 +129,12 @@ public class CroquetEntitySystem : CroquetSystem
                 DestroyObject(entityComponent.croquetHandle);
             }
         }
-        components.Clear();
+
+        assetScene = "";
+        addressablesReady = false;
+        addressableAssets.Clear();
+
+        base.TearDownScene();
     }
 
     public List<GameObject> UninitializedObjectsInScene()

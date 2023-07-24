@@ -358,7 +358,7 @@ export class InitializationManager extends ModelService {
         this.activeSceneState = ""; // preload, initializing, running
         this.initializingView = ""; // the view that has permission from us to provide the data for activeScene
 
-        this.client = null; // needs to handle onInitializationStart, onObjectInitialization
+        this.client = null; // needs to handle onPrepareForInitialization, onInitializationStart, onObjectInitialization
         this.initBufferCollector = [];
         this.lastInitString = null; // if activeSceneState is running, this is the string that was used to initialise it.  we can reload the scene instantly by reusing this.
 
@@ -384,14 +384,16 @@ export class InitializationManager extends ModelService {
             if (activeSceneState === 'preload' || activeSceneState === 'loading' || !forceFlag) return;
 
             this.activeSceneState = 'loading'; // since we already have the initString
-            this.publishSceneState(); // immediately trigger the PreloadingViewRoot to ditch the main viewRoot
-            this.loadFromString(this.lastInitString);
         } else {
             this.activeScene = sceneName;
             this.lastInitString = null;
             this.activeSceneState = 'preload';
-            this.publishSceneState();
         }
+
+        this.publishSceneState(); // will immediately ditch the main viewRoot
+        this.client.onPrepareForInitialization(); // clear out any non-persistent state from model
+
+        if (this.activeSceneState === 'loading') this.loadFromString(this.lastInitString);
     }
 
     handleRequestToInitScene({ viewId, sceneName }) {
@@ -520,9 +522,11 @@ export const AM_InitializationClient = superclass => class extends superclass {
         this.initializationManager.setClient(this);
     }
 
+    onPrepareForInitialization() { }
+
     onInitializationStart() { }
 
-    onObjectInitialization(cls, props) { }
+    onObjectInitialization(_cls, _props) { }
 
 };
 RegisterMixin(AM_InitializationClient);
@@ -573,9 +577,7 @@ export const GameViewManager = class extends ViewService {
     }
 
     destroy() {
-        // use a specialised command rather than the cross-bridge event mechanism,
-        // because the latter is being torn down
-        if (theGameEngineBridge.bridgeIsConnected) theGameEngineBridge.sendCommand('tearDownSession');
+        globalThis.timedLog("GameViewManager destroyed");
         theGameEngineBridge.setCommandHandler(null);
     }
 
@@ -1377,10 +1379,18 @@ export class GameViewRoot extends ViewRoot {
 
         if (sessionOffsetEstimator) sessionOffsetEstimator.initReflectorOffsets();
 
+        const sceneName = this.wellKnownModel('InitializationManager').activeScene;
+        theGameEngineBridge.sendCommand('sceneRunning', sceneName);
+
         this.lastViewCount = null;
         this.announceViewCount();
 
-        globalThis.timedLog("scene running");
+        globalThis.timedLog("GameViewRoot built");
+    }
+
+    destroy() {
+        globalThis.timedLog("GameViewRoot destroyed");
+        super.destroy();
     }
 
     announceViewCount() {
@@ -1438,7 +1448,10 @@ class PreloadingViewRoot extends View {
         // tell unity through a command (because in the state where there is no running viewRoot, publish to unity isn't available)
         theGameEngineBridge.sendCommand('sceneStateUpdated', activeScene, activeSceneState);
 
-        if (activeSceneState === 'running') {
+        if (activeSceneState === 'preload' || activeSceneState === 'loading') {
+            // we're refreshing the view.  destroy any existing viewRoot.
+            this.destroyRealViewRoot(); // if any
+        } else if (activeSceneState === 'running') {
             // fetch from the init manager the manifests and early subs, and pass
             // those into the bridge for use in starting up the real viewRoot...
             // though that has to wait until the unity side is ready for (i.e., has
@@ -1461,8 +1474,17 @@ class PreloadingViewRoot extends View {
 
         const { activeScene, activeSceneState } = this.im;
         if (activeSceneState === 'running' && theGameEngineBridge.readySceneInUnity === activeScene) {
-            console.log(`building real ViewRoot for scene ${activeScene}`);
+            globalThis.timedLog(`building real ViewRoot for scene ${activeScene}`);
             this.realViewRoot = new ViewRootClass(this.model);
+        }
+    }
+
+    destroyRealViewRoot() {
+        if (this.realViewRoot) {
+            globalThis.timedLog("destroying real ViewRoot");
+            theGameEngineBridge.sendCommand('tearDownScene');
+            this.realViewRoot.destroy();
+            this.realViewRoot = null;
         }
     }
 
@@ -1516,11 +1538,14 @@ class PreloadingViewRoot extends View {
     }
 
     detach() {
+        // this should only happen on a glitch in the Croquet reflector connection,
+        // or a deliberate session.leave().
+        // don't even bother tearing down the real ViewRoot. tearDownSession will
+        // reset everything on the Unity side.
         console.log("detaching PreloadingViewRoot");
-        if (this.realViewRoot) {
-            this.realViewRoot.detach();
-            delete this.realViewRoot;
-        }
+
+        if (theGameEngineBridge.bridgeIsConnected) theGameEngineBridge.sendCommand('tearDownSession');
+
         super.detach();
     }
 }

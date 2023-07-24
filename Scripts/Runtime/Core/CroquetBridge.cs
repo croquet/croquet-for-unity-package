@@ -26,14 +26,15 @@ public class CroquetBridge : MonoBehaviour
     public CroquetDebugTypes debugLoggingFlags;
 
     [Header("Session State")]
-    public bool sessionRequested = false;
-    public bool sessionRunning = false; // $$$ probably need to change some checks of this to sceneRunning
+    public string croquetSessionState = ""; // requested, running, stopped
+    // public bool sessionRunning = false; // $$$ probably need to change some checks of this to sceneRunning
     public string sessionName = "";
     public string croquetViewId;
     public int croquetViewCount;
     public string croquetActiveScene; // the scene currently being handled in the model
-    public string croquetActiveSceneState; // the scene state (preload, loading, running)
-    private bool sceneRunning = false; // whether we've told Croquet we're in the active scene and ready to run it
+    public string croquetActiveSceneState; // the model's scene state (preload, loading, running)
+    public string unitySceneState = "preparing"; // our scene state (preparing, ready, running)
+    // private bool sceneRunning = false; // whether we've told Croquet we're in the active scene and ready to run it
 
     [Header("Network Glitch Simulator")]
     public bool triggerGlitchNow = false;
@@ -380,7 +381,7 @@ public class CroquetBridge : MonoBehaviour
         string msg = String.Join('\x01', command);
         clientSock.Send(msg);
 
-        sessionRequested = true;
+        croquetSessionState = "requested";
 
         // from this point, any scene change will have been driven by Croquet.  we want to follow along.
         SceneManager.activeSceneChanged += ChangedActiveScene;
@@ -388,7 +389,7 @@ public class CroquetBridge : MonoBehaviour
 
     public void SendToCroquet(params string[] strings)
     {
-        if (!sessionRunning)
+        if (croquetSessionState != "running")
         {
             Debug.LogWarning($"attempt to send when Croquet session is not running: {string.Join(',', strings)}");
             return;
@@ -398,7 +399,7 @@ public class CroquetBridge : MonoBehaviour
 
     public void SendToCroquetSync(params string[] strings)
     {
-        if (!sessionRunning)
+        if (croquetSessionState != "running")
         {
             Debug.LogWarning($"attempt to send when Croquet session is not running: {string.Join(',', strings)}");
             return;
@@ -470,28 +471,33 @@ public class CroquetBridge : MonoBehaviour
 
     void Update()
     {
-        if (clientSock != null && !sessionRequested && sessionName != "") StartCroquetSession();
-        else if (sessionRunning)
+        if (clientSock != null && croquetSessionState == "" && sessionName != "") StartCroquetSession();
+        else if (croquetSessionState == "running")
         {
-            if (!sceneRunning && SceneManager.GetActiveScene().name == croquetActiveScene)
+            if (unitySceneState == "preparing" && SceneManager.GetActiveScene().name == croquetActiveScene)
             {
+                bool ready = true;
                 foreach (CroquetSystem system in croquetSystems)
                 {
-                    if (!system.ReadyToRunScene()) return;
+                    if (!system.ReadyToRunScene()) ready = false;
                 }
 
-                sceneRunning = true;
-                TellCroquetWeAreReadyForScene();
-
-                foreach (CroquetSystem system in croquetSystems)
+                if (ready)
                 {
-                    system.ClearPriorToRunningScene();
+                    unitySceneState = "ready";
+                    TellCroquetWeAreReadyForScene();
+
+                    foreach (CroquetSystem system in croquetSystems)
+                    {
+                        system.ClearPriorToRunningScene();
+                    }
                 }
             }
 
             // things to check periodically while the session is supposedly in full flow
             if (triggerGlitchNow)
             {
+                // @@ need to debounce this
                 triggerGlitchNow = false; // cancel the request
 
                 int milliseconds = (int) (glitchDuration * 1000f);
@@ -575,7 +581,7 @@ public class CroquetBridge : MonoBehaviour
 
         long duration = DateTimeOffset.Now.ToUnixTimeMilliseconds() - start;
         if (duration == 0) duration++;
-        if (sessionRunning) Measure("update", start.ToString(), duration.ToString());
+        if (croquetSessionState == "running") Measure("update", start.ToString(), duration.ToString());
 
         float now = Time.realtimeSinceStartup;
         if (now - lastMessageDiagnostics > 1f)
@@ -694,9 +700,11 @@ public class CroquetBridge : MonoBehaviour
         else if (command == "croquetPing") HandleCroquetPing(args[0]);
         else if (command == "setLogOptions") SetCSharpLogOptions(args[0]);  //OUT:LOGGER
         else if (command == "setMeasureOptions") SetCSharpMeasureOptions(args[0]);//OUT:METRICS
-        else if (command == "joinProgress") HandleJoinProgress(args[0]);
+        else if (command == "joinProgress") HandleSessionJoinProgress(args[0]);
         else if (command == "sessionRunning") HandleSessionRunning(args[0]);
         else if (command == "sceneStateUpdated") HandleSceneStateUpdated(args);
+        else if (command == "sceneRunning") HandleSceneRunning(args[0]);
+        else if (command == "tearDownScene") HandleSceneTeardown();
         else if (command == "tearDownSession") HandleSessionTeardown();
         else if (command == "croquetTime") HandleCroquetReflectorTime(args[0]);
         else if (!messageWasProcessed)
@@ -732,7 +740,7 @@ public class CroquetBridge : MonoBehaviour
         if (!croquetSubscriptions.ContainsKey(topic))
         {
             croquetSubscriptions[topic] = new List<(GameObject, Action<string>)>();
-            if (Instance != null && Instance.sessionRunning)
+            if (Instance != null && Instance.unitySceneState == "running")
             {
                 Instance.SendToCroquet("registerForEventTopic", topic);
             }
@@ -814,7 +822,7 @@ public class CroquetBridge : MonoBehaviour
                         // no remaining subscriptions for this topic at all
                         Debug.Log($"removed last subscription for {topic}");
                         croquetSubscriptions.Remove(topic);
-                        if (Instance != null && Instance.sessionRunning)
+                        if (Instance != null && Instance.unitySceneState == "running")
                         {
                             Instance.SendToCroquet("unregisterEventTopic", topic);
                         }
@@ -893,7 +901,7 @@ public class CroquetBridge : MonoBehaviour
                         {
                             // Debug.Log($"removed last subscription for {topic}");
                             croquetSubscriptions.Remove(topic);
-                            if (sessionRunning)
+                            if (unitySceneState == "running")
                             {
                                 // don't even try to send if this is happening as part of a teardown
                                 SendToCroquet("unregisterEventTopic", topic);
@@ -986,23 +994,20 @@ public class CroquetBridge : MonoBehaviour
         }
     }
 
-    void HandleJoinProgress(string ratio)
+    void HandleSessionJoinProgress(string ratio)
     {
-        if (sessionRunning) return; // loading has finished; this is probably just a delayed message
+        if (unitySceneState == "running") return; // loading has finished; this is probably just a delayed message
 
         SetLoadingProgress(float.Parse(ratio));
     }
 
     void HandleSessionRunning(string viewId)
     {
-        // this is dispatched from the Croquet session's LazyViewRoot constructor, telling us which
-        // scene (if any) the model has been set up for.
-        // if no scene has been set up yet, we assume that the scene with buildIndex 1 is now
-        // to be loaded.
-        // loading the scene will trigger our Changed.
+        // this is dispatched from the Croquet session's PreloadingViewRoot constructor, telling us which
+        // viewId we have in the session
         croquetViewId = viewId;
         Log("session", "Croquet session running!");
-        sessionRunning = true;
+        croquetSessionState = "running";
         estimatedDateNowAtReflectorZero = -1; // reset, to accept first value from new view
         if (loadingProgressDisplay != null) loadingProgressDisplay.Hide();
     }
@@ -1010,13 +1015,24 @@ public class CroquetBridge : MonoBehaviour
     void HandleSceneStateUpdated(string[] args)
     {
         // args are [activeScene, activeSceneState]
+
+        // this is sent by the PreloadingViewRoot, under the following circs:
+        // - construction of the ViewRoot, forwarding the InitializationManager's current state (which could
+        //   be anything, including presence of no scene at all when the session first starts)
+        // - on every update in scene name, or of scene state (preload, loading, running)
+
+        // if the state change implies a reboot of the view (a new scene, or a switch from 'running' to
+        // 'loading' for a reload), any previous ViewRoot will already have been destroyed, triggering
+        // a tearDownScene command that we use to clear out all Croquet-managed gameObjects.
+
         croquetActiveScene = args[0];
         croquetActiveSceneState = args[1];
         Log("session", $"Croquet scene \"{croquetActiveScene}\", state \"{croquetActiveSceneState}\"");
 
+        // if croquet doesn't have an active scene, propose a switch to the first game-level scene
         if (croquetActiveScene == "")
         {
-            // propose to Croquet that we load the first game scene
+            // propose to Croquet that we load the initial game scene
             if (initialSceneName == "")
             {
                 Debug.LogWarning("No initial scene name set; defaulting to buildIndex 1");
@@ -1030,14 +1046,7 @@ public class CroquetBridge : MonoBehaviour
         }
         else if (croquetActiveScene != SceneManager.GetActiveScene().name)
         {
-            // first, clear any data from current scene:
-            foreach (CroquetSystem system in croquetSystems)
-            {
-                Debug.Log($"{system} leaving scene");
-                system.LeavingScene();
-            }
-
-            sceneRunning = false; // will trigger repeated checks until we can tell Croquet we're ready (with assets, etc)
+            unitySceneState = "preparing"; // will trigger repeated checks until we can tell Croquet we're ready (with assets, etc)
             SceneManager.LoadScene(croquetActiveScene);
         }
     }
@@ -1053,17 +1062,38 @@ public class CroquetBridge : MonoBehaviour
         SendToCroquet(cmdAndArgs);
     }
 
+    void HandleSceneRunning(string sceneName)
+    {
+        // triggered by the startup of a GameRootView
+        Log("session", $"Croquet view for scene {sceneName} running");
+        unitySceneState = "running"; // we're off!
+    }
+
+    void HandleSceneTeardown()
+    {
+        // this is triggered by the PreloadingViewRoot when it destroys the game's running viewRoot as part
+        // of a scene switch
+        Log("session", "Croquet scene teardown");
+        deferredMessages.Clear();
+        unitySceneState = "preparing"; // ready to load the next
+        foreach (CroquetSystem system in croquetSystems)
+        {
+            system.TearDownScene();
+        }
+    }
+
     void HandleSessionTeardown()
     {
+        // this is triggered by the disappearance (temporary or otherwise) of the Croquet session.
         Log("session", "Croquet session teardown!");
         deferredMessages.Clear();
-        sessionRunning = false; // suppresses sending of any further messages over the bridge
+        croquetSessionState = "stopped"; // suppresses sending of any further messages over the bridge
         foreach (CroquetSystem system in croquetSystems)
         {
             system.TearDownSession();
         }
 
-        croquetActiveScene = "";
+        croquetActiveScene = ""; // wait for session to resume and tell us the scene
     }
 
     void HandleViewCount(float viewCount)
