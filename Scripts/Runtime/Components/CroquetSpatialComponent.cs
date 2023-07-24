@@ -4,6 +4,7 @@ using System.ComponentModel;
 using UnityEngine;
 
 [AddComponentMenu("Croquet/SpatialComponent")]
+[SelectionBase]
 public class CroquetSpatialComponent : CroquetComponent
 {
     public override CroquetSystem croquetSystem { get; set; } = CroquetSpatialSystem.Instance;
