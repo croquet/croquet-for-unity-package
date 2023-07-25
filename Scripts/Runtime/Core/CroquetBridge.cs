@@ -129,10 +129,19 @@ public class CroquetBridge : MonoBehaviour
         StartWS();
     }
 
-    public void SetSessionName(string name)
+    public void SetSessionName(string newSessionName)
     {
-        sessionName = name == "" ? defaultSessionName : sessionName;
-        Log("session", $"session name set to {sessionName}");
+        if (newSessionName == "")
+        {
+            sessionName = defaultSessionName;
+            Log("session", $"session name defaulted to {defaultSessionName}");
+        }
+        else
+        {
+            sessionName = newSessionName;
+            Log("session", $"session name set to {newSessionName}");
+        }
+        
     }
 
     private void ChangedActiveScene(Scene previous, Scene current)
