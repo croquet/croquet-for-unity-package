@@ -51,11 +51,6 @@ public abstract class CroquetSystem : MonoBehaviour
         throw new NotImplementedException();
     }
 
-    public virtual void LeavingScene()
-    {
-        components.Clear(); // $$$ reasonable?
-    }
-
     public virtual void LoadedScene(string sceneName)
     {
         // by default, nothing
@@ -71,9 +66,16 @@ public abstract class CroquetSystem : MonoBehaviour
         return true;
     }
 
+    public virtual void TearDownScene()
+    {
+        // by default, just clear the components
+        components.Clear();
+    }
+
     public virtual void TearDownSession()
     {
-        // by default, nothing
+        // by default, just invoke TearDownScene
+        TearDownScene();
     }
 
     public virtual string InitializationStringForInstanceID(int instanceID)

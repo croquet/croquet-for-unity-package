@@ -42,7 +42,7 @@ public class CroquetSpatialSystem : CroquetSystem
         Vector3 position = sc.gameObject.transform.position; // read from the object, not the component
         string posString = $"{position.x},{position.y},{position.z}";
         Quaternion rotation = sc.gameObject.transform.rotation;
-        string rotString = $"{rotation.x},{rotation.y},{rotation.z},{rotation.w},";
+        string rotString = $"{rotation.x},{rotation.y},{rotation.z},{rotation.w}";
         return $"position:{posString}|rotation:{rotString}";
     }
 
