@@ -363,7 +363,7 @@ public class CroquetSpatialSystem : CroquetSystem
 
         if (scale != null)
         {
-            argList.Add("p");
+            argList.Add("s");
             argList.Add(string.Join<float>(",", new[] { scale.Value.x, scale.Value.y, scale.Value.z }));
         }
 
