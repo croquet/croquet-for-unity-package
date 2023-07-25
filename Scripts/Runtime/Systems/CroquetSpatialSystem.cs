@@ -116,13 +116,13 @@ public class CroquetSpatialSystem : CroquetSystem
             CroquetSpatialComponent spatial = kvp.Value as CroquetSpatialComponent;
             Transform t = spatial.transform; // where the object is right now
 
-            if (Vector3.Distance(spatial.scale,t.localScale) > spatial.scaleDeltaEpsilon)
+            if (Vector3.Distance(spatial.scale,t.localScale) > spatial.scaleEpsilon)
             {
-                t.localScale = Vector3.Lerp(t.localScale, spatial.scale, spatial.scaleLerpFactor);
+                t.localScale = Vector3.Lerp(t.localScale, spatial.scale, spatial.scaleLerpPerFrame);
             }
-            if (Quaternion.Angle(spatial.rotation,t.localRotation) > spatial.rotationDeltaEpsilon)
+            if (Quaternion.Angle(spatial.rotation,t.localRotation) > spatial.rotationEpsilon)
             {
-                t.localRotation = Quaternion.Slerp(t.localRotation, spatial.rotation, spatial.rotationLerpFactor);
+                t.localRotation = Quaternion.Slerp(t.localRotation, spatial.rotation, spatial.rotationLerpPerFrame);
             }
             if (spatial.ballisticVelocity != null)
             {
@@ -188,12 +188,11 @@ public class CroquetSpatialSystem : CroquetSystem
                 // }
 
                 spatial.hasBeenMoved = true;
-            } else if (Vector3.Distance(spatial.position,t.localPosition) > spatial.positionDeltaEpsilon)
+            } else if (Vector3.Distance(spatial.position,t.localPosition) > spatial.positionEpsilon)
             {
                 // SmoothDamp seems better suited to our needs than a constant lerp
                 t.localPosition = Vector3.SmoothDamp(t.localPosition, spatial.position,
                         ref spatial.dampedVelocity, spatial.positionSmoothTime);
-                // Vector3.Lerp(t.localPosition, spatial.position, spatial.positionLerpFactor);
             }
         }
     }
