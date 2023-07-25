@@ -21,7 +21,7 @@ public class CroquetRunner : MonoBehaviour
     private static string bridgeSourcePath; // croquet-bridge folder under StreamingAssets
     private static string appSourcePath; // app's own folder under StreamingAssets
     private static string nodeExecPath = ""; // provided by CroquetBridge
-    
+
     struct CroquetNodeProcess : IJob
     {
         public int port;
@@ -46,7 +46,7 @@ public class CroquetRunner : MonoBehaviour
             croquetProcess.StartInfo.CreateNoWindow = true;
 
             string nodeEntry = "node-main.js";
-            
+
             croquetProcess.StartInfo.FileName = nodeExecPath;
             croquetProcess.StartInfo.Arguments = $"{nodeEntry} {port}";
 
@@ -88,7 +88,7 @@ public class CroquetRunner : MonoBehaviour
             }
         }
     }
-    
+
     public IEnumerator StartCroquetConnection(int port, string appName, bool useNodeJS, string pathToNode)
     {
         bridgeSourcePath = Path.Combine(Application.streamingAssetsPath, "croquet-bridge");
@@ -116,7 +116,7 @@ public class CroquetRunner : MonoBehaviour
         //
         //   deployed standalone on Windows:
         //     i. nodeJS (using node.exe copied into StreamingAssets)
-        
+
         // figure out the web url, whatever is going to happen
         // Use the port number determined by the bridge
         string webURL = $"http://localhost:{port}/{appName}/index.html";
@@ -132,6 +132,7 @@ public class CroquetRunner : MonoBehaviour
         {
             // cases (a), (h)
             WebViewObject webViewObject = (new GameObject("WebViewObject")).AddComponent<WebViewObject>();
+            DontDestroyOnLoad(webViewObject.gameObject);
             webViewObject.Init(
                 separated: showWebview,
                 enableWKWebView: true,
@@ -185,14 +186,14 @@ public class CroquetRunner : MonoBehaviour
             // cases (b), (g)
             TimedLog($"ready for browser to load from {webURL}");
         }
-        
+
         if (useNodeJS)
         {
             if (!waitForUserLaunch)
             {
                 // cases (c), (e), (i)
                 nodeExecPath = pathToNode;
-                
+
                 var job = new CroquetNodeProcess()
                 {
                     port = port
