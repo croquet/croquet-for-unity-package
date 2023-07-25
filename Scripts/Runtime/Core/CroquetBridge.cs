@@ -27,14 +27,12 @@ public class CroquetBridge : MonoBehaviour
 
     [Header("Session State")]
     public string croquetSessionState = ""; // requested, running, stopped
-    // public bool sessionRunning = false; // $$$ probably need to change some checks of this to sceneRunning
     public string sessionName = "";
     public string croquetViewId;
     public int croquetViewCount;
     public string croquetActiveScene; // the scene currently being handled in the model
     public string croquetActiveSceneState; // the model's scene state (preload, loading, running)
     public string unitySceneState = "preparing"; // our scene state (preparing, ready, running)
-    // private bool sceneRunning = false; // whether we've told Croquet we're in the active scene and ready to run it
 
     [Header("Network Glitch Simulator")]
     public bool triggerGlitchNow = false;
@@ -142,7 +140,7 @@ public class CroquetBridge : MonoBehaviour
             sessionName = newSessionName;
             Log("session", $"session name set to {newSessionName}");
         }
-        
+
     }
 
     private void ChangedActiveScene(Scene previous, Scene current)

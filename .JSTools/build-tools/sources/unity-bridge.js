@@ -24,7 +24,7 @@ globalThis.timedLog = msg => {
 globalThis.CROQUET_NODE = typeof window === 'undefined';
 
 
-let theGameInputManager;
+let theGameInputManager, session, sessionOffsetEstimator;
 
 // theGameEngineBridge is a singleton instance of BridgeToUnity, built immediately
 // on loading of this file.  it is never rebuilt.
@@ -84,6 +84,10 @@ console.log(`PORT ${portStr}`);
     }
 
     sendCommand(...args) {
+        if (args.findIndex(a => typeof a !== "string") >= 0) {
+            console.warn("Command and arguments must be strings; not sending", args);
+            return;
+        }
         const msg = [...args].join('\x01');
         this.sendToUnity(msg);
 
@@ -185,9 +189,10 @@ console.log(`PORT ${portStr}`);
                 //   etc
                 const [sceneName, ...initStrings] = args;
                 this.readySceneInUnity = sceneName;
-                if (this.preloadingView) {
-                    this.preloadingView.readyToBuildSceneInUnity(sceneName);
-                    this.preloadingView.attemptToPublishInitialization(sceneName, initStrings);
+                const view = this.preloadingView;
+                if (view) {
+                    view.readyToBuildSceneInUnity(sceneName);
+                    view.attemptToPublishInitialization(sceneName, initStrings);
                 } else console.warn(`defineScene but no preloadingView!`);
                 break;
             }
@@ -199,7 +204,8 @@ console.log(`PORT ${portStr}`);
                 // real root.
                 const sceneName = args[0];
                 this.readySceneInUnity = sceneName;
-                if (this.preloadingView) this.preloadingView?.readyToBuildSceneInUnity(sceneName);
+                const view = this.preloadingView;
+                if (view) view.readyToBuildSceneInUnity(sceneName);
                 else console.warn(`readyToRunScene but no preloadingView!`);
                 break;
             }
@@ -220,7 +226,7 @@ console.log(`PORT ${portStr}`);
                 // args[3] - the encoded arg
                 const [ scope, eventName, argFormat, argString ] = args;
                 // console.log({scope, eventName, argFormat, argString});
-                if (argFormat === undefined) session?.view.publish(scope, eventName);
+                if (argFormat === undefined) this.preloadingView?.publish(scope, eventName);
                 else {
                     let eventArgs = argString.split('\x03');
                     switch (argFormat) {
@@ -239,7 +245,7 @@ console.log(`PORT ${portStr}`);
                         case 'ss': // string array; ok as is
                         default:
                     }
-                    session?.view.publish(scope, eventName, eventArgs);
+                    this.preloadingView?.publish(scope, eventName, eventArgs);
                 }
                 break;
             }
@@ -444,7 +450,7 @@ export class InitializationManager extends ModelService {
     loadFromString(initString) {
         this.client.onInitializationStart();
 
-        const [earlySubscriptionTopics, assetManifestString, ...entities] = initString.split('\x01');
+        const [_earlySubscriptionTopics, _assetManifestString, ...entities] = initString.split('\x01');
         entities.forEach(entityString => {
             // console.log(entityString);
             const propertyStrings = entityString.split('|');
@@ -453,9 +459,6 @@ export class InitializationManager extends ModelService {
             propertyStrings.forEach(propAndValue => {
                 const [propName, value] = propAndValue.split(':');
                 switch (propName) {
-                    // case 'ID':
-                    //     props.creatingId = value;
-                    //     break;
                     case 'ACTOR':
                         try { cls = Actor.classFromID(value) }
                         catch (e) {
@@ -484,7 +487,7 @@ export class InitializationManager extends ModelService {
         });
 
         this.activeSceneState = 'running';
-        this.publishSceneState({ earlySubscriptionTopics, assetManifestString });
+        this.publishSceneState();
     }
 
     handleViewExit(viewId) {
@@ -1445,20 +1448,20 @@ class PreloadingViewRoot extends View {
         // NB: this is 'immediate', so synchronous with the publishing of the event
         const { activeScene, activeSceneState } = this.im;
 
-        // tell unity through a command (because in the state where there is no running viewRoot, publish to unity isn't available)
-        theGameEngineBridge.sendCommand('sceneStateUpdated', activeScene, activeSceneState);
+        const announceStateToUnity = () => theGameEngineBridge.sendCommand('sceneStateUpdated', activeScene, activeSceneState);
 
-        if (activeSceneState === 'preload' || activeSceneState === 'loading') {
-            // we're refreshing the view.  destroy any existing viewRoot.
-            this.destroyRealViewRoot(); // if any
-        } else if (activeSceneState === 'running') {
+        if (activeSceneState === 'running') {
             // fetch from the init manager the manifests and early subs, and pass
             // those into the bridge for use in starting up the real viewRoot...
             // though that has to wait until the unity side is ready for (i.e., has
             // the assets for) the scene in question.
+            announceStateToUnity();
             const props = this.im.getSceneConstructionProperties();
             theGameEngineBridge.setSceneConstructionProperties(props);
             this.buildRealViewRootIfReady();
+        } else {
+            this.destroyRealViewRoot(); // if any
+            announceStateToUnity();
         }
     }
 
@@ -1534,6 +1537,8 @@ class PreloadingViewRoot extends View {
     }
 
     update(time, delta) {
+        super.update(time, delta);
+
         if (this.realViewRoot) this.realViewRoot.update(time, delta);
     }
 
@@ -1737,8 +1742,10 @@ class TimerClient {
     }
 }
 
-const timerClient = globalThis.CROQUET_NODE ? globalThis : new TimerClient();
+let timerClient, ticker;
 if (globalThis.CROQUET_NODE) {
+    timerClient = globalThis;
+
     // until we figure out how to use them on Node.js, disable measure and mark so we
     // don't build up unprocessed measurement records.
     // note: attempting basic reassignment
@@ -1754,6 +1761,11 @@ if (globalThis.CROQUET_NODE) {
         configurable: true,
         writable: true
     });
+} else {
+    // install our home-grown timer, and an interim ticker (will be replaced once
+    // the session starts) just to handle timeouts
+    timerClient = new TimerClient();
+    ticker = () => serviceTimeouts(); // very cheap if there aren't any
 }
 
 
@@ -1870,7 +1882,7 @@ class SessionOffsetEstimator {
 }
 
 
-let session, ViewRootClass, sessionOffsetEstimator, ticker;
+let ViewRootClass;
 export async function StartSession(model, view) {
     ViewRootClass = view;
     // console.profile();
