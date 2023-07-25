@@ -39,17 +39,72 @@ public class CroquetSpatialSystem : CroquetSystem
     public override string InitializationStringForInstanceID(int instanceID)
     {
         CroquetSpatialComponent sc = components[instanceID] as CroquetSpatialComponent;
-        Vector3 position = sc.gameObject.transform.position; // read from the object, not the component
-        string posString = $"{position.x},{position.y},{position.z}";
-        Quaternion rotation = sc.gameObject.transform.rotation;
-        string rotString = $"{rotation.x},{rotation.y},{rotation.z},{rotation.w}";
-        return $"position:{posString}|rotation:{rotString}";
+        Transform t = sc.gameObject.transform;
+        List<string> strings = new List<string>();
+        Vector3 position = t.localPosition; // read from the object, not the component
+        if (!position.Equals(Vector3.zero))
+        {
+            strings.Add($"position:{position.x},{position.y},{position.z}");
+        }
+        Quaternion rotation = t.localRotation;
+        if (!rotation.Equals(Quaternion.identity))
+        {
+            strings.Add($"rotation:{rotation.x},{rotation.y},{rotation.z},{rotation.w}");
+        }
+        Vector3 scale = t.localScale;
+        if (!scale.Equals(new Vector3(1f, 1f, 1f)))
+        {
+            strings.Add($"scale:{scale.x},{scale.y},{scale.z}");
+        }
+
+        if (sc.includeOnSceneInit)
+        {
+            strings.Add($"spatialOptions:{PackedOptionValues(sc)}");
+        }
+
+        string initString = string.Join('|', strings.ToArray());
+        Debug.Log(initString);
+        return initString;
+    }
+
+    private string PackedOptionValues(CroquetSpatialComponent spatial)
+    {
+        float[] props = new float[]
+        {
+            spatial.positionSmoothTime,
+            spatial.positionEpsilon,
+            spatial.rotationLerpPerFrame,
+            spatial.rotationEpsilon,
+            spatial.scaleLerpPerFrame,
+            spatial.scaleEpsilon,
+            spatial.desiredLag,
+            spatial.ballisticNudgeLerp
+        };
+
+        return string.Join<float>(',', props);
+    }
+
+    private void UnpackOptionValues(string packedValues, CroquetSpatialComponent spatial)
+    {
+        float[] props = Array.ConvertAll(packedValues.Split(','), float.Parse);
+        spatial.positionSmoothTime = props[0];
+        spatial.positionEpsilon = props[1];
+        spatial.rotationLerpPerFrame = props[2];
+        spatial.rotationEpsilon = props[3];
+        spatial.scaleLerpPerFrame = props[4];
+        spatial.scaleEpsilon = props[5];
+        spatial.desiredLag = props[6];
+        spatial.ballisticNudgeLerp = props[7];
     }
 
     private void Update()
     {
         // Update the transform (position, rotation, scale) in the scene
-        UpdateTransforms();
+        // - but only if the scene is running
+        if (CroquetBridge.Instance.unitySceneState == "running")
+        {
+            UpdateTransforms();
+        }
     }
 
     void Unparent(string[] args)
@@ -73,6 +128,13 @@ public class CroquetSpatialSystem : CroquetSystem
 
     public override void PawnInitializationComplete(GameObject go)
     {
+        if (Croquet.HasActorSentProperty(go, "spatialOptions"))
+        {
+            string options = Croquet.ReadActorString(go, "spatialOptions");
+            CroquetSpatialComponent spatial = go.GetComponent<CroquetSpatialComponent>();
+            UnpackOptionValues(options, spatial);
+        }
+
         CroquetActorManifest manifest = go.GetComponent<CroquetActorManifest>();
         if (manifest != null && Array.IndexOf(manifest.mixins, "Ballistic2D") >= 0)
         {

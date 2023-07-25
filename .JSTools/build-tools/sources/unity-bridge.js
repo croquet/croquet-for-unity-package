@@ -972,7 +972,8 @@ export const PM_GameRendered = superclass => class extends superclass {
         merged.forEach(propName => {
             let actorPropName = propName;
             if (propName === "position") actorPropName = "translation";
-            const value = actor[actorPropName];
+            let value = actor[actorPropName];
+            if (value === undefined) value = this[propName]; // allow pawn to fill in with custom properties
             if (value === undefined) {
                 console.log(`property ${propName} not found on ${actor.constructor.name} (possible prefab/class mismatch)`);
                 return;
@@ -1047,7 +1048,8 @@ if (this.gameHandle % 100 === 0) {
             let actorPropName = propName;
             if (propName === "position") actorPropName = "translation";
 
-            const newValue = actor[actorPropName];
+            let newValue = actor[actorPropName];
+            if (newValue === undefined) newValue = this[propName];
             let changed, newStringyValue;
             if (Array.isArray(value)) {
                 // @@ would be nice if we can find a more efficient approach
@@ -1127,6 +1129,8 @@ export const PM_GameSpatial = superclass => class extends superclass {
         super(actor);
         this.componentNames.add('CroquetSpatialComponent');
         this.resetGeometrySnapState();
+
+        if (this.spatialOptions) this.extraStatics.add('spatialOptions'); // not an actor property, but will be fed from here
     }
 
     get scale() { return this.actor.scale }
@@ -1135,6 +1139,7 @@ export const PM_GameSpatial = superclass => class extends superclass {
     get local() { return this.actor.local }
     get global() { return this.actor.global }
     get lookGlobal() { return this.global } // Allows objects to have an offset camera position -- obsolete?
+    get spatialOptions() { return this.actor._spatialOptions }
 
     get forward() { return this.actor.forward }
     get up() { return this.actor.up }

@@ -17,7 +17,7 @@ public abstract class CroquetSystem : MonoBehaviour
 
     public virtual void RegisterComponent(CroquetComponent component)
     {
-        Debug.Log($"register {component.gameObject} in {this}");
+        // Debug.Log($"register {component.gameObject} in {this}");
         components.Add(component.gameObject.GetInstanceID(), component);
     }
 

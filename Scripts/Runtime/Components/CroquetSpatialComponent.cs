@@ -33,7 +33,7 @@ public class CroquetSpatialComponent : CroquetComponent
     [Header("Ballistic motion")]
     public float desiredLag = 0.05f; // seconds behind
     [HideInInspector] public float currentLag = 0f;
-    public Vector3? ballisticVelocity = null;
+    [HideInInspector] public Vector3? ballisticVelocity = null;
     public float ballisticNudgeLerp = 0.2f; // adjustments to "ballistic" movement
 
     // public List<string> telemetry = new List<string>(); // for testing

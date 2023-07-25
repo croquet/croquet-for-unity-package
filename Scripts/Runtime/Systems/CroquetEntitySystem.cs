@@ -408,6 +408,19 @@ public class CroquetEntitySystem : CroquetSystem
         }
     }
 
+    public bool HasActorSentProperty(GameObject gameObject, string propertyName)
+    {
+        CroquetEntityComponent entity = components[gameObject.GetInstanceID()] as CroquetEntityComponent;
+        if (entity == null)
+        {
+            Debug.LogWarning($"failed to find Entity component for {gameObject}");
+            return false;
+        }
+
+        Dictionary<string, string> properties = entity.actorProperties;
+        return properties.ContainsKey(propertyName);
+    }
+
     public string GetPropertyValueString(GameObject gameObject, string propertyName)
     {
         CroquetEntityComponent entity = components[gameObject.GetInstanceID()] as CroquetEntityComponent;

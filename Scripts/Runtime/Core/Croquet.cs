@@ -359,6 +359,11 @@ public static class Croquet
 
     #region Actor Property Access
 
+    public static bool HasActorSentProperty(GameObject gameObject, string propertyName)
+    {
+        return CroquetEntitySystem.Instance.HasActorSentProperty(gameObject, propertyName);
+    }
+
     public static string ReadActorString(GameObject gameObject, string propertyName)
     {
         string stringVal = CroquetEntitySystem.Instance.GetPropertyValueString(gameObject, propertyName);
