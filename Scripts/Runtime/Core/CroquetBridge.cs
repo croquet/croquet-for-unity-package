@@ -544,10 +544,10 @@ public class CroquetBridge : MonoBehaviour
             // the properties for actor.create() are sent as a string prop1:val1|prop2:val2...
             List<string> initStrings = new List<string>();
             initStrings.Add($"ACTOR:{manifest.defaultActorClass}");
-            int instanceID = manifest.gameObject.GetInstanceID();
+            GameObject go = manifest.gameObject;
             foreach (CroquetSystem system in croquetSystems)
             {
-                string initString = system.InitializationStringForInstanceID(instanceID);
+                string initString = system.InitializationStringForObject(go);
                 if (!initString.Equals(""))
                 {
                     initStrings.Add(initString);

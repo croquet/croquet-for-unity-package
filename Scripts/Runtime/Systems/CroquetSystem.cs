@@ -78,7 +78,7 @@ public abstract class CroquetSystem : MonoBehaviour
         TearDownScene();
     }
 
-    public virtual string InitializationStringForInstanceID(int instanceID)
+    public virtual string InitializationStringForObject(GameObject go)
     {
         return "";
     }

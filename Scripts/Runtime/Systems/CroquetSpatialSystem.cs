@@ -36,12 +36,12 @@ public class CroquetSpatialSystem : CroquetSystem
         }
     }
 
-    public override string InitializationStringForInstanceID(int instanceID)
+    public override string InitializationStringForObject(GameObject go)
     {
-        CroquetSpatialComponent sc = components[instanceID] as CroquetSpatialComponent;
-        Transform t = sc.gameObject.transform;
+        // placement doesn't depend on having a SpatialComponent
+        Transform t = go.transform;
         List<string> strings = new List<string>();
-        Vector3 position = t.localPosition; // read from the object, not the component
+        Vector3 position = t.localPosition;
         if (!position.Equals(Vector3.zero))
         {
             strings.Add($"position:{position.x},{position.y},{position.z}");
@@ -57,9 +57,14 @@ public class CroquetSpatialSystem : CroquetSystem
             strings.Add($"scale:{scale.x},{scale.y},{scale.z}");
         }
 
-        if (sc.includeOnSceneInit)
+        int instanceID = go.GetInstanceID();
+        if (components.ContainsKey(instanceID))
         {
-            strings.Add($"spatialOptions:{PackedOptionValues(sc)}");
+            CroquetSpatialComponent sc = components[instanceID] as CroquetSpatialComponent;
+            if (sc.includeOnSceneInit)
+            {
+                strings.Add($"spatialOptions:{PackedOptionValues(sc)}");
+            }
         }
 
         string initString = string.Join('|', strings.ToArray());
