@@ -496,7 +496,7 @@ public class CroquetBridge : MonoBehaviour
 
                     foreach (CroquetSystem system in croquetSystems)
                     {
-                        system.ClearPriorToRunningScene();
+                        system.ClearSceneBeforeRunning();
                     }
                 }
             }

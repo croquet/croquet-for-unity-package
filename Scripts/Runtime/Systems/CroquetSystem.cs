@@ -56,14 +56,14 @@ public abstract class CroquetSystem : MonoBehaviour
         // by default, nothing
     }
 
-    public virtual void ClearPriorToRunningScene()
-    {
-        components.Clear(); // wipe out anything that registered as the scene came up
-    }
-
     public virtual bool ReadyToRunScene()
     {
         return true;
+    }
+
+    public virtual void ClearSceneBeforeRunning()
+    {
+        components.Clear(); // wipe out anything that registered as the scene came up
     }
 
     public virtual void TearDownScene()
