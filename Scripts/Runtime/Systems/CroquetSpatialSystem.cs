@@ -41,17 +41,17 @@ public class CroquetSpatialSystem : CroquetSystem
         // placement doesn't depend on having a SpatialComponent
         Transform t = go.transform;
         List<string> strings = new List<string>();
-        Vector3 position = t.localPosition;
+        Vector3 position = t.position;
         if (!position.Equals(Vector3.zero))
         {
             strings.Add($"position:{position.x},{position.y},{position.z}");
         }
-        Quaternion rotation = t.localRotation;
+        Quaternion rotation = t.rotation;
         if (!rotation.Equals(Quaternion.identity))
         {
             strings.Add($"rotation:{rotation.x},{rotation.y},{rotation.z},{rotation.w}");
         }
-        Vector3 scale = t.localScale;
+        Vector3 scale = t.lossyScale;
         if (!scale.Equals(new Vector3(1f, 1f, 1f)))
         {
             strings.Add($"scale:{scale.x},{scale.y},{scale.z}");
