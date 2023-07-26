@@ -33,6 +33,7 @@ public class CroquetBridge : MonoBehaviour
     public string croquetActiveScene; // the scene currently being handled in the model
     public string croquetActiveSceneState; // the model's scene state (preload, loading, running)
     public string unitySceneState = "preparing"; // our scene state (preparing, ready, running)
+    private List<CroquetActorManifest> sceneDefinitionManifests = new List<CroquetActorManifest>();
 
     [Header("Network Glitch Simulator")]
     public bool triggerGlitchNow = false;
@@ -147,11 +148,15 @@ public class CroquetBridge : MonoBehaviour
     {
         // this is triggered when we've already arrived in the "current" scene.
 
-        // deactivate all Croquet objects
+        // immediately deactivate all Croquet objects, but keep a record of those that were active
+        // in case we're asked to provide a scene definition
+        sceneDefinitionManifests.Clear();
         CroquetActorManifest[] croquetObjects = FindObjectsByType<CroquetActorManifest>(FindObjectsInactive.Include, FindObjectsSortMode.None);
         foreach (CroquetActorManifest manifest in croquetObjects)
         {
-            manifest.gameObject.SetActive(false);
+            GameObject go = manifest.gameObject;
+            if (go.activeSelf) sceneDefinitionManifests.Add(manifest);
+            go.SetActive(false);
         }
 
         // for now, the main thing we want to trigger is the loading of the scene-specific assets.
@@ -519,6 +524,8 @@ public class CroquetBridge : MonoBehaviour
     {
         if (croquetActiveSceneState == "preload") SendDefineScene();
         else SendReadyForScene();
+
+        sceneDefinitionManifests.Clear(); // no longer needed
     }
 
     void SendDefineScene()
@@ -537,13 +544,12 @@ public class CroquetBridge : MonoBehaviour
             CroquetEntitySystem.Instance.assetManifestString
         };
 
-        // look for all objects in the scene that have a CroquetActorManifest (all of which will now be inactive)
-        CroquetActorManifest[] needingInit = FindObjectsByType<CroquetActorManifest>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-        foreach (CroquetActorManifest manifest in needingInit)
+        // look for all objects in the scene that have a CroquetActorManifest and are active
+        foreach (CroquetActorManifest manifest in sceneDefinitionManifests)
         {
             // the properties for actor.create() are sent as a string prop1:val1|prop2:val2...
             List<string> initStrings = new List<string>();
-            initStrings.Add($"ACTOR:{manifest.defaultActorClass}");
+            initStrings.Add($"ACTOR:{manifest.defaultActorClass}|type:{manifest.pawnType}");
             GameObject go = manifest.gameObject;
             foreach (CroquetSystem system in croquetSystems)
             {
