@@ -28,7 +28,7 @@ public class CroquetBridge : MonoBehaviour
     public CroquetDebugTypes debugLoggingFlags;
 
     [Header("Session State")]
-    public string croquetSessionState = ""; // requested, running, stopped
+    public string croquetSessionState = "stopped"; // requested, running, stopped
     public string sessionName = "";
     public string croquetViewId;
     public int croquetViewCount;
@@ -97,7 +97,8 @@ public class CroquetBridge : MonoBehaviour
         // If there is an instance, and it's not me, delete myself.
         if (Instance != null && Instance != this)
         {
-            Destroy(this);
+            Destroy(gameObject);
+            return;
         }
         else
         {
@@ -119,12 +120,9 @@ public class CroquetBridge : MonoBehaviour
         // Frame cap
         Application.targetFrameRate = 60;
 
-        // while developing a scene, it would be usual for any loading-progress display to be
-        // deactivated so as not to block the view.  if there is one, activate it now.
-        LoadingProgressDisplay loadingObj = FindObjectOfType<LoadingProgressDisplay>(true);
+        LoadingProgressDisplay loadingObj = FindObjectOfType<LoadingProgressDisplay>();
         if (loadingObj != null)
         {
-            loadingObj.gameObject.SetActive(true); // if not already
             DontDestroyOnLoad(loadingObj.gameObject);
             loadingProgressDisplay = loadingObj.GetComponent<LoadingProgressDisplay>();
             if (!launchThroughMenu)
@@ -136,6 +134,8 @@ public class CroquetBridge : MonoBehaviour
                 loadingProgressDisplay.Hide(); // until it's needed
             }
         }
+
+        SceneManager.activeSceneChanged += ChangedActiveScene; // in Start, so it's only set up once
 
         lastMessageDiagnostics = Time.realtimeSinceStartup;
 
@@ -160,7 +160,10 @@ public class CroquetBridge : MonoBehaviour
     private void ChangedActiveScene(Scene previous, Scene current)
     {
         // this is triggered when we've already arrived in the "current" scene.
-        ArrivedInGameScene(current);
+        if (croquetSessionState != "stopped")
+        {
+            ArrivedInGameScene(current);
+        }
     }
 
     private void ArrivedInGameScene(Scene currentScene)
@@ -416,9 +419,6 @@ public class CroquetBridge : MonoBehaviour
         clientSock.Send(msg);
 
         croquetSessionState = "requested";
-
-        // from this point, any scene change will have been driven by Croquet.  we want to follow along.
-        SceneManager.activeSceneChanged += ChangedActiveScene;
     }
 
     public void SendToCroquet(params string[] strings)
@@ -505,7 +505,7 @@ public class CroquetBridge : MonoBehaviour
 
     void Update()
     {
-        if (clientSock != null && croquetSessionState == "" && sessionName != "") StartCroquetSession();
+        if (clientSock != null && croquetSessionState == "stopped" && sessionName != "") StartCroquetSession();
         else if (croquetSessionState == "running")
         {
             if (unitySceneState == "preparing" && SceneManager.GetActiveScene().name == croquetActiveScene)
@@ -740,7 +740,7 @@ public class CroquetBridge : MonoBehaviour
         else if (command == "sceneStateUpdated") HandleSceneStateUpdated(args);
         else if (command == "sceneRunning") HandleSceneRunning(args[0]);
         else if (command == "tearDownScene") HandleSceneTeardown();
-        else if (command == "tearDownSession") HandleSessionTeardown();
+        else if (command == "tearDownSession") HandleSessionTeardown(args[0]);
         else if (command == "croquetTime") HandleCroquetReflectorTime(args[0]);
         else if (!messageWasProcessed)
         {
@@ -1142,10 +1142,12 @@ public class CroquetBridge : MonoBehaviour
         }
     }
 
-    void HandleSessionTeardown()
+    void HandleSessionTeardown(string postTeardownScene)
     {
-        // this is triggered by the disappearance (temporary or otherwise) of the Croquet session.
-        Log("session", "Croquet session teardown!");
+        // this is triggered by the disappearance (temporary or otherwise) of the Croquet session,
+        // or the processing of a "shutdown" command sent from here.
+        string postTeardownMsg = postTeardownScene == "" ? "" : $" (and jump to {postTeardownScene})";
+        Log("session", $"Croquet session teardown{postTeardownMsg}");
         deferredMessages.Clear();
         croquetSessionState = "stopped"; // suppresses sending of any further messages over the bridge
         foreach (CroquetSystem system in croquetSystems)
@@ -1153,7 +1155,16 @@ public class CroquetBridge : MonoBehaviour
             system.TearDownSession();
         }
 
+        sessionName = "";
+        croquetViewId = "";
         croquetActiveScene = ""; // wait for session to resume and tell us the scene
+        croquetActiveSceneState = "";
+
+        if (postTeardownScene != "")
+        {
+            int buildIndex = int.Parse(postTeardownScene);
+            SceneManager.LoadScene(buildIndex);
+        }
     }
 
     void HandleViewCount(float viewCount)

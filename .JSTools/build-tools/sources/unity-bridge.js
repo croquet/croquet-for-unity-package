@@ -165,7 +165,7 @@ console.log(`PORT ${portStr}`);
                 // @@ should be configurable (especially so it can be turned off
                 // for a build).
                 this.setJSLogForwarding(waitForUserLaunchStr === 'false' ? ['warn', 'error'] : []);
-                this.setReady();
+                unityDrivenStartSession();
                 break;
             }
             case 'requestToLoadScene': {
@@ -272,10 +272,11 @@ console.log(`PORT ${portStr}`);
                 this.simulateNetworkGlitch(Number(args[0]));
                 break;
             case 'shutdown':
-                // @@ not sure this will ever make sense
+                // close any running session, but keep the bridge
+                // arg 0 - if present - is a reference (name or buildIndex) to the scene that Unity should switch to after tearing down the session
                 globalThis.timedLog('shutdown event received');
-                session.leave();
-                if (globalThis.CROQUET_NODE) process.exit();
+                this.postShutdownSceneInUnity = args.length ? args[0] : null;
+                shutDownSession();
                 break;
             default:
                 if (this.commandHandler) this.commandHandler(command, args);
@@ -296,7 +297,9 @@ console.log(`PORT ${portStr}`);
 
     tearDownSession() {
         this.readySceneInUnity = null; // can't harm
-        if (this.bridgeIsConnected) this.sendCommand('tearDownSession');
+        const sceneStr = this.postShutdownSceneInUnity || "";
+        this.postShutdownSceneInUnity = null;
+        if (this.bridgeIsConnected) this.sendCommand('tearDownSession', sceneStr);
     }
 
     setJSLogForwarding(toForward) {
@@ -1710,13 +1713,10 @@ class TimeList {
     }
 }
 
-let serviceTimeouts;
 class TimerClient {
     constructor() {
         this.timeouts = {};
-
         this.timeList = new TimeList();
-        serviceTimeouts = () => this.serviceTimeouts();
 
         globalThis.setTimeout = (c, d) => this.setTimeout(c, d);
         globalThis.clearTimeout = id => this.clearTimeout(id);
@@ -1759,7 +1759,7 @@ class TimerClient {
     }
 }
 
-let timerClient, ticker;
+let timerClient, ticker, sessionStepper;
 if (globalThis.CROQUET_NODE) {
     timerClient = globalThis;
 
@@ -1782,7 +1782,7 @@ if (globalThis.CROQUET_NODE) {
     // install our home-grown timer, and an interim ticker (will be replaced once
     // the session starts) just to handle timeouts
     timerClient = new TimerClient();
-    ticker = () => serviceTimeouts(); // very cheap if there aren't any
+    ticker = () => timerClient.serviceTimeouts(); // very cheap if there aren't any
 }
 
 
@@ -1807,6 +1807,8 @@ class SessionOffsetEstimator {
     }
 
     sendPing() {
+        if (!this.session) return;
+
         if (this.session.view) {
             // only actually send pings while there is a view
             const args = { sent: Math.floor(performance.now()) };
@@ -1820,6 +1822,8 @@ class SessionOffsetEstimator {
     }
 
     handlePong(args) {
+        if (!this.session) return;
+
         const { sent, rawTime: reflectorRaw } = args;
         const now = Math.floor(performance.now());
         this.estimateReflectorOffset(sent, reflectorRaw, now);
@@ -1896,16 +1900,20 @@ class SessionOffsetEstimator {
         resetTrigger = null;
         return trigger;
     }
+
+    shutDown() {
+        this.session = null;
+    }
 }
 
 
-let ViewRootClass;
+let ModelRootClass, ViewRootClass;
 export async function StartSession(model, view) {
+    ModelRootClass = model;
     ViewRootClass = view;
-    // console.profile();
-    // setTimeout(() => console.profileEnd(), 10000);
-    await theGameEngineBridge.readyP; // readyForSession has been received
-    globalThis.timedLog("bridge ready");
+}
+
+async function unityDrivenStartSession() {
     const { apiKey, appId, sessionName, debugLogTypes } = theGameEngineBridge;
     const name = `${sessionName}`;
     const password = 'password';
@@ -1921,7 +1929,7 @@ export async function StartSession(model, view) {
         eventRateLimit: 50, // we need a high rate for distributing scene definitions
         flags: ['unity', 'rawtime'],
         debug: debugLogTypes,
-        model,
+        model: ModelRootClass,
         view: PreloadingViewRoot,
         progressReporter: ratio => {
             globalThis.timedLog(`join progress: ${ratio}`);
@@ -1932,11 +1940,10 @@ export async function StartSession(model, view) {
     sessionOffsetEstimator = new SessionOffsetEstimator(session);
 
     const STEP_DELAY = 26; // aiming to ensure that there will be a new 50ms physics update on every other step
-    let stepHandler = null;
     let stepCount = 0;
     let lastStep = 0;
-    stepHandler = () => {
-        if (!session.view) return; // don't try stepping after leaving session (including during a rejoin)
+    const stepHandler = () => {
+        if (!session?.view) return; // don't try stepping after leaving session (including during a rejoin)
 
         const now = performance.now() | 0;
 
@@ -1950,16 +1957,29 @@ export async function StartSession(model, view) {
     };
 
     if (globalThis.CROQUET_NODE) {
-        setInterval(stepHandler, STEP_DELAY); // as simple as that
+        sessionStepper = setInterval(stepHandler, STEP_DELAY); // as simple as that
     } else {
         ticker = () => {
             // NB: this is called from a tickHook and a websocket message handler -
             // so if there's anything heavy to do, schedule it asynchronously.
 
-            if (serviceTimeouts) serviceTimeouts(); // very cheap if there aren't any
+            timerClient.serviceTimeouts(); // very cheap if there aren't any
 
             stepHandler();
         };
         session.view.realm.vm.controller.tickHook = ticker;
     }
+}
+
+function shutDownSession() {
+    session.leave();
+    session = null;
+    if (globalThis.CROQUET_NODE) {
+        clearInterval(sessionStepper);
+        sessionStepper = null;
+    } else {
+        ticker = () => timerClient.serviceTimeouts();
+    }
+    sessionOffsetEstimator.shutDown();
+    sessionOffsetEstimator = null;
 }
