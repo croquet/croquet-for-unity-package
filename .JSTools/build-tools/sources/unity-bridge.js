@@ -1536,9 +1536,10 @@ class PreloadingViewRoot extends View {
         const sendString = initStrings.join('\x01');
         const array = new TextEncoder().encode(sendString);
         const CHUNK_SIZE = 2500;
-        // Croquet will complain if more than 20 messages are sent in 1 second.
-        // if we'll be sending more than 15 from here, introduce a throttle.
-        const useThrottle = array.length > CHUNK_SIZE * 15;
+        // we've asked Croquet to let us send up to 50 messages in 1 second.
+        // if we'll be sending more than 45 from here, introduce a throttle
+        // so the controller doesn't complain.
+        const useThrottle = array.length > CHUNK_SIZE * 45;
         let ind = 0;
         let isFirst = true;
         let isLast;
@@ -1549,7 +1550,7 @@ class PreloadingViewRoot extends View {
             ind += CHUNK_SIZE;
             isFirst = false;
 
-            if (useThrottle) await new Promise(resolve => setTimeout(resolve, 50)); // eslint-disable-line no-await-in-loop
+            if (useThrottle) await new Promise(resolve => setTimeout(resolve, 20)); // eslint-disable-line no-await-in-loop
         }
     }
 
@@ -1791,11 +1792,11 @@ let resetTrigger = null;
 let pingsProcessed;
 class SessionOffsetEstimator {
     // maintain a best guess of the minimum offset between the local wall clock and the reflector's raw time as received on PING messages and their PONG responses.  this is used purely to judge when an event has been held up on one or other leg, and hence to adjust the calculation of the estimated offset between local and reflector time.
-    // one problem we have to deal with is network batching of messages, meaning that they often arrive late.  so whenever a reflector event indicates that it raw time is earlier than our current guess, we assume that this is closer to the actual timing.  immediately adjust our estimate.
+    // one problem we have to deal with is network batching of messages, meaning that they often arrive late.  so whenever a reflector event indicates that its raw time is earlier than our current guess, we assume that this is closer to the actual timing.  immediately adjust our estimate.
     // but then, in case the minimum offset is in fact gradually growing - i.e., the local wall clock is gradually gaining on the reflector's - the estimate is continually nudged forwards using a bias that adds 0.2ms per second (12ms per minute) of elapsed time since the last adjustment.  we expect that bias to be overridden every few seconds by an accurately timed event - but if the actual offset really is drifting by a few ms per minute, the bias should ensure that we capture that.
-    constructor(session) {
-        this.session = session;
-        const controller = this.controller = session.view.realm.vm.controller;
+    constructor(sess) {
+        this.session = sess;
+        const controller = this.controller = sess.view.realm.vm.controller;
 
         this.offsetEstimate = null;
         this.minRoundtrip = 0;
@@ -1806,7 +1807,7 @@ class SessionOffsetEstimator {
     }
 
     sendPing() {
-        if (session.view) {
+        if (this.session.view) {
             // only actually send pings while there is a view
             const args = { sent: Math.floor(performance.now()) };
             this.controller.connection.PING(args);
@@ -1917,6 +1918,7 @@ export async function StartSession(model, view) {
         tps: 33, // deliberately out of phase with 25Hz ticks from Unity, aiming for decent stepping coverage in WebView sessions
         autoSleep: false,
         expectedSimFPS: 0, // 0 => don't attempt to load-balance simulation
+        eventRateLimit: 50, // we need a high rate for distributing scene definitions
         flags: ['unity', 'rawtime'],
         debug: debugLogTypes,
         model,
