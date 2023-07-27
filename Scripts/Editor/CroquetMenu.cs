@@ -45,13 +45,10 @@ public static class SceneAndPlayWatcher
 
     private static void HandlePlayModeState(PlayModeStateChange state)
     {
-        //if (state == PlayModeStateChange.ExitingEditMode)
-        //{
-        //    CroquetBuilder.EnteringPlayMode();
-        //}
+        // PlayModeStateChange.ExitingEditMode (i.e., entering Play) is handled above in the constructor
         if (state == PlayModeStateChange.EnteredEditMode)
         {
-            CroquetBuilder.EnteredPlayMode();
+            CroquetBuilder.EnteredEditMode();
         }
     }
 
@@ -102,7 +99,7 @@ public class CroquetMenu
         // this item is not available if either
         //   we don't know how to build for the current scene, or
         //   a watcher for any scene is running (MacOS only), or
-        //   a build has been requested and hasn't finished yet 
+        //   a build has been requested and hasn't finished yet
         if (!CroquetBuilder.KnowHowToBuildJS()) return false;
 
 #if !UNITY_EDITOR_WIN

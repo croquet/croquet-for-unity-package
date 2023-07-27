@@ -45,9 +45,9 @@ public class CroquetBuilder
         CroquetBridge bridgeComp = null;
         CroquetRunner runnerComp = null;
         GameObject[] roots = scene.GetRootGameObjects();
-        
+
         CroquetBridge bridge = Object.FindObjectOfType<CroquetBridge>();
-        
+
         if (bridge != null)
         {
             bridgeComp = bridge;
@@ -351,9 +351,9 @@ public class CroquetBuilder
         }
     }
 
-    public static void EnteredPlayMode()
+    public static void EnteredEditMode()
     {
-        // if there is a watcher, re-establish the process reporting its logs
+        // if there is a watcher, when play stops re-establish the process reporting its logs
         string logFile = EditorPrefs.GetString(LOG_PROP, "");
         if (logFile != "")
         {
