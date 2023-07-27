@@ -48,7 +48,7 @@ MonoBehaviour:
   appProperties: {fileID: 11400000, guid: d8a4c352ae9b743efa34611f46d63ff2, type: 2}
   useNodeJS: 0
   appName: 
-  defaultSessionName: 123
+  defaultSessionName: 
   launchThroughMenu: 0
   firstLevelScene: 
   debugLoggingFlags:
@@ -62,7 +62,7 @@ MonoBehaviour:
     classes: 0
     ticks: 0
   croquetSessionState: stopped
-  sessionName: 0
+  sessionName: 
   croquetViewId: 
   croquetViewCount: 0
   croquetActiveScene: 
