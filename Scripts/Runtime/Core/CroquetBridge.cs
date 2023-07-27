@@ -210,7 +210,6 @@ public class CroquetBridge : MonoBehaviour
             clientSock = Context.WebSocket;
 
             Instance.Log("session", "server socket opened");
-            Instance.SetLoadingStage(0.50f, "bridge connected");
 
             // if we're not waiting for a menu to launch the session, set the session name immediately
             if (!Instance.launchThroughMenu) Instance.SetSessionName(""); // use the default name
