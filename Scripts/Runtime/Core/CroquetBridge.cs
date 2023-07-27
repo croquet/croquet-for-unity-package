@@ -119,9 +119,12 @@ public class CroquetBridge : MonoBehaviour
         // Frame cap
         Application.targetFrameRate = 60;
 
-        LoadingProgressDisplay loadingObj = FindObjectOfType<LoadingProgressDisplay>();
+        // while developing a scene, it would be usual for any loading-progress display to be
+        // deactivated so as not to block the view.  if there is one, activate it now.
+        LoadingProgressDisplay loadingObj = FindObjectOfType<LoadingProgressDisplay>(true);
         if (loadingObj != null)
         {
+            loadingObj.gameObject.SetActive(true); // if not already
             DontDestroyOnLoad(loadingObj.gameObject);
             loadingProgressDisplay = loadingObj.GetComponent<LoadingProgressDisplay>();
             if (!launchThroughMenu)
