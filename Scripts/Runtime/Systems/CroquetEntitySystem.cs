@@ -192,8 +192,13 @@ public class CroquetEntitySystem : CroquetSystem
                 {
                     foreach (var go in objects.Result)
                     {
-                        Debug.Log($"Addressable Loaded: {go.name}");
-                        addressableAssets.Add(go.name.ToLower(), go); // @@ remove case-sensitivity
+                        CroquetActorManifest manifest = go.GetComponent<CroquetActorManifest>();
+                        if (manifest != null)
+                        {
+                            string assetName = manifest.pawnType;
+                            Debug.Log($"Loaded asset for {assetName} pawnType");
+                            addressableAssets.Add(assetName, go);
+                        }
                     }
 
                     addressablesReady = true;
@@ -273,9 +278,9 @@ public class CroquetEntitySystem : CroquetSystem
         }
         else
         {
-            if (addressableAssets.ContainsKey(spec.type.ToLower()))
+            if (addressableAssets.ContainsKey(spec.type))
             {
-                gameObjectToMake = Instantiate(addressableAssets[spec.type.ToLower()]); // @@ remove case-sensitivity
+                gameObjectToMake = Instantiate(addressableAssets[spec.type]);
             }
             else
             {

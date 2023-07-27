@@ -625,8 +625,7 @@ export const GameViewManager = class extends ViewService {
     }
 
     assetManifestForType(type) {
-        // @@ for now, Unity side only deals with lower-case names
-        return this.assetManifests[type.toLowerCase()];
+        return this.assetManifests[type];
     }
 
     handleUnityCommand(command, args) {
