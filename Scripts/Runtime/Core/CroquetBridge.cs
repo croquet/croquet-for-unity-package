@@ -106,11 +106,6 @@ public class CroquetBridge : MonoBehaviour
         }
 
         croquetRunner = gameObject.GetComponent<CroquetRunner>();
-        LoadingProgressDisplay loadingObj = FindObjectOfType<LoadingProgressDisplay>();
-        if (loadingObj != null)
-        {
-            loadingProgressDisplay = loadingObj.GetComponent<LoadingProgressDisplay>();
-        }
         croquetSystems = gameObject.GetComponents<CroquetSystem>();
 
         Croquet.Subscribe("croquet", "viewCount", HandleViewCount);
@@ -124,7 +119,20 @@ public class CroquetBridge : MonoBehaviour
         // Frame cap
         Application.targetFrameRate = 60;
 
-        SetLoadingStage(0, "Starting...");
+        LoadingProgressDisplay loadingObj = FindObjectOfType<LoadingProgressDisplay>();
+        if (loadingObj != null)
+        {
+            DontDestroyOnLoad(loadingObj.gameObject);
+            loadingProgressDisplay = loadingObj.GetComponent<LoadingProgressDisplay>();
+            if (!launchThroughMenu)
+            {
+                SetLoadingStage(0.25f, "Connecting...");
+            }
+            else
+            {
+                loadingProgressDisplay.Hide(); // until it's needed
+            }
+        }
 
         lastMessageDiagnostics = Time.realtimeSinceStartup;
 
@@ -296,7 +304,6 @@ public class CroquetBridge : MonoBehaviour
         string pathToNode = ""; // not available
 #endif
 
-        SetLoadingStage(0.25f, "Ready to connect bridge");
         StartCoroutine(croquetRunner.StartCroquetConnection(port, appName, useNodeJS, pathToNode));
     }
 
@@ -373,6 +380,8 @@ public class CroquetBridge : MonoBehaviour
 
     void StartCroquetSession()
     {
+        SetLoadingStage(0.5f, "Starting...");
+
         // jul 2023: we now join the session without knowing which scene we're going to start
         // out in.  if the session already has a running scene, we'll go there; if not, we'll
         // activate the scene with buildIndex 1 and propose to Croquet (knowing that another client
@@ -1032,7 +1041,6 @@ public class CroquetBridge : MonoBehaviour
         Log("session", "Croquet session running!");
         croquetSessionState = "running";
         estimatedDateNowAtReflectorZero = -1; // reset, to accept first value from new view
-        if (loadingProgressDisplay != null) loadingProgressDisplay.Hide();
 
         if (waitingForFirstScene && !launchThroughMenu) Croquet.RequestToLoadScene(SceneManager.GetActiveScene().name, true, true);
     }
@@ -1114,6 +1122,7 @@ public class CroquetBridge : MonoBehaviour
     {
         // triggered by the startup of a GameRootView
         Log("session", $"Croquet view for scene {sceneName} running");
+        if (loadingProgressDisplay != null) loadingProgressDisplay.Hide();
         unitySceneState = "running"; // we're off!
     }
 
@@ -1196,6 +1205,7 @@ public class CroquetBridge : MonoBehaviour
     {
         if (loadingProgressDisplay == null) return;
 
+        loadingProgressDisplay.Show(); // make sure it's visible
         loadingProgressDisplay.SetProgress(ratio, msg);
     }
 
