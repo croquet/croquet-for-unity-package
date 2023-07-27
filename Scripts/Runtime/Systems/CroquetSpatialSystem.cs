@@ -39,36 +39,35 @@ public class CroquetSpatialSystem : CroquetSystem
     public override string InitializationStringForObject(GameObject go)
     {
         // placement doesn't depend on having a SpatialComponent
+        CroquetSpatialComponent sc = null;
+        int instanceID = go.GetInstanceID();
+        if (components.ContainsKey(instanceID)) sc = components[instanceID] as CroquetSpatialComponent;
+
         Transform t = go.transform;
         List<string> strings = new List<string>();
         Vector3 position = t.position;
-        if (!position.Equals(Vector3.zero))
+        if (position.magnitude > (sc ? sc.positionEpsilon : 0.01f))
         {
             strings.Add($"position:{position.x},{position.y},{position.z}");
         }
         Quaternion rotation = t.rotation;
-        if (!rotation.Equals(Quaternion.identity))
+        if (Quaternion.Angle(rotation,Quaternion.identity) > (sc ? sc.rotationEpsilon : 0.01f))
         {
             strings.Add($"rotation:{rotation.x},{rotation.y},{rotation.z},{rotation.w}");
         }
         Vector3 scale = t.lossyScale;
-        if (!scale.Equals(new Vector3(1f, 1f, 1f)))
+        if (Vector3.Distance(scale,new Vector3(1f, 1f, 1f)) > (sc ? sc.scaleEpsilon : 0.01f))
         {
             strings.Add($"scale:{scale.x},{scale.y},{scale.z}");
         }
 
-        int instanceID = go.GetInstanceID();
-        if (components.ContainsKey(instanceID))
+        if (sc && sc.includeOnSceneInit)
         {
-            CroquetSpatialComponent sc = components[instanceID] as CroquetSpatialComponent;
-            if (sc.includeOnSceneInit)
-            {
-                strings.Add($"spatialOptions:{PackedOptionValues(sc)}");
-            }
+            strings.Add($"spatialOptions:{PackedOptionValues(sc)}");
         }
 
         string initString = string.Join('|', strings.ToArray());
-        Debug.Log(initString);
+        // Debug.Log(initString);
         return initString;
     }
 
