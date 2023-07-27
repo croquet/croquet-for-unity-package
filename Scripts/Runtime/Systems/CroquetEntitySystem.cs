@@ -90,9 +90,8 @@ public class CroquetEntitySystem : CroquetSystem
         else
         {
             Instance = this;
+            addressableAssets = new Dictionary<string, GameObject>();
         }
-
-        addressableAssets = new Dictionary<string, GameObject>();
     }
 
     private void Start()

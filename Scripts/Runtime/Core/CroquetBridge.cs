@@ -97,22 +97,21 @@ public class CroquetBridge : MonoBehaviour
         // If there is an instance, and it's not me, delete myself.
         if (Instance != null && Instance != this)
         {
-            Destroy(gameObject);
-            return;
+            Destroy(gameObject); // take responsibility for removing the whole object
         }
         else
         {
             Instance = this;
             DontDestroyOnLoad(gameObject);
+
+            croquetRunner = gameObject.GetComponent<CroquetRunner>();
+            croquetSystems = gameObject.GetComponents<CroquetSystem>();
+
+            Croquet.Subscribe("croquet", "viewCount", HandleViewCount);
+
+            SetCSharpLogOptions("info,session");
+            SetCSharpMeasureOptions("bundle"); // for now, just report handling of message batches from Croquet
         }
-
-        croquetRunner = gameObject.GetComponent<CroquetRunner>();
-        croquetSystems = gameObject.GetComponents<CroquetSystem>();
-
-        Croquet.Subscribe("croquet", "viewCount", HandleViewCount);
-
-        SetCSharpLogOptions("info,session");
-        SetCSharpMeasureOptions("bundle"); // for now, just report handling of message batches from Croquet
     }
 
     void Start()
