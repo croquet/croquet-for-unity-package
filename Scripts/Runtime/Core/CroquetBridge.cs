@@ -19,10 +19,12 @@ public class CroquetBridge : MonoBehaviour
     public CroquetSettings appProperties;
 
     [Header("Session Configuration")]
+    public bool useNodeJS;
     public string appName;
     public string defaultSessionName = "ABCDE";
-    public string initialSceneName; // the scene that will be loaded in a new session
-    public bool useNodeJS;
+    public bool launchThroughMenu = false;
+    private bool waitingForFirstScene = true;
+    public string firstLevelScene; // the scene that will be loaded in a new session
     public CroquetDebugTypes debugLoggingFlags;
 
     [Header("Session State")]
@@ -147,6 +149,12 @@ public class CroquetBridge : MonoBehaviour
     private void ChangedActiveScene(Scene previous, Scene current)
     {
         // this is triggered when we've already arrived in the "current" scene.
+        ArrivedInGameScene(current);
+    }
+
+    private void ArrivedInGameScene(Scene currentScene)
+    {
+        waitingForFirstScene = false;
 
         // immediately deactivate all Croquet objects, but keep a record of those that were active
         // in case we're asked to provide a scene definition
@@ -173,7 +181,7 @@ public class CroquetBridge : MonoBehaviour
         // to be ready to load the scene; ours will immediately pass that test.
         foreach (CroquetSystem system in croquetSystems)
         {
-            system.LoadedScene(current.name);
+            system.LoadedScene(currentScene.name);
         }
     }
 
@@ -203,6 +211,9 @@ public class CroquetBridge : MonoBehaviour
 
             Instance.Log("session", "server socket opened");
             Instance.SetLoadingStage(0.50f, "bridge connected");
+
+            // if we're not waiting for a menu to launch the session, set the session name immediately
+            if (!Instance.launchThroughMenu) Instance.SetSessionName(""); // use the default name
         }
 
         protected override void OnMessage(MessageEventArgs e)
@@ -544,7 +555,7 @@ public class CroquetBridge : MonoBehaviour
             CroquetEntitySystem.Instance.assetManifestString
         };
 
-        // look for all objects in the scene that have a CroquetActorManifest and are active
+        // gather specs for all objects in the scene that have a CroquetActorManifest and are active
         foreach (CroquetActorManifest manifest in sceneDefinitionManifests)
         {
             // the properties for actor.create() are sent as a string prop1:val1|prop2:val2...
@@ -1023,6 +1034,8 @@ public class CroquetBridge : MonoBehaviour
         croquetSessionState = "running";
         estimatedDateNowAtReflectorZero = -1; // reset, to accept first value from new view
         if (loadingProgressDisplay != null) loadingProgressDisplay.Hide();
+
+        if (waitingForFirstScene && !launchThroughMenu) Croquet.RequestToLoadScene(SceneManager.GetActiveScene().name, true, true);
     }
 
     void HandleSceneStateUpdated(string[] args)
@@ -1042,18 +1055,35 @@ public class CroquetBridge : MonoBehaviour
         croquetActiveSceneState = args[1];
         Log("session", $"Croquet scene \"{croquetActiveScene}\", state \"{croquetActiveSceneState}\"");
 
+        if (waitingForFirstScene && !launchThroughMenu) {
+            // on session startup without going through a menu, the first scene load is triggered in
+            // HandleSessionRunning.  when the Croquet
+            // session successfully switches to the scene (starting in "preload" state, because we
+            // force a rebuild), we can start preparing the scene to provide its definition.
+            // if the user later moves on to other scenes, and perhaps even comes back to this one,
+            // we use the normal state-change handling below.
+            if (croquetActiveScene == "") return; // get back to us when you have a scene
+
+            Scene currentScene = SceneManager.GetActiveScene();
+            if (croquetActiveScene == currentScene.name && croquetActiveSceneState == "preload")
+            {
+                ArrivedInGameScene(currentScene); // we were already in the right scene
+            }
+            return; // nothing more to do here
+        }
+
         // if croquet doesn't have an active scene, propose a switch to the first game-level scene
         if (croquetActiveScene == "")
         {
             // propose to Croquet that we load the initial game scene
-            if (initialSceneName == "")
+            if (firstLevelScene == "")
             {
                 Debug.LogWarning("No initial scene name set; defaulting to buildIndex 1");
                 Croquet.RequestToLoadScene(1, false);
             }
             else
             {
-                Croquet.RequestToLoadScene(initialSceneName,
+                Croquet.RequestToLoadScene(firstLevelScene,
                     false); // false => don't force if scene's already loaded/loading
             }
         }
@@ -1062,15 +1092,21 @@ public class CroquetBridge : MonoBehaviour
             unitySceneState = "preparing"; // will trigger repeated checks until we can tell Croquet we're ready (with assets, etc)
             SceneManager.LoadScene(croquetActiveScene);
         }
+        else if (croquetActiveSceneState == "running" && unitySceneState == "preparing")
+        {
+            // this will happen when recovering from a Croquet network glitch... and maybe no other situation
+            ArrivedInGameScene(SceneManager.GetActiveScene());
+        }
     }
 
-    public void RequestToLoadScene(string sceneName, bool forceReload)
+    public void RequestToLoadScene(string sceneName, bool forceReload, bool forceRebuild)
     {
         string[] cmdAndArgs =
         {
             "requestToLoadScene",
             sceneName,
-            forceReload ? "true" : "false"
+            forceReload ? "true" : "false",
+            forceRebuild ? "true" : "false"
         };
         SendToCroquet(cmdAndArgs);
     }

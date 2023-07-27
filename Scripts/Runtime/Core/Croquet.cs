@@ -428,12 +428,17 @@ public static class Croquet
             return;
         }
 
-        CroquetBridge.Instance.RequestToLoadScene(filename, forceReload);
+        RequestToLoadScene(filename, forceReload, false); // don't normally force a rebuild
     }
 
     public static void RequestToLoadScene(string sceneName, bool forceReload)
     {
-        CroquetBridge.Instance.RequestToLoadScene(sceneName, forceReload);
+        RequestToLoadScene(sceneName, forceReload, false); // don't normally force a rebuild
+    }
+
+    public static void RequestToLoadScene(string sceneName, bool forceReload, bool forceRebuild)
+    {
+        CroquetBridge.Instance.RequestToLoadScene(sceneName, forceReload, forceRebuild);
     }
 }
 

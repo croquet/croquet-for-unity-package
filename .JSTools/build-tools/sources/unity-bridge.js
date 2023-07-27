@@ -171,11 +171,13 @@ console.log(`PORT ${portStr}`);
             case 'requestToLoadScene': {
                 // args are
                 //   scene name - if different from model's existing scene, request will always be accepted
-                //   forceFlag - "true" or "false", determining whether init can override *same* scene in model
+                //   forceReload - "true" or "false", determining whether init can override *same* scene in model
+                //   forceRebuild - "true" or "false", determining whether init can use cached scene details if available
                 if (this.preloadingView) {
                     const sceneName = args[0];
-                    const forceFlag = args[1] === 'true';
-                    this.preloadingView.publishRequestToLoadScene(sceneName, forceFlag);
+                    const forceReload = args[1] === 'true';
+                    const forceRebuild = args[2] === 'true';
+                    this.preloadingView.publishRequestToLoadScene(sceneName, forceReload, forceRebuild);
                 } else console.warn(`requestToLoadScene but no preloadingView!`);
                 break;
             }
@@ -287,6 +289,16 @@ console.log(`PORT ${portStr}`);
         this.assetManifestString = assetManifestString;
     }
 
+    tearDownScene() {
+        this.readySceneInUnity = null;
+        if (this.bridgeIsConnected) this.sendCommand('tearDownScene');
+    }
+
+    tearDownSession() {
+        this.readySceneInUnity = null; // can't harm
+        if (this.bridgeIsConnected) this.sendCommand('tearDownSession');
+    }
+
     setJSLogForwarding(toForward) {
         console.log("categories of JS log forwarded to Unity:", toForward);
         const isNode = globalThis.CROQUET_NODE;
@@ -378,7 +390,7 @@ export class InitializationManager extends ModelService {
         this.client = model;
     }
 
-    handleRequestToLoadScene({ sceneName, forceFlag }) {
+    handleRequestToLoadScene({ sceneName, forceReload, forceRebuild }) {
         // this comes from a view (unity or otherwise), for example when a user presses a button to advance to the next level
 
         // if sceneName is the same as activeScene, and the state is 'preload' or 'loading', ignore.  it's already being dealt with.
@@ -387,9 +399,9 @@ export class InitializationManager extends ModelService {
 
         const { activeScene, activeSceneState } = this;
         if (sceneName === activeScene) {
-            if (activeSceneState === 'preload' || activeSceneState === 'loading' || !forceFlag) return;
+            if (activeSceneState === 'preload' || activeSceneState === 'loading' || !forceReload) return;
 
-            this.activeSceneState = 'loading'; // since we already have the initString
+            this.activeSceneState = forceRebuild ? 'preload' : 'loading';
         } else {
             this.activeScene = sceneName;
             this.lastInitString = null;
@@ -1490,14 +1502,14 @@ class PreloadingViewRoot extends View {
     destroyRealViewRoot() {
         if (this.realViewRoot) {
             globalThis.timedLog("destroying real ViewRoot");
-            theGameEngineBridge.sendCommand('tearDownScene');
+            theGameEngineBridge.tearDownScene();
             this.realViewRoot.destroy();
             this.realViewRoot = null;
         }
     }
 
-    publishRequestToLoadScene(sceneName, forceFlag) {
-        this.publish(this.sessionId, 'requestToLoadScene', {sceneName, forceFlag});
+    publishRequestToLoadScene(sceneName, forceReload, forceRebuild) {
+        this.publish(this.sessionId, 'requestToLoadScene', {sceneName, forceReload, forceRebuild});
     }
 
     async attemptToPublishInitialization(sceneName, initStrings) {
@@ -1550,11 +1562,10 @@ class PreloadingViewRoot extends View {
     detach() {
         // this should only happen on a glitch in the Croquet reflector connection,
         // or a deliberate session.leave().
-        // don't even bother tearing down the real ViewRoot. tearDownSession will
-        // reset everything on the Unity side.
         console.log("detaching PreloadingViewRoot");
 
-        if (theGameEngineBridge.bridgeIsConnected) theGameEngineBridge.sendCommand('tearDownSession');
+        this.destroyRealViewRoot(); // will send tearDownScene; also important here not to have a defunct view hanging around, in case session is restored
+        theGameEngineBridge.tearDownSession();
 
         super.detach();
     }
