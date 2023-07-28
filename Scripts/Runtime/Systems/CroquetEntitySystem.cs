@@ -131,8 +131,6 @@ public class CroquetEntitySystem : CroquetSystem
             }
         }
 
-        assetScene = "";
-
         base.TearDownScene();
     }
 
