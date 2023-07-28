@@ -1189,6 +1189,14 @@ public class CroquetBridge : MonoBehaviour
             int buildIndex = int.Parse(postTeardownScene);
             SceneManager.LoadScene(buildIndex);
         }
+        else
+        {
+            // probably a glitch in the Croquet network connection.  should resume shortly.
+            if (loadingProgressDisplay && !loadingProgressDisplay.gameObject.activeSelf)
+            {
+                SetLoadingStage(0.5f, "Reconnecting...");
+            }
+        }
     }
 
     void HandleViewCount(float viewCount)
