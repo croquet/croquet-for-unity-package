@@ -190,6 +190,7 @@ console.log(`PORT ${portStr}`);
                 //   object string 2
                 //   etc
                 const [sceneName, ...initStrings] = args;
+                // console.log(`defineScene for ${sceneName}`);
                 this.readySceneInUnity = sceneName;
                 const view = this.preloadingView;
                 if (view) {
@@ -205,6 +206,7 @@ console.log(`PORT ${portStr}`);
                 // tell the PreloadingViewRoot that we're ready to build the
                 // real root.
                 const sceneName = args[0];
+                // console.log(`readyToRunScene for ${sceneName}`);
                 this.readySceneInUnity = sceneName;
                 const view = this.preloadingView;
                 if (view) view.readyToBuildSceneInUnity(sceneName);
@@ -402,7 +404,10 @@ export class InitializationManager extends ModelService {
 
         const { activeScene, activeSceneState } = this;
         if (sceneName === activeScene) {
-            if (activeSceneState === 'preload' || activeSceneState === 'loading' || !forceReload) return;
+            if (activeSceneState === 'preload' || activeSceneState === 'loading' || !forceReload) {
+                console.log(`denying request to load ${sceneName}`);
+                return;
+            }
 
             this.activeSceneState = forceRebuild ? 'preload' : 'loading';
         } else {
@@ -410,6 +415,7 @@ export class InitializationManager extends ModelService {
             this.lastInitString = null;
             this.activeSceneState = 'preload';
         }
+        console.log(`approved request to load ${sceneName}; state now "${this.activeSceneState}"`);
 
         this.publishSceneState(); // will immediately ditch the main viewRoot
         this.client.onPrepareForInitialization(); // clear out any non-persistent state from model
@@ -424,15 +430,20 @@ export class InitializationManager extends ModelService {
         }
 
         // it's possible that this is an out-of-date request to init a scene that we're no longer interested in.
-        // if sceneName is not the same as our activeScene, or if activeSceneState is anything other than 'preload', or there is already an initializingView, the request is rejected.
+        // if sceneName is not the same as our activeScene, or if activeSceneState is anything other than 'preload', or there is already an initializingView, the request is denied.
         const { activeScene, initializingView } = this;
-        if (sceneName !== activeScene || this.activeSceneState !== 'preload' || initializingView) return;
-
-        console.log(`granting ${viewId} permission to init ${sceneName}`);
-        this.activeSceneState = 'loading';
-        this.initializingView = viewId;
-        this.publishSceneState();
-        this.publish(this.sessionId, 'requestToInitGranted', viewId);
+        let verdict;
+        if (sceneName !== activeScene || this.activeSceneState !== 'preload' || initializingView) {
+            console.log(`denying ${viewId} permission to init ${sceneName}`);
+            verdict = false;
+        } else {
+            console.log(`granting ${viewId} permission to init ${sceneName}`);
+            this.activeSceneState = 'loading';
+            this.initializingView = viewId;
+            this.publishSceneState();
+            verdict = true;
+        }
+        this.publish(viewId, 'requestToInitVerdict', verdict);
     }
 
     sceneInitChunk({ viewId, sceneName, isFirst, isLast, buf }) {
@@ -1439,7 +1450,7 @@ class PreloadingViewRoot extends View {
         this.im = this.wellKnownModel('InitializationManager'); // can't use GetModelService, because this isn't a WorldCore ViewRoot
 
         this.subscribe(this.sessionId, { event: 'sceneStateUpdated', handling: 'immediate'}, this.handleSceneState);
-        this.subscribe(this.sessionId, 'requestToInitGranted', this.handleRequestToInitGranted);
+        this.subscribe(this.viewId, 'requestToInitVerdict', this.handleRequestToInitVerdict);
 
         // we treat the construction of this view as a signal that the session
         // is ready to talk across the bridge.  but without a real viewRoot,
@@ -1484,11 +1495,14 @@ class PreloadingViewRoot extends View {
         }
     }
 
-    handleRequestToInitGranted(viewId) {
-        // the InitializationManager has granted some view's request to init.
-        // if it's us, go ahead.
-        if (viewId === this.viewId) this.onRequestToInitGranted?.();
-        this.onRequestToInitGranted = null;
+    handleRequestToInitVerdict(verdict) {
+        // the InitializationManager has responded to a requestToInit request from this view
+        if (this.onRequestToInitVerdict) {
+            this.onRequestToInitVerdict(verdict);
+            this.onRequestToInitVerdict = null;
+        } else {
+            console.warn("unexpected response to requestToInit");
+        }
     }
 
     buildRealViewRootIfReady() {
@@ -1515,16 +1529,25 @@ class PreloadingViewRoot extends View {
     }
 
     async attemptToPublishInitialization(sceneName, initStrings) {
-        // don't interrupt if we're already sending
+        // don't interrupt if we're already sending, or awaiting permission
         if (this.publishingInitP) await this.publishingInitP;
 
         this.publishingInitP = new Promise(resolve => {
-            this.onRequestToInitGranted = () => {
-                this.publishInitializationInChunks(sceneName, initStrings)
-                    .then(() => {
-                        this.publishingInitP = null;
-                        resolve();
-                    });
+            this.onRequestToInitVerdict = verdict => {
+                const finalize = () => {
+                    this.publishingInitP = null;
+                    resolve();
+                };
+
+                if (verdict) {
+                    // granted
+                    this.publishInitializationInChunks(sceneName, initStrings)
+                        .then(finalize);
+                } else {
+                    // denied
+                    finalize();
+                }
+
                 };
             this.publish(this.sessionId, 'requestToInitScene', { viewId: this.viewId, sceneName });
         });

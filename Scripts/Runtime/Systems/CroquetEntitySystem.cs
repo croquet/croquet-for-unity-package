@@ -17,10 +17,10 @@ public class CroquetEntitySystem : CroquetSystem
     // manages preloading the addressableAssets
     private Dictionary<string, GameObject> addressableAssets;
     private string assetScene = ""; // the scene for which we've loaded the assets
+    private int assetLoadKey = 0; // to distinguish the asynchronous loads
     public string assetManifestString;
 
-    public bool
-        addressablesReady = false; // make public read or emit event to inform other systems that the assets are loaded
+    public bool addressablesReady = false; // make public read or emit event to inform other systems that the assets are loaded
 
     // Create Singleton Reference
     public static CroquetEntitySystem Instance { get; private set; }
@@ -106,12 +106,14 @@ public class CroquetEntitySystem : CroquetSystem
         if (sceneName == assetScene) return; // already loaded (or being searched for)
 
         assetScene = sceneName;
+        addressablesReady = false;
+        assetLoadKey++;
         StartCoroutine(LoadAddressableAssetsWithLabel(sceneName)); // NB: used to be the appName (despite what our docs said)
     }
 
-    public override bool ReadyToRunScene()
+    public override bool ReadyToRunScene(string sceneName)
     {
-        return addressablesReady;
+        return assetScene == sceneName && addressablesReady;
     }
 
     public override void TearDownScene()
@@ -130,8 +132,6 @@ public class CroquetEntitySystem : CroquetSystem
         }
 
         assetScene = "";
-        addressablesReady = false;
-        addressableAssets.Clear();
 
         base.TearDownScene();
     }
@@ -167,11 +167,13 @@ public class CroquetEntitySystem : CroquetSystem
         // Presumably there are more efficient ways to do this (in particular, when
         // there *are* matches).  Maybe by using the list?
 
+        int key = assetLoadKey;
+
         //Returns any IResourceLocations that are mapped to the supplied label
         AsyncOperationHandle<IList<IResourceLocation>> handle = Addressables.LoadResourceLocationsAsync(sceneName);
         yield return handle;
 
-        if (sceneName != assetScene) yield break; // scene has changed while assets were being found
+        if (key != assetLoadKey) yield break; // scene has changed while assets were being found
 
         IList<IResourceLocation> result = handle.Result;
         int prefabs = 0;
@@ -188,15 +190,16 @@ public class CroquetEntitySystem : CroquetSystem
             Addressables.LoadAssetsAsync<GameObject>(sceneName, null).Completed += objects =>
             {
                 // check again that the scene hasn't been changed during the async operation
-                if (sceneName == assetScene)
+                if (key == assetLoadKey)
                 {
+                    addressableAssets.Clear(); // now that we're ready to fill it
                     foreach (var go in objects.Result)
                     {
                         CroquetActorManifest manifest = go.GetComponent<CroquetActorManifest>();
                         if (manifest != null)
                         {
                             string assetName = manifest.pawnType;
-                            Debug.Log($"Loaded asset for {assetName} pawnType");
+                            Debug.Log($"Loaded asset for {assetName} pawnType in load {key}");
                             addressableAssets.Add(assetName, go);
                         }
                     }

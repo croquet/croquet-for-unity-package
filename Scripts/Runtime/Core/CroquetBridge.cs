@@ -167,6 +167,12 @@ public class CroquetBridge : MonoBehaviour
 
     private void ArrivedInGameScene(Scene currentScene)
     {
+        if (currentScene.name != croquetActiveScene)
+        {
+            Debug.Log($"arrived in scene {currentScene.name} but waiting for {croquetActiveScene}");
+            return;
+        }
+
         waitingForFirstScene = false;
 
         // immediately deactivate all Croquet objects, but keep a record of those that were active
@@ -512,11 +518,12 @@ public class CroquetBridge : MonoBehaviour
                 bool ready = true;
                 foreach (CroquetSystem system in croquetSystems)
                 {
-                    if (!system.ReadyToRunScene()) ready = false;
+                    if (!system.ReadyToRunScene(croquetActiveScene)) ready = false;
                 }
 
                 if (ready)
                 {
+                    // Debug.Log($"ready to run scene \"{croquetActiveScene}\"");
                     unitySceneState = "ready";
                     TellCroquetWeAreReadyForScene();
 
@@ -551,6 +558,8 @@ public class CroquetBridge : MonoBehaviour
 
     void SendDefineScene()
     {
+        // Debug.Log($"sending defineScene for {SceneManager.GetActiveScene().name}");
+
         // args to the command across the bridge are
         //   scene name - if different from model's existing scene, init will always be accepted
         //   earlySubscriptionTopics
@@ -592,6 +601,8 @@ public class CroquetBridge : MonoBehaviour
 
     void SendReadyForScene()
     {
+        // Debug.Log($"sending readyToRunScene for {SceneManager.GetActiveScene().name}");
+
         string sceneName = SceneManager.GetActiveScene().name;
         string[] command = new string[]
         {
@@ -602,7 +613,6 @@ public class CroquetBridge : MonoBehaviour
         // send the message directly (bypassing the deferred-message queue)
         string msg = String.Join('\x01', command);
         clientSock.Send(msg);
-
     }
 
     void FixedUpdate()
@@ -1098,7 +1108,14 @@ public class CroquetBridge : MonoBehaviour
         }
         else if (croquetActiveScene != SceneManager.GetActiveScene().name)
         {
+            // Debug.Log($"preparing for scene {croquetActiveScene}");
             unitySceneState = "preparing"; // will trigger repeated checks until we can tell Croquet we're ready (with assets, etc)
+            if (loadingProgressDisplay && !loadingProgressDisplay.gameObject.activeSelf)
+            {
+                // we won't have a chance to set different loading stages.  run smoothly from 0 to 1,
+                // and we'll probably have arrived.
+                SetLoadingStage(1.0f, "Loading...");
+            }
             SceneManager.LoadScene(croquetActiveScene);
         }
         else if (croquetActiveSceneState == "running" && unitySceneState == "preparing")

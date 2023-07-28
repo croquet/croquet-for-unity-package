@@ -56,7 +56,7 @@ public abstract class CroquetSystem : MonoBehaviour
         // by default, nothing
     }
 
-    public virtual bool ReadyToRunScene()
+    public virtual bool ReadyToRunScene(string sceneName)
     {
         return true;
     }
