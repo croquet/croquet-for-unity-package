@@ -48,17 +48,20 @@ public class CroquetSpatialSystem : CroquetSystem
         Vector3 position = t.position;
         if (position.magnitude > (sc ? sc.positionEpsilon : 0.01f))
         {
-            strings.Add($"position:{position.x},{position.y},{position.z}");
+            int precision = sc ? sc.positionMaxDecimals : 4;
+            strings.Add($"position:{FormatFloats(new []{position.x,position.y,position.z}, precision)}");
         }
         Quaternion rotation = t.rotation;
         if (Quaternion.Angle(rotation,Quaternion.identity) > (sc ? sc.rotationEpsilon : 0.01f))
         {
-            strings.Add($"rotation:{rotation.x},{rotation.y},{rotation.z},{rotation.w}");
+            int precision = sc ? sc.rotationMaxDecimals : 6;
+            strings.Add($"rotation:{FormatFloats(new []{rotation.x,rotation.y,rotation.z,rotation.w}, precision)}");
         }
         Vector3 scale = t.lossyScale;
         if (Vector3.Distance(scale,new Vector3(1f, 1f, 1f)) > (sc ? sc.scaleEpsilon : 0.01f))
         {
-            strings.Add($"scale:{scale.x},{scale.y},{scale.z}");
+            int precision = sc ? sc.scaleMaxDecimals : 4;
+            strings.Add($"scale:{FormatFloats(new []{scale.x,scale.y,scale.z}, precision)}");
         }
 
         if (sc && sc.includeOnSceneInit)
@@ -66,10 +69,19 @@ public class CroquetSpatialSystem : CroquetSystem
             strings.Add($"spatialOptions:{PackedOptionValues(sc)}");
         }
 
-        // string initString = string.Join('|', strings.ToArray());
-        // // Debug.Log(initString);
-        // return initString;
         return strings;
+    }
+
+    string FormatFloats(float[] floats, int precision)
+    {
+        string formatter = $"0.{new string('0', precision)}";
+        string[] strings = Array.ConvertAll(floats, f =>
+        {
+            // suggestion adapted from https://stackoverflow.com/questions/4525854/remove-trailing-zeros
+            string strdec = f.ToString(formatter);
+            return strdec.Contains(".") ? strdec.TrimEnd('0').TrimEnd('.') : strdec;
+        });
+        return string.Join(',', strings);
     }
 
     private string PackedOptionValues(CroquetSpatialComponent spatial)
@@ -147,6 +159,7 @@ public class CroquetSpatialSystem : CroquetSystem
             Vector3 initialPos = new Vector3(p[0], p[1], p[2]);
             float[] r = Croquet.ReadActorFloatArray(go, "rotation");
             Quaternion initialRot = new Quaternion(r[0], r[1], r[2], r[3]);
+            initialRot.Normalize(); // probably ok, but doesn't hurt to confirm
             float[] s = Croquet.ReadActorFloatArray(go, "scale");
             Vector3 initialScale = new Vector3(s[0], s[1], s[2]);
 
@@ -460,12 +473,14 @@ public class CroquetSpatialSystem : CroquetSystem
 
     Quaternion QuaternionFromBuffer(byte[] rawData, int startPos)
     {
-        return new Quaternion(
+        Quaternion q = new Quaternion(
             BitConverter.ToSingle(rawData, startPos),
             BitConverter.ToSingle(rawData, startPos + 4),
             BitConverter.ToSingle(rawData, startPos + 8),
             BitConverter.ToSingle(rawData, startPos + 12)
         );
+        q.Normalize(); // probably ok, but doesn't hurt to confirm
+        return q;
     }
 
     Vector3 Vector3FromBuffer(byte[] rawData, int startPos)

@@ -16,9 +16,13 @@ public class CroquetSpatialComponent : CroquetComponent
     public Quaternion rotation = Quaternion.identity ;
     public Vector3 scale = Vector3.one;
 
+    [Header("SCENE LAYOUT")]
+    public int positionMaxDecimals = 4;
+    public int rotationMaxDecimals = 6;
+    public int scaleMaxDecimals = 4;
+
     [Header("OPTIONS")]
     public bool includeOnSceneInit = true;
-    [Space(5)]
     [Header("Smoothing")]
     public float positionSmoothTime = 0.25f; // used by SmoothDamp
     public float positionEpsilon = 0.01f;

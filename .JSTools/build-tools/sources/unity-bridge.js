@@ -10,7 +10,7 @@
 //   \x05 to mark the start of the data argument in a binary-encoded message, such as updateSpatial.
 
 
-import { ModelService, Actor, RegisterMixin, mix, Pawn, View, ViewRoot, ViewService, GetViewService, StartWorldcore, PawnManager, v3_equals, q_equals } from "@croquet/worldcore-kernel";
+import { ModelService, Actor, RegisterMixin, mix, Pawn, View, ViewRoot, ViewService, GetViewService, StartWorldcore, PawnManager, v3_equals, q_equals, q_normalize } from "@croquet/worldcore-kernel";
 
 globalThis.timedLog = msg => {
     // timing on the message itself is now added when forwarding
@@ -500,8 +500,10 @@ export class InitializationManager extends ModelService {
                         props.translation = value.split(',').map(Number); // note name change
                         break;
                     case 'rotation':
+                        props.rotation = q_normalize(value.split(',').map(Number));
+                        break;
                     case 'scale':
-                        props[propName] = value.split(',').map(Number);
+                        props.scale = value.split(',').map(Number);
                         break;
                     default:
                         props[propName] = value;
