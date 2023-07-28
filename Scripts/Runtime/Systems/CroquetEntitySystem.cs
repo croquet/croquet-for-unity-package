@@ -197,7 +197,7 @@ public class CroquetEntitySystem : CroquetSystem
                         if (manifest != null)
                         {
                             string assetName = manifest.pawnType;
-                            Debug.Log($"Loaded asset for {assetName} pawnType in load {key}");
+                            Debug.Log($"Loaded asset for {assetName} pawnType");
                             addressableAssets.Add(assetName, go);
                         }
                     }
