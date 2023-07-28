@@ -182,8 +182,14 @@ public class CroquetBridge : MonoBehaviour
         foreach (CroquetActorManifest manifest in croquetObjects)
         {
             GameObject go = manifest.gameObject;
-            if (go.activeSelf) sceneDefinitionManifests.Add(manifest);
-            go.SetActive(false);
+            if (go.activeSelf)
+            {
+                sceneDefinitionManifests.Add(manifest);
+                go.SetActive(false); // keep it around but invisible until we've read the manifest
+            }
+            else{
+                Destroy(go); // not part of the definition; ditch it immediately
+            }
         }
 
         // for now, the main thing we want to trigger is the loading of the scene-specific assets.
@@ -592,6 +598,8 @@ public class CroquetBridge : MonoBehaviour
 
             string oneObject = String.Join('|', initStrings.ToArray());
             definitionStrings.Add(oneObject);
+
+            Destroy(go); // now that we have what we need
         }
 
         // send the message directly (bypassing the deferred-message queue)
