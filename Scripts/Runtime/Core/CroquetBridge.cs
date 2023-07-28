@@ -580,28 +580,42 @@ public class CroquetBridge : MonoBehaviour
             CroquetEntitySystem.Instance.assetManifestString
         };
 
+        Dictionary<string, string> abbreviations = new Dictionary<string, string>();
+        int tokens = 0;
         // gather specs for all objects in the scene that have a CroquetActorManifest and are active
         foreach (CroquetActorManifest manifest in sceneDefinitionManifests)
         {
             // the properties for actor.create() are sent as a string prop1:val1|prop2:val2...
             List<string> initStrings = new List<string>();
-            initStrings.Add($"ACTOR:{manifest.defaultActorClass}|type:{manifest.pawnType}");
+            initStrings.Add($"ACTOR:{manifest.defaultActorClass}");
+            initStrings.Add($"type:{manifest.pawnType}");
             GameObject go = manifest.gameObject;
             foreach (CroquetSystem system in croquetSystems)
             {
-                string initString = system.InitializationStringForObject(go);
-                if (!initString.Equals(""))
-                {
-                    initStrings.Add(initString);
-                }
+                initStrings.AddRange(system.InitializationStringsForObject(go));
             }
 
-            string oneObject = String.Join('|', initStrings.ToArray());
+            List<string> convertedStrings = new List<string>();
+            foreach (string pair in initStrings)
+            {
+                tokens++;
+                if (!abbreviations.ContainsKey(pair))
+                {
+                    abbreviations.Add(pair, $"${abbreviations.Count}");
+                    convertedStrings.Add(pair); // first and last time
+                }
+                else
+                {
+                    convertedStrings.Add(abbreviations[pair]);
+                }
+            }
+            string oneObject = String.Join('|', convertedStrings.ToArray());
             definitionStrings.Add(oneObject);
 
             Destroy(go); // now that we have what we need
         }
 
+        Log("session", $"scene definition with {tokens} tokens ({abbreviations.Count} unique)");
         // send the message directly (bypassing the deferred-message queue)
         string msg = String.Join('\x01', definitionStrings.ToArray());
         clientSock.Send(msg);

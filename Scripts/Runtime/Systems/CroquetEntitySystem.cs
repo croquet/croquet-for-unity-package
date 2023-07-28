@@ -149,13 +149,6 @@ public class CroquetEntitySystem : CroquetSystem
         return needingInit;
     }
 
-    // $$$ if the defaultActorClass comes from the manifest, we don't need anything here
-    // public override string InitializationStringForInstanceID(int instanceID)
-    // {
-    //     CroquetEntityComponent ec = components[instanceID] as CroquetEntityComponent;
-    //     return $"ACTOR:{ec.actorClassName}";
-    // }
-
     IEnumerator LoadAddressableAssetsWithLabel(string sceneName)
     {
         // @@ LoadAssetsAsync throws an error - asynchronously - if there are

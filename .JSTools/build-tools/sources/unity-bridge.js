@@ -404,7 +404,7 @@ export class InitializationManager extends ModelService {
         const { activeScene, activeSceneState } = this;
         if (sceneName === activeScene) {
             if (activeSceneState === 'preload' || activeSceneState === 'loading' || !forceReload) {
-                console.log(`denying request to load ${sceneName}`);
+                console.log(`denying request to load ${sceneName}; sceneState is "${activeSceneState}"`);
                 return;
             }
 
@@ -413,6 +413,7 @@ export class InitializationManager extends ModelService {
             this.activeScene = sceneName;
             this.lastInitString = null;
             this.activeSceneState = 'preload';
+            this.initializingView = null; // cut off any in-progress load for a previous scene
         }
         console.log(`approved request to load ${sceneName}; state now "${this.activeSceneState}"`);
 
@@ -475,13 +476,17 @@ export class InitializationManager extends ModelService {
     loadFromString(initString) {
         this.client.onInitializationStart();
 
+        const abbreviations = [];
         const [_earlySubscriptionTopics, _assetManifestString, ...entities] = initString.split('\x01');
         entities.forEach(entityString => {
             // console.log(entityString);
             const propertyStrings = entityString.split('|');
             let cls;
             const props = {};
-            propertyStrings.forEach(propAndValue => {
+            propertyStrings.forEach(token => {
+                let propAndValue = token; // unless an abbreviation
+                if (token.startsWith('$')) propAndValue = abbreviations[token.slice(1)];
+                else abbreviations.push(token);
                 const [propName, value] = propAndValue.split(':');
                 switch (propName) {
                     case 'ACTOR':
@@ -1466,7 +1471,7 @@ class PreloadingViewRoot extends View {
         // and fetched the scene-relevant assets).
         const { activeScene } = this.im;
         if (sceneName !== activeScene) {
-            console.warn(`bridge is ready for scene ${sceneName}, but we're running ${activeScene}`);
+            console.log(`bridge is ready for scene ${sceneName}, but we're running ${activeScene}`);
             return;
         }
 
@@ -1568,6 +1573,10 @@ class PreloadingViewRoot extends View {
         let isFirst = true;
         let isLast;
         while (ind < array.length) {
+            if (this.im.activeScene !== sceneName) {
+                console.log(`abandoning publish of ${sceneName}; ${this.im.activeScene} is now active`);
+                return; // bail out
+            }
             isLast = ind + CHUNK_SIZE >= array.length;
             const buf = array.slice(ind, ind + CHUNK_SIZE);
             this.publish(this.sessionId, 'sceneInitChunk', { viewId, sceneName, isFirst, isLast, buf });

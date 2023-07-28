@@ -82,4 +82,10 @@ public abstract class CroquetSystem : MonoBehaviour
     {
         return "";
     }
+
+    public virtual List<string> InitializationStringsForObject(GameObject go)
+    {
+        return new List<string>();
+    }
+
 }

@@ -36,7 +36,7 @@ public class CroquetSpatialSystem : CroquetSystem
         }
     }
 
-    public override string InitializationStringForObject(GameObject go)
+    public override List<string> InitializationStringsForObject(GameObject go)
     {
         // placement doesn't depend on having a SpatialComponent
         CroquetSpatialComponent sc = null;
@@ -66,9 +66,10 @@ public class CroquetSpatialSystem : CroquetSystem
             strings.Add($"spatialOptions:{PackedOptionValues(sc)}");
         }
 
-        string initString = string.Join('|', strings.ToArray());
-        // Debug.Log(initString);
-        return initString;
+        // string initString = string.Join('|', strings.ToArray());
+        // // Debug.Log(initString);
+        // return initString;
+        return strings;
     }
 
     private string PackedOptionValues(CroquetSpatialComponent spatial)
