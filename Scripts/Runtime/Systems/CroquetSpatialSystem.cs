@@ -36,10 +36,80 @@ public class CroquetSpatialSystem : CroquetSystem
         }
     }
 
+    public override List<string> InitializationStringsForObject(GameObject go)
+    {
+        // placement doesn't depend on having a SpatialComponent
+        CroquetSpatialComponent sc = null;
+        int instanceID = go.GetInstanceID();
+        if (components.ContainsKey(instanceID)) sc = components[instanceID] as CroquetSpatialComponent;
+
+        Transform t = go.transform;
+        List<string> strings = new List<string>();
+        Vector3 position = t.position;
+        if (position.magnitude > (sc ? sc.positionEpsilon : 0.01f))
+        {
+            strings.Add($"position:{position.x},{position.y},{position.z}");
+        }
+        Quaternion rotation = t.rotation;
+        if (Quaternion.Angle(rotation,Quaternion.identity) > (sc ? sc.rotationEpsilon : 0.01f))
+        {
+            strings.Add($"rotation:{rotation.x},{rotation.y},{rotation.z},{rotation.w}");
+        }
+        Vector3 scale = t.lossyScale;
+        if (Vector3.Distance(scale,new Vector3(1f, 1f, 1f)) > (sc ? sc.scaleEpsilon : 0.01f))
+        {
+            strings.Add($"scale:{scale.x},{scale.y},{scale.z}");
+        }
+
+        if (sc && sc.includeOnSceneInit)
+        {
+            strings.Add($"spatialOptions:{PackedOptionValues(sc)}");
+        }
+
+        // string initString = string.Join('|', strings.ToArray());
+        // // Debug.Log(initString);
+        // return initString;
+        return strings;
+    }
+
+    private string PackedOptionValues(CroquetSpatialComponent spatial)
+    {
+        float[] props = new float[]
+        {
+            spatial.positionSmoothTime,
+            spatial.positionEpsilon,
+            spatial.rotationLerpPerFrame,
+            spatial.rotationEpsilon,
+            spatial.scaleLerpPerFrame,
+            spatial.scaleEpsilon,
+            spatial.desiredLag,
+            spatial.ballisticNudgeLerp
+        };
+
+        return string.Join<float>(',', props);
+    }
+
+    private void UnpackOptionValues(string packedValues, CroquetSpatialComponent spatial)
+    {
+        float[] props = Array.ConvertAll(packedValues.Split(','), float.Parse);
+        spatial.positionSmoothTime = props[0];
+        spatial.positionEpsilon = props[1];
+        spatial.rotationLerpPerFrame = props[2];
+        spatial.rotationEpsilon = props[3];
+        spatial.scaleLerpPerFrame = props[4];
+        spatial.scaleEpsilon = props[5];
+        spatial.desiredLag = props[6];
+        spatial.ballisticNudgeLerp = props[7];
+    }
+
     private void Update()
     {
         // Update the transform (position, rotation, scale) in the scene
-        UpdateTransforms();
+        // - but only if the scene is running
+        if (CroquetBridge.Instance.unitySceneState == "running")
+        {
+            UpdateTransforms();
+        }
     }
 
     void Unparent(string[] args)
@@ -63,6 +133,13 @@ public class CroquetSpatialSystem : CroquetSystem
 
     public override void PawnInitializationComplete(GameObject go)
     {
+        if (Croquet.HasActorSentProperty(go, "spatialOptions"))
+        {
+            string options = Croquet.ReadActorString(go, "spatialOptions");
+            CroquetSpatialComponent spatial = go.GetComponent<CroquetSpatialComponent>();
+            UnpackOptionValues(options, spatial);
+        }
+
         CroquetActorManifest manifest = go.GetComponent<CroquetActorManifest>();
         if (manifest != null && Array.IndexOf(manifest.mixins, "Ballistic2D") >= 0)
         {
@@ -106,13 +183,13 @@ public class CroquetSpatialSystem : CroquetSystem
             CroquetSpatialComponent spatial = kvp.Value as CroquetSpatialComponent;
             Transform t = spatial.transform; // where the object is right now
 
-            if (Vector3.Distance(spatial.scale,t.localScale) > spatial.scaleDeltaEpsilon)
+            if (Vector3.Distance(spatial.scale,t.localScale) > spatial.scaleEpsilon)
             {
-                t.localScale = Vector3.Lerp(t.localScale, spatial.scale, spatial.scaleLerpFactor);
+                t.localScale = Vector3.Lerp(t.localScale, spatial.scale, spatial.scaleLerpPerFrame);
             }
-            if (Quaternion.Angle(spatial.rotation,t.localRotation) > spatial.rotationDeltaEpsilon)
+            if (Quaternion.Angle(spatial.rotation,t.localRotation) > spatial.rotationEpsilon)
             {
-                t.localRotation = Quaternion.Slerp(t.localRotation, spatial.rotation, spatial.rotationLerpFactor);
+                t.localRotation = Quaternion.Slerp(t.localRotation, spatial.rotation, spatial.rotationLerpPerFrame);
             }
             if (spatial.ballisticVelocity != null)
             {
@@ -178,12 +255,11 @@ public class CroquetSpatialSystem : CroquetSystem
                 // }
 
                 spatial.hasBeenMoved = true;
-            } else if (Vector3.Distance(spatial.position,t.localPosition) > spatial.positionDeltaEpsilon)
+            } else if (Vector3.Distance(spatial.position,t.localPosition) > spatial.positionEpsilon)
             {
                 // SmoothDamp seems better suited to our needs than a constant lerp
                 t.localPosition = Vector3.SmoothDamp(t.localPosition, spatial.position,
                         ref spatial.dampedVelocity, spatial.positionSmoothTime);
-                // Vector3.Lerp(t.localPosition, spatial.position, spatial.positionLerpFactor);
             }
         }
     }

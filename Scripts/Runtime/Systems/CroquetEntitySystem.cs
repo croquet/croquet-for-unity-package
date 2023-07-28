@@ -16,10 +16,11 @@ public class CroquetEntitySystem : CroquetSystem
 {
     // manages preloading the addressableAssets
     private Dictionary<string, GameObject> addressableAssets;
+    private string assetScene = ""; // the scene for which we've loaded the assets
+    private int assetLoadKey = 0; // to distinguish the asynchronous loads
     public string assetManifestString;
-    public bool addressablesReady = false; // make public read or emit event to inform other systems that the assets are loaded
 
-    private CroquetSystem[] allSystems;
+    public bool addressablesReady = false; // make public read or emit event to inform other systems that the assets are loaded
 
     // Create Singleton Reference
     public static CroquetEntitySystem Instance { get; private set; }
@@ -89,21 +90,66 @@ public class CroquetEntitySystem : CroquetSystem
         else
         {
             Instance = this;
+            addressableAssets = new Dictionary<string, GameObject>();
         }
-
-        addressableAssets = new Dictionary<string, GameObject>();
-        // cache a list of all the systems that are running in this scene, for
-        // alerting when object properties change
     }
 
     private void Start()
     {
-        CroquetBridge.Instance.RegisterSystem(this);
-        allSystems = CroquetBridge.Instance.gameObject.GetComponents<CroquetSystem>();
-        StartCoroutine(LoadAddressableAssetsWithLabel(CroquetBridge.Instance.appName));
     }
 
-    IEnumerator LoadAddressableAssetsWithLabel(string label)
+    public override void LoadedScene(string sceneName)
+    {
+        base.LoadedScene(sceneName);
+
+        // this is sent *after* switching the scene
+        if (sceneName == assetScene) return; // already loaded (or being searched for)
+
+        assetScene = sceneName;
+        addressablesReady = false;
+        assetLoadKey++;
+        StartCoroutine(LoadAddressableAssetsWithLabel(sceneName)); // NB: used to be the appName (despite what our docs said)
+    }
+
+    public override bool ReadyToRunScene(string sceneName)
+    {
+        return assetScene == sceneName && addressablesReady;
+    }
+
+    public override void TearDownScene()
+    {
+        // destroy everything in the scene, in preparation either for rebuilding the same scene after
+        // a connection glitch or for loading/reloading due to a requested scene change.
+
+        List<CroquetComponent> componentsToDelete = components.Values.ToList();
+        foreach (CroquetComponent component in componentsToDelete)
+        {
+            CroquetEntityComponent entityComponent = component as CroquetEntityComponent;
+            if (entityComponent != null)
+            {
+                DestroyObject(entityComponent.croquetHandle);
+            }
+        }
+
+        base.TearDownScene();
+    }
+
+    public List<GameObject> UninitializedObjectsInScene()
+    {
+        List<GameObject> needingInit = new List<GameObject>();
+        foreach (CroquetComponent c in components.Values)
+        {
+            CroquetEntityComponent ec = c as CroquetEntityComponent;
+            if (ec.croquetHandle.Equals(""))
+            {
+                needingInit.Add(ec.gameObject);
+            }
+        }
+
+        return needingInit;
+    }
+
+    IEnumerator LoadAddressableAssetsWithLabel(string sceneName)
     {
         // @@ LoadAssetsAsync throws an error - asynchronously - if there are
         // no assets that match the key.  One way to avoid that error is to run
@@ -112,9 +158,13 @@ public class CroquetEntitySystem : CroquetSystem
         // Presumably there are more efficient ways to do this (in particular, when
         // there *are* matches).  Maybe by using the list?
 
+        int key = assetLoadKey;
+
         //Returns any IResourceLocations that are mapped to the supplied label
-        AsyncOperationHandle<IList<IResourceLocation>> handle = Addressables.LoadResourceLocationsAsync(label);
+        AsyncOperationHandle<IList<IResourceLocation>> handle = Addressables.LoadResourceLocationsAsync(sceneName);
         yield return handle;
+
+        if (key != assetLoadKey) yield break; // scene has changed while assets were being found
 
         IList<IResourceLocation> result = handle.Result;
         int prefabs = 0;
@@ -128,22 +178,33 @@ public class CroquetEntitySystem : CroquetSystem
         if (prefabs != 0)
         {
             // Load any assets labelled with this appName from the Addressable Assets
-            Addressables.LoadAssetsAsync<GameObject>(label, null).Completed += objects =>
+            Addressables.LoadAssetsAsync<GameObject>(sceneName, null).Completed += objects =>
             {
-                foreach (var go in objects.Result)
+                // check again that the scene hasn't been changed during the async operation
+                if (key == assetLoadKey)
                 {
-                    Debug.Log($"Addressable Loaded: {go.name}");
-                    addressableAssets.Add(go.name.ToLower(), go); // @@ remove case-sensitivity
+                    addressableAssets.Clear(); // now that we're ready to fill it
+                    foreach (var go in objects.Result)
+                    {
+                        CroquetActorManifest manifest = go.GetComponent<CroquetActorManifest>();
+                        if (manifest != null)
+                        {
+                            string assetName = manifest.pawnType;
+                            Debug.Log($"Loaded asset for {assetName} pawnType");
+                            addressableAssets.Add(assetName, go);
+                        }
+                    }
+
+                    addressablesReady = true;
+                    // prepare this now, because trying within the Socket's OnOpen
+                    // fails.  presumably a thread issue.
+                    assetManifestString = AssetManifestsAsString();
                 }
-                addressablesReady = true;
-                // prepare this now, because trying within the Socket's OnOpen
-                // fails.  presumably a thread issue.
-                assetManifestString = AssetManifestsAsString();
             };
         }
         else
         {
-            Debug.Log($"No addressable assets are tagged '{label}'");
+            Debug.Log($"No addressable assets are tagged '{sceneName}'");
             addressablesReady = true;
         }
     }
@@ -211,9 +272,9 @@ public class CroquetEntitySystem : CroquetSystem
         }
         else
         {
-            if (addressableAssets.ContainsKey(spec.type.ToLower()))
+            if (addressableAssets.ContainsKey(spec.type))
             {
-                gameObjectToMake = Instantiate(addressableAssets[spec.type.ToLower()]); // @@ remove case-sensitivity
+                gameObjectToMake = Instantiate(addressableAssets[spec.type]);
             }
             else
             {
@@ -312,8 +373,7 @@ public class CroquetEntitySystem : CroquetSystem
             component.PawnInitializationComplete();
         }
 
-        foreach (CroquetSystem system in allSystems)
-        {
+        foreach (CroquetSystem system in CroquetBridge.Instance.croquetSystems) {
             if (system.KnowsObject(gameObjectToMake))
             {
                 system.PawnInitializationComplete(gameObjectToMake);
@@ -337,13 +397,26 @@ public class CroquetEntitySystem : CroquetSystem
         // Debug.Log($"setting {propertyName} to {stringyValue}");
         entity.actorProperties[propertyName] = stringyValue;
         GameObject go = entity.gameObject;
-        foreach (CroquetSystem system in allSystems)
+        foreach (CroquetSystem system in CroquetBridge.Instance.croquetSystems)
         {
             if (system.KnowsObject(go))
             {
                 system.ActorPropertySet(go, propertyName);
             }
         }
+    }
+
+    public bool HasActorSentProperty(GameObject gameObject, string propertyName)
+    {
+        CroquetEntityComponent entity = components[gameObject.GetInstanceID()] as CroquetEntityComponent;
+        if (entity == null)
+        {
+            Debug.LogWarning($"failed to find Entity component for {gameObject}");
+            return false;
+        }
+
+        Dictionary<string, string> properties = entity.actorProperties;
+        return properties.ContainsKey(propertyName);
     }
 
     public string GetPropertyValueString(GameObject gameObject, string propertyName)
@@ -395,22 +468,6 @@ public class CroquetEntitySystem : CroquetSystem
             // asking to destroy a pawn for which there's no view can happen just because of
             // creation/destruction timing in worldcore.  not necessarily a problem.
             Debug.Log($"attempt to destroy absent object {croquetHandle}");
-        }
-    }
-
-    public override void TearDownSession()
-    {
-        // destroy everything in the scene for the purposes of rebuilding when the
-        // connection is reestablished.
-
-        List<CroquetComponent> componentsToDelete = components.Values.ToList();
-        foreach (CroquetComponent component in componentsToDelete)
-        {
-            CroquetEntityComponent entityComponent = component as CroquetEntityComponent;
-            if (entityComponent != null)
-            {
-                DestroyObject(entityComponent.croquetHandle);
-            }
         }
     }
 

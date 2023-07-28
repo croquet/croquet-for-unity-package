@@ -19,16 +19,23 @@ public class CroquetBridge : MonoBehaviour
     public CroquetSettings appProperties;
 
     [Header("Session Configuration")]
-    public string appName;
-    public int defaultSessionName = 123;
     public bool useNodeJS;
+    public string appName;
+    public string defaultSessionName = "ABCDE";
+    public bool launchThroughMenu = false;
+    private bool waitingForFirstScene = true;
+    public string firstLevelScene; // the scene that will be loaded in a new session
     public CroquetDebugTypes debugLoggingFlags;
 
     [Header("Session State")]
-    public bool sessionRunning = false;
-    public int sessionName = 0;
+    public string croquetSessionState = "stopped"; // requested, running, stopped
+    public string sessionName = "";
     public string croquetViewId;
     public int croquetViewCount;
+    public string croquetActiveScene; // the scene currently being handled in the model
+    public string croquetActiveSceneState; // the model's scene state (preload, loading, running)
+    public string unitySceneState = "preparing"; // our scene state (preparing, ready, running)
+    private List<CroquetActorManifest> sceneDefinitionManifests = new List<CroquetActorManifest>();
 
     [Header("Network Glitch Simulator")]
     public bool triggerGlitchNow = false;
@@ -61,7 +68,7 @@ public class CroquetBridge : MonoBehaviour
     public static CroquetBridge Instance { get; private set; }
     private CroquetRunner croquetRunner;
 
-    private CroquetSystem[] croquetSystems = new CroquetSystem[0];
+    public CroquetSystem[] croquetSystems = new CroquetSystem[0];
 
     private static Dictionary<string, List<(GameObject, Action<string>)>> croquetSubscriptions = new Dictionary<string, List<(GameObject, Action<string>)>>();
     private static Dictionary<GameObject, HashSet<string>> croquetSubscriptionsByGameObject =
@@ -86,36 +93,25 @@ public class CroquetBridge : MonoBehaviour
 
     void Awake()
     {
-
         // Create Singleton Accessor
         // If there is an instance, and it's not me, delete myself.
         if (Instance != null && Instance != this)
         {
-            Destroy(this);
+            Destroy(gameObject); // take responsibility for removing the whole object
         }
         else
         {
             Instance = this;
+            DontDestroyOnLoad(gameObject);
+
+            croquetRunner = gameObject.GetComponent<CroquetRunner>();
+            croquetSystems = gameObject.GetComponents<CroquetSystem>();
+
+            Croquet.Subscribe("croquet", "viewCount", HandleViewCount);
+
+            SetCSharpLogOptions("info,session");
+            SetCSharpMeasureOptions("bundle"); // for now, just report handling of message batches from Croquet
         }
-
-        croquetRunner = gameObject.GetComponent<CroquetRunner>();
-        LoadingProgressDisplay loadingObj = FindObjectOfType<LoadingProgressDisplay>();
-        if (loadingObj != null)
-        {
-            loadingProgressDisplay = loadingObj.GetComponent<LoadingProgressDisplay>();
-        }
-        croquetSystems = gameObject.GetComponents<CroquetSystem>();
-
-        Croquet.Subscribe("croquet", "sessionRunning", HandleSessionRunning);
-        Croquet.Subscribe("croquet", "viewCount", HandleViewCount);
-
-        SetCSharpLogOptions("info,session");
-        SetCSharpMeasureOptions("bundle"); // for now, just report handling of message batches from Croquet
-    }
-
-    public void RegisterSystem(CroquetSystem system)
-    {
-        croquetSystems.Append(system);
     }
 
     void Start()
@@ -123,11 +119,95 @@ public class CroquetBridge : MonoBehaviour
         // Frame cap
         Application.targetFrameRate = 60;
 
-        SetLoadingStage(0, "Starting...");
+        LoadingProgressDisplay loadingObj = FindObjectOfType<LoadingProgressDisplay>();
+        if (loadingObj != null)
+        {
+            DontDestroyOnLoad(loadingObj.gameObject);
+            loadingProgressDisplay = loadingObj.GetComponent<LoadingProgressDisplay>();
+            if (!launchThroughMenu)
+            {
+                SetLoadingStage(0.25f, "Connecting...");
+            }
+            else
+            {
+                loadingProgressDisplay.Hide(); // until it's needed
+            }
+        }
+
+        SceneManager.activeSceneChanged += ChangedActiveScene; // in Start, so it's only set up once
 
         lastMessageDiagnostics = Time.realtimeSinceStartup;
 
-        // StartWS will be called to set up the websocket, and hence the session
+        StartWS();
+    }
+
+    public void SetSessionName(string newSessionName)
+    {
+        if (newSessionName == "")
+        {
+            sessionName = defaultSessionName;
+            Log("session", $"session name defaulted to {defaultSessionName}");
+        }
+        else
+        {
+            sessionName = newSessionName;
+            Log("session", $"session name set to {newSessionName}");
+        }
+
+    }
+
+    private void ChangedActiveScene(Scene previous, Scene current)
+    {
+        // this is triggered when we've already arrived in the "current" scene.
+        if (croquetSessionState != "stopped")
+        {
+            ArrivedInGameScene(current);
+        }
+    }
+
+    private void ArrivedInGameScene(Scene currentScene)
+    {
+        if (currentScene.name != croquetActiveScene)
+        {
+            Debug.Log($"arrived in scene {currentScene.name} but waiting for {croquetActiveScene}");
+            return;
+        }
+
+        waitingForFirstScene = false;
+
+        // immediately deactivate all Croquet objects, but keep a record of those that were active
+        // in case we're asked to provide a scene definition
+        sceneDefinitionManifests.Clear();
+        CroquetActorManifest[] croquetObjects = FindObjectsByType<CroquetActorManifest>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        foreach (CroquetActorManifest manifest in croquetObjects)
+        {
+            GameObject go = manifest.gameObject;
+            if (go.activeSelf)
+            {
+                sceneDefinitionManifests.Add(manifest);
+                go.SetActive(false); // keep it around but invisible until we've read the manifest
+            }
+            else{
+                Destroy(go); // not part of the definition; ditch it immediately
+            }
+        }
+
+        // for now, the main thing we want to trigger is the loading of the scene-specific assets.
+        // once they are ready, we'll tell Croquet the asset list for this scene, and also any
+        // subscriptions set up by early awakening gameObjects in the scene.
+        // if the scene is already running in Croquet, that information will be enough to trigger our
+        // local bridge to create the ViewRoot, and hence the pawn manager that will tell us all the
+        // pawns to make.
+        // if the scene is *not* yet running in Croquet (in 'preload' state), we'll also send the
+        // details to allow all clients to build the scene: the asset manifests, early subscriptions,
+        // and the details of all pre-placed objects.  other clients may be sending the information
+        // too; the first to ask gets permission.  the model on every client will initialise
+        // itself with the scene's state, and then the client's view will wait for its Unity side
+        // to be ready to load the scene; ours will immediately pass that test.
+        foreach (CroquetSystem system in croquetSystems)
+        {
+            system.LoadedScene(currentScene.name);
+        }
     }
 
     private void OnDestroy()
@@ -156,38 +236,8 @@ public class CroquetBridge : MonoBehaviour
 
             Instance.Log("session", "server socket opened");
 
-            string apiKey = Instance.appProperties.apiKey;
-            string appId = Instance.appProperties.appPrefix + "." + Instance.appName;
-            string sessionName = Instance.sessionName.ToString();
-            string assetManifests = CroquetEntitySystem.Instance.assetManifestString;
-            string earlySubscriptionTopics = Instance.EarlySubscriptionTopicsAsString();
-            string debugLogTypes = Instance.debugLoggingFlags.ToString();
-
-            bool waitForUserLaunch = Instance.croquetRunner.waitForUserLaunch;
-
-            string[] command = new string[] {
-                "readyForSession",
-                apiKey,
-                appId,
-                sessionName,
-                assetManifests,
-                earlySubscriptionTopics,
-                debugLogTypes,
-                waitForUserLaunch ? "userLaunch" : "autoLaunch"
-            };
-
-            // issue a warning if Croquet debug logging is enabled when not using an
-            // external browser
-            if (!waitForUserLaunch && debugLogTypes != "")
-            {
-                Debug.LogWarning($"Croquet debug logging is set to \"{debugLogTypes}\"");
-            }
-
-            // send the message directly (bypassing the deferred-message queue)
-            string msg = String.Join('\x01', command);
-            clientSock.Send(msg);
-
-            Instance.SetLoadingStage(0.50f, "bridge connected");
+            // if we're not waiting for a menu to launch the session, set the session name immediately
+            if (!Instance.launchThroughMenu) Instance.SetSessionName(""); // use the default name
         }
 
         protected override void OnMessage(MessageEventArgs e)
@@ -201,8 +251,6 @@ public class CroquetBridge : MonoBehaviour
             Instance.Log("session", System.String.Format("server socket closed {0}: {1}", e.Code, e.Reason));
         }
     }
-
-    private bool hasStartedWS = false;
 
     void StartWS()
     {
@@ -221,12 +269,6 @@ public class CroquetBridge : MonoBehaviour
             return;
         }
 #endif
-        hasStartedWS = true; // even if it turns out to fail, don't try again
-
-        // if the scene has an object that inherits from SessionNameChooser, assume that
-        // the user has been given an opportunity to set the session name.
-        SessionNameChooser chooser = FindObjectOfType<SessionNameChooser>();
-        sessionName = chooser == null ? defaultSessionName : PlayerPrefs.GetInt("sessionNameValue", 1);
 
         Log("session", "building WS Server on open port");
         int port = appProperties.preferredPort;
@@ -279,7 +321,6 @@ public class CroquetBridge : MonoBehaviour
         string pathToNode = ""; // not available
 #endif
 
-        SetLoadingStage(0.25f, "Ready to connect bridge");
         StartCoroutine(croquetRunner.StartCroquetConnection(port, appName, useNodeJS, pathToNode));
     }
 
@@ -354,9 +395,46 @@ public class CroquetBridge : MonoBehaviour
         messageQueue.Enqueue(qm);
     }
 
+    void StartCroquetSession()
+    {
+        SetLoadingStage(0.5f, "Starting...");
+
+        // jul 2023: we now join the session without knowing which scene we're going to start
+        // out in.  if the session already has a running scene, we'll go there; if not, we'll
+        // activate the scene with buildIndex 1 and propose to Croquet (knowing that another client
+        // might get there first) that it load that one.
+        string apiKey = appProperties.apiKey;
+        string appId = appProperties.appPrefix + "." + appName;
+        string debugLogTypes = debugLoggingFlags.ToString();
+
+        bool waitForUserLaunch = croquetRunner.waitForUserLaunch;
+
+        string[] command = new string[] {
+            "readyForSession",
+            apiKey,
+            appId,
+            sessionName,
+            debugLogTypes,
+            waitForUserLaunch.ToString()
+        };
+
+        // issue a warning if Croquet debug logging is enabled when not using an
+        // external browser
+        if (!waitForUserLaunch && debugLogTypes != "")
+        {
+            Debug.LogWarning($"Croquet debug logging is set to \"{debugLogTypes}\"");
+        }
+
+        // send the message directly (bypassing the deferred-message queue)
+        string msg = String.Join('\x01', command);
+        clientSock.Send(msg);
+
+        croquetSessionState = "requested";
+    }
+
     public void SendToCroquet(params string[] strings)
     {
-        if (!sessionRunning)
+        if (croquetSessionState != "running")
         {
             Debug.LogWarning($"attempt to send when Croquet session is not running: {string.Join(',', strings)}");
             return;
@@ -366,7 +444,7 @@ public class CroquetBridge : MonoBehaviour
 
     public void SendToCroquetSync(params string[] strings)
     {
-        if (!sessionRunning)
+        if (croquetSessionState != "running")
         {
             Debug.LogWarning($"attempt to send when Croquet session is not running: {string.Join(',', strings)}");
             return;
@@ -438,17 +516,34 @@ public class CroquetBridge : MonoBehaviour
 
     void Update()
     {
-        // before WS has been started, check whether we're ready to do so
-        if (!hasStartedWS && CroquetEntitySystem.Instance.addressablesReady)
+        if (clientSock != null && croquetSessionState == "stopped" && sessionName != "") StartCroquetSession();
+        else if (croquetSessionState == "running")
         {
-            StartWS();
-        }
+            if (unitySceneState == "preparing" && SceneManager.GetActiveScene().name == croquetActiveScene)
+            {
+                bool ready = true;
+                foreach (CroquetSystem system in croquetSystems)
+                {
+                    if (!system.ReadyToRunScene(croquetActiveScene)) ready = false;
+                }
 
-        if (sessionRunning)
-        {
+                if (ready)
+                {
+                    // Debug.Log($"ready to run scene \"{croquetActiveScene}\"");
+                    unitySceneState = "ready";
+                    TellCroquetWeAreReadyForScene();
+
+                    foreach (CroquetSystem system in croquetSystems)
+                    {
+                        system.ClearSceneBeforeRunning();
+                    }
+                }
+            }
+
             // things to check periodically while the session is supposedly in full flow
             if (triggerGlitchNow)
             {
+                // @@ need to debounce this
                 triggerGlitchNow = false; // cancel the request
 
                 int milliseconds = (int) (glitchDuration * 1000f);
@@ -457,6 +552,89 @@ public class CroquetBridge : MonoBehaviour
                 SendToCroquetSync("simulateNetworkGlitch", milliseconds.ToString());
             }
         }
+    }
+
+    void TellCroquetWeAreReadyForScene()
+    {
+        if (croquetActiveSceneState == "preload") SendDefineScene();
+        else SendReadyForScene();
+
+        sceneDefinitionManifests.Clear(); // no longer needed
+    }
+
+    void SendDefineScene()
+    {
+        // Debug.Log($"sending defineScene for {SceneManager.GetActiveScene().name}");
+
+        // args to the command across the bridge are
+        //   scene name - if different from model's existing scene, init will always be accepted
+        //   earlySubscriptionTopics
+        //   assetManifests
+        //   object string 1
+        //   object string 2
+        //   etc
+        List<string> definitionStrings = new List<string>() {
+            "defineScene",
+            SceneManager.GetActiveScene().name,
+            EarlySubscriptionTopicsAsString(),
+            CroquetEntitySystem.Instance.assetManifestString
+        };
+
+        Dictionary<string, string> abbreviations = new Dictionary<string, string>();
+        int tokens = 0;
+        // gather specs for all objects in the scene that have a CroquetActorManifest and are active
+        foreach (CroquetActorManifest manifest in sceneDefinitionManifests)
+        {
+            // the properties for actor.create() are sent as a string prop1:val1|prop2:val2...
+            List<string> initStrings = new List<string>();
+            initStrings.Add($"ACTOR:{manifest.defaultActorClass}");
+            initStrings.Add($"type:{manifest.pawnType}");
+            GameObject go = manifest.gameObject;
+            foreach (CroquetSystem system in croquetSystems)
+            {
+                initStrings.AddRange(system.InitializationStringsForObject(go));
+            }
+
+            List<string> convertedStrings = new List<string>();
+            foreach (string pair in initStrings)
+            {
+                tokens++;
+                if (!abbreviations.ContainsKey(pair))
+                {
+                    abbreviations.Add(pair, $"${abbreviations.Count}");
+                    convertedStrings.Add(pair); // first and last time
+                }
+                else
+                {
+                    convertedStrings.Add(abbreviations[pair]);
+                }
+            }
+            string oneObject = String.Join('|', convertedStrings.ToArray());
+            definitionStrings.Add(oneObject);
+
+            Destroy(go); // now that we have what we need
+        }
+
+        Log("session", $"scene definition with {tokens} tokens ({abbreviations.Count} unique)");
+        // send the message directly (bypassing the deferred-message queue)
+        string msg = String.Join('\x01', definitionStrings.ToArray());
+        clientSock.Send(msg);
+    }
+
+    void SendReadyForScene()
+    {
+        // Debug.Log($"sending readyToRunScene for {SceneManager.GetActiveScene().name}");
+
+        string sceneName = SceneManager.GetActiveScene().name;
+        string[] command = new string[]
+        {
+            "readyToRunScene",
+            sceneName
+        };
+
+        // send the message directly (bypassing the deferred-message queue)
+        string msg = String.Join('\x01', command);
+        clientSock.Send(msg);
     }
 
     void FixedUpdate()
@@ -469,7 +647,7 @@ public class CroquetBridge : MonoBehaviour
 
         long duration = DateTimeOffset.Now.ToUnixTimeMilliseconds() - start;
         if (duration == 0) duration++;
-        if (sessionRunning) Measure("update", start.ToString(), duration.ToString());
+        if (croquetSessionState == "running") Measure("update", start.ToString(), duration.ToString());
 
         float now = Time.realtimeSinceStartup;
         if (now - lastMessageDiagnostics > 1f)
@@ -588,8 +766,12 @@ public class CroquetBridge : MonoBehaviour
         else if (command == "croquetPing") HandleCroquetPing(args[0]);
         else if (command == "setLogOptions") SetCSharpLogOptions(args[0]);  //OUT:LOGGER
         else if (command == "setMeasureOptions") SetCSharpMeasureOptions(args[0]);//OUT:METRICS
-        else if (command == "joinProgress") HandleJoinProgress(args[0]);
-        else if (command == "tearDownSession") HandleSessionTeardown();
+        else if (command == "joinProgress") HandleSessionJoinProgress(args[0]);
+        else if (command == "sessionRunning") HandleSessionRunning(args[0]);
+        else if (command == "sceneStateUpdated") HandleSceneStateUpdated(args);
+        else if (command == "sceneRunning") HandleSceneRunning(args[0]);
+        else if (command == "tearDownScene") HandleSceneTeardown();
+        else if (command == "tearDownSession") HandleSessionTeardown(args[0]);
         else if (command == "croquetTime") HandleCroquetReflectorTime(args[0]);
         else if (!messageWasProcessed)
         {
@@ -624,7 +806,7 @@ public class CroquetBridge : MonoBehaviour
         if (!croquetSubscriptions.ContainsKey(topic))
         {
             croquetSubscriptions[topic] = new List<(GameObject, Action<string>)>();
-            if (Instance != null && Instance.sessionRunning)
+            if (Instance != null && Instance.unitySceneState == "running")
             {
                 Instance.SendToCroquet("registerForEventTopic", topic);
             }
@@ -704,9 +886,9 @@ public class CroquetBridge : MonoBehaviour
                     if (croquetSubscriptions[topic].Count == 0)
                     {
                         // no remaining subscriptions for this topic at all
-                        // Debug.Log($"removed last subscription for {topic}");
+                        Debug.Log($"removed last subscription for {topic}");
                         croquetSubscriptions.Remove(topic);
-                        if (Instance != null && Instance.sessionRunning)
+                        if (Instance != null && Instance.unitySceneState == "running")
                         {
                             Instance.SendToCroquet("unregisterEventTopic", topic);
                         }
@@ -785,7 +967,7 @@ public class CroquetBridge : MonoBehaviour
                         {
                             // Debug.Log($"removed last subscription for {topic}");
                             croquetSubscriptions.Remove(topic);
-                            if (sessionRunning)
+                            if (unitySceneState == "running")
                             {
                                 // don't even try to send if this is happening as part of a teardown
                                 SendToCroquet("unregisterEventTopic", topic);
@@ -878,31 +1060,156 @@ public class CroquetBridge : MonoBehaviour
         }
     }
 
-    void HandleJoinProgress(string ratio)
+    void HandleSessionJoinProgress(string ratio)
     {
-        if (sessionRunning) return; // loading has finished; this is probably just a delayed message
+        if (unitySceneState == "running") return; // loading has finished; this is probably just a delayed message
 
         SetLoadingProgress(float.Parse(ratio));
     }
 
     void HandleSessionRunning(string viewId)
     {
-        // this is dispatched from the Croquet session's ViewRoot constructor
-        Log("session", "Croquet session running!");
-        sessionRunning = true;
+        // this is dispatched from the Croquet session's PreloadingViewRoot constructor, telling us which
+        // viewId we have in the session
         croquetViewId = viewId;
+        Log("session", "Croquet session running!");
+        croquetSessionState = "running";
         estimatedDateNowAtReflectorZero = -1; // reset, to accept first value from new view
-        if (loadingProgressDisplay != null) loadingProgressDisplay.Hide();
+
+        if (waitingForFirstScene && !launchThroughMenu) Croquet.RequestToLoadScene(SceneManager.GetActiveScene().name, true, true);
     }
 
-    void HandleSessionTeardown()
+    void HandleSceneStateUpdated(string[] args)
     {
-        Log("session", "Croquet session teardown!");
+        // args are [activeScene, activeSceneState]
+
+        // this is sent by the PreloadingViewRoot, under the following circs:
+        // - construction of the ViewRoot, forwarding the InitializationManager's current state (which could
+        //   be anything, including presence of no scene at all when the session first starts)
+        // - on every update in scene name, or of scene state (preload, loading, running)
+
+        // if the state change implies a reboot of the view (a new scene, or a switch from 'running' to
+        // 'loading' for a reload), any previous ViewRoot will already have been destroyed, triggering
+        // a tearDownScene command that we use to clear out all Croquet-managed gameObjects.
+
+        croquetActiveScene = args[0];
+        croquetActiveSceneState = args[1];
+        Log("session", $"Croquet scene \"{croquetActiveScene}\", state \"{croquetActiveSceneState}\"");
+
+        if (waitingForFirstScene && !launchThroughMenu) {
+            // on session startup without going through a menu, the first scene load is triggered in
+            // HandleSessionRunning.  when the Croquet
+            // session successfully switches to the scene (starting in "preload" state, because we
+            // force a rebuild), we can start preparing the scene to provide its definition.
+            // if the user later moves on to other scenes, and perhaps even comes back to this one,
+            // we use the normal state-change handling below.
+            if (croquetActiveScene == "") return; // get back to us when you have a scene
+
+            Scene currentScene = SceneManager.GetActiveScene();
+            if (croquetActiveScene == currentScene.name && croquetActiveSceneState == "preload")
+            {
+                ArrivedInGameScene(currentScene); // we were already in the right scene
+            }
+            return; // nothing more to do here
+        }
+
+        // if croquet doesn't have an active scene, propose a switch to the first game-level scene
+        if (croquetActiveScene == "")
+        {
+            // propose to Croquet that we load the initial game scene
+            if (firstLevelScene == "")
+            {
+                Debug.LogWarning("No initial scene name set; defaulting to buildIndex 1");
+                Croquet.RequestToLoadScene(1, false);
+            }
+            else
+            {
+                Croquet.RequestToLoadScene(firstLevelScene,
+                    false); // false => don't force if scene's already loaded/loading
+            }
+        }
+        else if (croquetActiveScene != SceneManager.GetActiveScene().name)
+        {
+            // Debug.Log($"preparing for scene {croquetActiveScene}");
+            unitySceneState = "preparing"; // will trigger repeated checks until we can tell Croquet we're ready (with assets, etc)
+            if (loadingProgressDisplay && !loadingProgressDisplay.gameObject.activeSelf)
+            {
+                // we won't have a chance to set different loading stages.  run smoothly from 0 to 1,
+                // and we'll probably have arrived.
+                SetLoadingStage(1.0f, "Loading...");
+            }
+            SceneManager.LoadScene(croquetActiveScene);
+        }
+        else if (croquetActiveSceneState == "running" && unitySceneState == "preparing")
+        {
+            // this will happen when recovering from a Croquet network glitch... and maybe no other situation
+            ArrivedInGameScene(SceneManager.GetActiveScene());
+        }
+    }
+
+    public void RequestToLoadScene(string sceneName, bool forceReload, bool forceRebuild)
+    {
+        string[] cmdAndArgs =
+        {
+            "requestToLoadScene",
+            sceneName,
+            forceReload ? "true" : "false",
+            forceRebuild ? "true" : "false"
+        };
+        SendToCroquet(cmdAndArgs);
+    }
+
+    void HandleSceneRunning(string sceneName)
+    {
+        // triggered by the startup of a GameRootView
+        Log("session", $"Croquet view for scene {sceneName} running");
+        if (loadingProgressDisplay != null) loadingProgressDisplay.Hide();
+        unitySceneState = "running"; // we're off!
+    }
+
+    void HandleSceneTeardown()
+    {
+        // this is triggered by the PreloadingViewRoot when it destroys the game's running viewRoot as part
+        // of a scene switch
+        Log("session", "Croquet scene teardown");
         deferredMessages.Clear();
-        sessionRunning = false; // suppresses sending of any further messages over the bridge
+        unitySceneState = "preparing"; // ready to load the next
+        foreach (CroquetSystem system in croquetSystems)
+        {
+            system.TearDownScene();
+        }
+    }
+
+    void HandleSessionTeardown(string postTeardownScene)
+    {
+        // this is triggered by the disappearance (temporary or otherwise) of the Croquet session,
+        // or the processing of a "shutdown" command sent from here.
+        string postTeardownMsg = postTeardownScene == "" ? "" : $" (and jump to {postTeardownScene})";
+        Log("session", $"Croquet session teardown{postTeardownMsg}");
+        deferredMessages.Clear();
+        croquetSessionState = "stopped"; // suppresses sending of any further messages over the bridge
         foreach (CroquetSystem system in croquetSystems)
         {
             system.TearDownSession();
+        }
+
+        sessionName = "";
+        croquetViewId = "";
+        croquetActiveScene = ""; // wait for session to resume and tell us the scene
+        croquetActiveSceneState = "";
+
+        if (postTeardownScene != "")
+        {
+            int buildIndex = int.Parse(postTeardownScene);
+            SceneManager.LoadScene(buildIndex);
+        }
+        else
+        {
+            // probably a glitch in the Croquet network connection.  should resume shortly.
+            if (loadingProgressDisplay && !loadingProgressDisplay.gameObject.activeSelf)
+            {
+                SetLoadingStage(0.5f, "Reconnecting...");
+            }
         }
     }
 
@@ -958,6 +1265,7 @@ public class CroquetBridge : MonoBehaviour
     {
         if (loadingProgressDisplay == null) return;
 
+        loadingProgressDisplay.Show(); // make sure it's visible
         loadingProgressDisplay.SetProgress(ratio, msg);
     }
 

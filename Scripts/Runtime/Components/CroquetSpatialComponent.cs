@@ -4,6 +4,7 @@ using System.ComponentModel;
 using UnityEngine;
 
 [AddComponentMenu("Croquet/SpatialComponent")]
+[SelectionBase]
 public class CroquetSpatialComponent : CroquetComponent
 {
     public override CroquetSystem croquetSystem { get; set; } = CroquetSpatialSystem.Instance;
@@ -15,22 +16,24 @@ public class CroquetSpatialComponent : CroquetComponent
     public Quaternion rotation = Quaternion.identity ;
     public Vector3 scale = Vector3.one;
 
-    [Header("Options")]
-    public bool initializeWithSceneTransform = false;
-    [Space(10)]
-    public float positionDeltaEpsilon = 0.01f;
-    public float rotationDeltaEpsilon = 0.01f;
-    public float scaleDeltaEpsilon = 0.01f;
-    [Space(10)]
+    [Header("OPTIONS")]
+    public bool includeOnSceneInit = true;
+    [Space(5)]
+    [Header("Smoothing")]
     public float positionSmoothTime = 0.25f; // used by SmoothDamp
-    public Vector3 dampedVelocity = Vector3.zero; // used by SmoothDamp
-    public float rotationLerpFactor = 0.2f;
-    public float scaleLerpFactor = 0.2f;
-
+    public float positionEpsilon = 0.01f;
+    [HideInInspector] public Vector3 dampedVelocity = Vector3.zero; // used by SmoothDamp
+    [Space(5)]
+    public float rotationLerpPerFrame = 0.2f;
+    public float rotationEpsilon = 0.01f;
+    [Space(5)]
+    public float scaleLerpPerFrame = 0.2f;
+    public float scaleEpsilon = 0.01f;
+    [Space(5)]
     [Header("Ballistic motion")]
     public float desiredLag = 0.05f; // seconds behind
-    public float currentLag = 0f;
-    public Vector3? ballisticVelocity = null;
+    [HideInInspector] public float currentLag = 0f;
+    [HideInInspector] public Vector3? ballisticVelocity = null;
     public float ballisticNudgeLerp = 0.2f; // adjustments to "ballistic" movement
 
     // public List<string> telemetry = new List<string>(); // for testing
