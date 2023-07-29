@@ -414,6 +414,11 @@ public static class Croquet
 
     public static void RequestToLoadScene(int sceneBuildIndex, bool forceReload)
     {
+        RequestToLoadScene(sceneBuildIndex, forceReload, false); // don't normally force a rebuild
+    }
+
+    public static void RequestToLoadScene(int sceneBuildIndex, bool forceReload, bool forceRebuild)
+    {
         string path = SceneUtility.GetScenePathByBuildIndex(sceneBuildIndex);
         if (path == "")
         {
@@ -428,7 +433,7 @@ public static class Croquet
             return;
         }
 
-        RequestToLoadScene(filename, forceReload, false); // don't normally force a rebuild
+        RequestToLoadScene(filename, forceReload, forceRebuild);
     }
 
     public static void RequestToLoadScene(string sceneName, bool forceReload)
