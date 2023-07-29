@@ -418,17 +418,12 @@ export class InitializationManager extends ModelService {
         console.log(`approved request to load ${sceneName}; state now "${this.activeSceneState}"`);
 
         this.publishSceneState(); // will immediately ditch the main viewRoot
-        this.client.onPrepareForInitialization(); // clear out any non-persistent state from model
+        this.client?.onPrepareForInitialization(); // clear out any non-persistent state from model
 
         if (this.activeSceneState === 'loading') this.loadFromString(this.lastInitString);
     }
 
     handleRequestToInitScene({ viewId, sceneName }) {
-        if (!this.client) {
-            console.warn("Attempt to initialize scene without an appointed AM_InitializationClient object");
-            return;
-        }
-
         // it's possible that this is an out-of-date request to init a scene that we're no longer interested in.
         // if sceneName is not the same as our activeScene, or if activeSceneState is anything other than 'preload', or there is already an initializingView, the request is denied.
         const { activeScene, initializingView } = this;
@@ -474,10 +469,16 @@ export class InitializationManager extends ModelService {
     }
 
     loadFromString(initString) {
-        this.client.onInitializationStart();
+        this.client?.onInitializationStart();
 
         const abbreviations = [];
         const [_earlySubscriptionTopics, _assetManifestString, ...entities] = initString.split('\x01');
+
+        if (entities.length && !this.client) {
+            console.warn("Attempt to initialize scene entities without an appointed AM_InitializationClient object");
+            entities.length = 0; // just ignore them
+        }
+
         entities.forEach(entityString => {
             // console.log(entityString);
             const propertyStrings = entityString.split('|');
