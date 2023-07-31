@@ -22,7 +22,7 @@ public class PresentOncePositionUpdated : MonoBehaviour
         // if(CroquetSpatialSystem.Instance.hasObjectMoved(gameObject.GetInstanceID()))
         if (sc.hasBeenMoved || (!waitUntilMove && sc.hasBeenPlaced) || Time.realtimeSinceStartup - startTime >= timeout)
         {
-            foreach (var renderer in GetComponentsInChildren<MeshRenderer>())
+            foreach (var renderer in GetComponentsInChildren<Renderer>())
             {
                 renderer.enabled = true;
             }
