@@ -59,8 +59,8 @@ public class CroquetBuilder
         sceneRunnerComponent = runnerComp;
     }
 
-    public static string CroquetBuildToolsInPackage = Path.GetFullPath("Packages/com.croquet.multiplayer/.JSTools");
-    public static string NodeExeInPackage = Path.GetFullPath("Packages/com.croquet.multiplayer/.JSTools/NodeJS/node.exe");
+    public static string CroquetBuildToolsInPackage = Path.GetFullPath("Packages/io.croquet.multiplayer/.JSTools");
+    public static string NodeExeInPackage = Path.GetFullPath("Packages/io.croquet.multiplayer/.JSTools/NodeJS/node.exe");
 
     public struct JSBuildDetails
     {
