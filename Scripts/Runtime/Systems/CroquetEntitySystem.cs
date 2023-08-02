@@ -415,7 +415,7 @@ public class CroquetEntitySystem : CroquetSystem
             return false;
         }
 
-        Dictionary<string, string> properties = entity.actorProperties;
+        StringStringSerializableDict properties = entity.actorProperties;
         return properties.ContainsKey(propertyName);
     }
 
@@ -428,7 +428,7 @@ public class CroquetEntitySystem : CroquetSystem
             return null;
         }
 
-        Dictionary<string, string> properties = entity.actorProperties;
+        StringStringSerializableDict properties = entity.actorProperties;
         if (!properties.ContainsKey(propertyName))
         {
             Debug.LogWarning($"failed to find property {propertyName} in {gameObject}");

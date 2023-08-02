@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using UnityEditor;
 using UnityEngine;
 
 [AddComponentMenu("Croquet/EntityComponent")]
@@ -20,5 +21,10 @@ public class CroquetEntityComponent : CroquetComponent
     //   ReadActorStringArray(prop)
     //   ReadActorFloat(prop)
     //   ReadActorFloatArray(prop)
-    public Dictionary<string, string> actorProperties = new Dictionary<string, string>();
+    public StringStringSerializableDict actorProperties = new StringStringSerializableDict();
+    
+   
 }
+
+[Serializable]
+public class StringStringSerializableDict : SerializableDictionary<string, string> { }
