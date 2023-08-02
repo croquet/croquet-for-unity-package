@@ -184,7 +184,7 @@ public class CroquetRunner : MonoBehaviour
         if (!useNodeJS && waitForUserLaunch)
         {
             // cases (b), (g)
-            TimedLog($"ready for browser to load from {webURL}");
+            TimedLog("ready for browser to load from <a href=\""+$"{webURL}\">{webURL}</a>");
         }
 
         if (useNodeJS)
