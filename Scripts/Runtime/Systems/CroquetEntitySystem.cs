@@ -161,7 +161,11 @@ public class CroquetEntitySystem : CroquetSystem
         int key = assetLoadKey;
 
         //Returns any IResourceLocations that are mapped to the supplied label
-        AsyncOperationHandle<IList<IResourceLocation>> handle = Addressables.LoadResourceLocationsAsync(sceneName);
+        AsyncOperationHandle<IList<IResourceLocation>> handle = Addressables.LoadResourceLocationsAsync(new string[]
+        {
+            "default",
+            sceneName,
+        }, Addressables.MergeMode.Union);
         yield return handle;
 
         if (key != assetLoadKey) yield break; // scene has changed while assets were being found
@@ -171,14 +175,17 @@ public class CroquetEntitySystem : CroquetSystem
         foreach (var loc in result) {
             if (loc.ToString().EndsWith(".prefab")) prefabs++;
         }
-        // int count = result.Count;
-        // Debug.Log($"Found {prefabs} addressable prefabs");
+        
+        Debug.Log($"Found {prefabs} addressable prefabs tagged as 'default' or ${sceneName}");
         Addressables.Release(handle);
 
         if (prefabs != 0)
         {
             // Load any assets labelled with this appName from the Addressable Assets
-            Addressables.LoadAssetsAsync<GameObject>(sceneName, null).Completed += objects =>
+            Addressables.LoadAssetsAsync<GameObject>(
+            new string[] { "default", sceneName },
+            o => { },
+            Addressables.MergeMode.Union).Completed += objects =>
             {
                 // check again that the scene hasn't been changed during the async operation
                 if (key == assetLoadKey)
