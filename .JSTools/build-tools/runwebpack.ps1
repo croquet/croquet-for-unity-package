@@ -9,7 +9,7 @@ $TARGET=$args[2]
 
 # assume node_modules is in the parent directory of the whole Unity project
 
-if (!(Test-Path ..\..\..\..\node_modules\webpack)) {
+if (!(Test-Path ..\node_modules\webpack)) {
   Write-Warning "Cannot find webpack.  Did you do 'npm install'?"
   Exit
 }

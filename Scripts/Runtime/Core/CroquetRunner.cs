@@ -15,10 +15,14 @@ using Debug = UnityEngine.Debug;
 public class CroquetRunner : MonoBehaviour
 {
     public bool waitForUserLaunch;
+    public bool runOffline;
     public string localReflector;
+#if UNITY_EDITOR_WIN
+    [HideInInspector] public bool showWebview;
+#else
     public bool showWebview;
+#endif
 
-    private static string bridgeSourcePath; // croquet-bridge folder under StreamingAssets
     private static string appSourcePath; // app's own folder under StreamingAssets
     private static string nodeExecPath = ""; // provided by CroquetBridge
 
@@ -91,7 +95,6 @@ public class CroquetRunner : MonoBehaviour
 
     public IEnumerator StartCroquetConnection(int port, string appName, bool useNodeJS, string pathToNode)
     {
-        bridgeSourcePath = Path.Combine(Application.streamingAssetsPath, "croquet-bridge");
         appSourcePath = Path.Combine(Application.streamingAssetsPath, appName);
 
 #if UNITY_EDITOR

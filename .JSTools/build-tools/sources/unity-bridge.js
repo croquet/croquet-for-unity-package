@@ -74,6 +74,7 @@ console.log(`PORT ${portStr}`);
             };
         };
         sock.onclose = _evt => {
+            this.setJSLogForwarding([]); // restore to local logging
             globalThis.timedLog('bridge websocket closed');
             this.bridgeIsConnected = false;
             if (session) session.leave();
@@ -154,28 +155,29 @@ console.log(`PORT ${portStr}`);
                 break;
             }
             case 'readyForSession': {
-                const [apiKey, appId, sessionName, debugLogTypes, waitForUserLaunchStr] = args;
+                const { apiKey, appId, sessionName, debugFlags, waitForUserLaunch } = JSON.parse(args[0]);
                 globalThis.timedLog(`starting session of ${appId} with key ${apiKey}`);
                 this.apiKey = apiKey;
                 this.appId = appId;
                 this.sessionName = sessionName;
-                this.debugLogTypes = debugLogTypes; // comma-separated list
+                this.debugFlags = debugFlags; // comma-separated list
+                this.runOffline = debugFlags.includes('offline');
                 // if this is an auto-launched session (i.e., not an external browser), set up logging so that warnings and errors appear in the Unity console.  for an external browser, we forward nothing.
                 // @@ should be configurable (especially so it can be turned off
                 // for a build).
-                this.setJSLogForwarding(waitForUserLaunchStr === 'false' ? ['warn', 'error'] : []);
+                this.setJSLogForwarding(waitForUserLaunch ? ['warn', 'error'] : []);
                 unityDrivenStartSession();
                 break;
             }
             case 'requestToLoadScene': {
                 // args are
                 //   scene name - if different from model's existing scene, request will always be accepted
-                //   forceReload - "true" or "false", determining whether init can override *same* scene in model
-                //   forceRebuild - "true" or "false", determining whether init can use cached scene details if available
+                //   forceReload - "True" or "False", determining whether init can override *same* scene in model
+                //   forceRebuild - "True" or "False", determining whether init can use cached scene details if available
                 if (this.preloadingView) {
                     const sceneName = args[0];
-                    const forceReload = args[1] === 'true';
-                    const forceRebuild = args[2] === 'true';
+                    const forceReload = args[1] === 'True';
+                    const forceRebuild = args[2] === 'True';
                     this.preloadingView.publishRequestToLoadScene(sceneName, forceReload, forceRebuild);
                 } else console.warn(`requestToLoadScene but no preloadingView!`);
                 break;
@@ -304,7 +306,6 @@ console.log(`PORT ${portStr}`);
     }
 
     setJSLogForwarding(toForward) {
-        console.log("categories of JS log forwarded to Unity:", toForward);
         const isNode = globalThis.CROQUET_NODE;
         const timeStamper = logVals => `${(globalThis.CroquetViewDate || Date).now() % 100000}: ` + logVals.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
         const forwarder = (logType, logVals) => this.sendCommand('logFromJS', logType, timeStamper(logVals));
@@ -320,7 +321,8 @@ console.log(`PORT ${portStr}`);
                 else console[logType] = console[`q_${logType}`]; // use system default
             }
         });
-    }
+        console.log("categories of JS log forwarded to Unity:", toForward);
+   }
 
     update(_time) {
         // sent by the gameViewManager on each update()
@@ -346,7 +348,11 @@ console.log(`PORT ${portStr}`);
         // from that, and the current values of performance.now and Date.now, we
         // calculate an estimate of what our Date.now would have been when the
         // reflector's raw time was zero.  that gets sent over the bridge.
-        if (!sessionOffsetEstimator?.offsetEstimate) return;
+
+        // if the Croquet session is running offline, the estimator
+        // will return a constant offset of 1.
+        const offset = sessionOffsetEstimator?.getOffsetEstimate();
+        if (!offset) return;
 
         const perfNow = performance.now();
         const reflectorNow = sessionOffsetEstimator.offsetEstimate + perfNow;
@@ -1827,16 +1833,27 @@ class SessionOffsetEstimator {
     // maintain a best guess of the minimum offset between the local wall clock and the reflector's raw time as received on PING messages and their PONG responses.  this is used purely to judge when an event has been held up on one or other leg, and hence to adjust the calculation of the estimated offset between local and reflector time.
     // one problem we have to deal with is network batching of messages, meaning that they often arrive late.  so whenever a reflector event indicates that its raw time is earlier than our current guess, we assume that this is closer to the actual timing.  immediately adjust our estimate.
     // but then, in case the minimum offset is in fact gradually growing - i.e., the local wall clock is gradually gaining on the reflector's - the estimate is continually nudged forwards using a bias that adds 0.2ms per second (12ms per minute) of elapsed time since the last adjustment.  we expect that bias to be overridden every few seconds by an accurately timed event - but if the actual offset really is drifting by a few ms per minute, the bias should ensure that we capture that.
-    constructor(sess) {
+
+    // we now also support "offline" mode, in which case the offsetEstimate
+    // reports a fixed value (so reflector raw time appears to march exactly
+    // in step with Date.now)
+    constructor(sess, runOffline) {
         this.session = sess;
-        const controller = this.controller = sess.view.realm.vm.controller;
+        this.runOffline = runOffline;
+        if (!runOffline) {
+            const controller = this.controller = sess.view.realm.vm.controller;
 
-        this.offsetEstimate = null;
-        this.minRoundtrip = 0;
+            this.offsetEstimate = null;
+            this.minRoundtrip = 0;
 
-        controller.connection.pongHook = args => this.handlePong(args);
-        this.initReflectorOffsets();
-        this.sendPing();
+            controller.connection.pongHook = args => this.handlePong(args);
+            this.initReflectorOffsets();
+            this.sendPing();
+        }
+    }
+
+    getOffsetEstimate() {
+        return this.runOffline ? 1 : this.offsetEstimate;
     }
 
     sendPing() {
@@ -1947,7 +1964,7 @@ export async function StartSession(model, view) {
 }
 
 async function unityDrivenStartSession() {
-    const { apiKey, appId, sessionName, debugLogTypes } = theGameEngineBridge;
+    const { apiKey, appId, sessionName, debugFlags, runOffline } = theGameEngineBridge;
     const name = `${sessionName}`;
     const password = 'password';
     session = await StartWorldcore({
@@ -1961,7 +1978,8 @@ async function unityDrivenStartSession() {
         expectedSimFPS: 0, // 0 => don't attempt to load-balance simulation
         eventRateLimit: 50, // we need a high rate for distributing scene definitions
         flags: ['unity', 'rawtime'],
-        debug: debugLogTypes,
+        debug: debugFlags,
+        offline: runOffline,
         model: ModelRootClass,
         view: PreloadingViewRoot,
         progressReporter: ratio => {
@@ -1970,7 +1988,7 @@ async function unityDrivenStartSession() {
         }
     });
 
-    sessionOffsetEstimator = new SessionOffsetEstimator(session);
+    sessionOffsetEstimator = new SessionOffsetEstimator(session, runOffline);
 
     const STEP_DELAY = 26; // aiming to ensure that there will be a new 50ms physics update on every other step
     let stepCount = 0;
@@ -2000,7 +2018,18 @@ async function unityDrivenStartSession() {
 
             stepHandler();
         };
-        session.view.realm.vm.controller.tickHook = ticker;
+        const { controller } = session.view.realm.vm;
+        controller.tickHook = ticker;
+// $$$ TEMPORARY HACK TO KEEP OfflineSocket TICKING
+if (runOffline) {
+    const { socket } = controller.connection;
+    clearInterval(socket.ticker);
+    socket.tick = function() {
+        this.reply('TICK', { time: this.time });
+        setTimeout(() => this.tick(), this.ticks);
+    };
+    socket.tick();
+}
     }
 }
 

@@ -14,8 +14,8 @@ NODE=$1
 APPNAME=$2
 TARGET=$3
 
-# node_modules in the parent directory of the whole Unity project
-NODE_MODULES=../../../../node_modules
+# node_modules in the .CroquetJS folder, one above here
+NODE_MODULES=../node_modules
 
 if [ ! -d $NODE_MODULES/webpack ]; then
 	echo "Cannot find webpack.  Did you do 'npm install'?"

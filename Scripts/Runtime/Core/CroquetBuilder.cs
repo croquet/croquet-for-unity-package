@@ -2,16 +2,20 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Diagnostics;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using System.Text;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEditor;
-// using UnityEditor.PackageManager.Requests;
+using UnityEditor.Build;
+using UnityEditor.Build.Reporting;
 using UnityEditor.PackageManager;
 using Debug = UnityEngine.Debug;
 using Object = UnityEngine.Object;
 
+// CroquetBuilder is a class with only static methods.  Its responsibility is to manage the bundling of
+// the JavaScript code associated with an app that the user wants to play.
 public class CroquetBuilder
 {
     public static string NodeExeInBuild =
@@ -27,7 +31,8 @@ public class CroquetBuilder
     // on both platforms we provide options for explicitly re-bundling by invocation
     // from the Croquet menu (for example, before hitting Build), or automatically
     // whenever the Play button is pressed.
-    public static Process oneTimeBuildProcess;
+    public static Process oneTimeBuildProcess; // queried by CroquetMenu
+    private static string hashedProjectPath = ""; // a hash string representing this project, for use in EditorPrefs keys
     private static string sceneName;
     private static CroquetBridge sceneBridgeComponent;
     private static CroquetRunner sceneRunnerComponent; // used in WIN editor
@@ -35,13 +40,15 @@ public class CroquetBuilder
 
     private const string ID_PROP = "JS Builder Id";
     private const string APP_PROP = "JS Builder App";
+    private const string TARGET_PROP = "JS Builder Target";
     private const string LOG_PROP = "JS Builder Log";
     private const string BUILD_ON_PLAY = "JS Build on Play";
+    private const string BUILD_STATE = "JS Build State";
 
     public static bool BuildOnPlayEnabled
     {
-        get { return EditorPrefs.GetBool(BUILD_ON_PLAY, false); }
-        set { EditorPrefs.SetBool(BUILD_ON_PLAY, value); }
+        get { return EditorPrefs.GetBool(ProjectSpecificKey(BUILD_ON_PLAY), false); }
+        set { EditorPrefs.SetBool(ProjectSpecificKey(BUILD_ON_PLAY), value); }
     }
 
     public static void CacheSceneComponents(Scene scene)
@@ -118,31 +125,58 @@ public class CroquetBuilder
 
     public static bool KnowHowToBuildJS()
     {
+        // used by the Croquet menu to decide which options are valid to show
         JSBuildDetails details = GetSceneBuildDetails();
         return details.appName != "";
     }
 
+    private static string ProjectSpecificKey(string rawKey)
+    {
+        return $"{KeyPrefixForAppPrefs()}:{rawKey}";
+    }
+
+    private static string AppSpecificKey(string rawKey, string appName)
+    {
+        return $"{KeyPrefixForAppPrefs()}:{appName}:{rawKey}";
+    }
+
+    private static void RecordJSBuildState(string appName, string target, bool success)
+    {
+        // record one of "web", "node", or "" to indicate whether StreamingAssets contains a successful
+        // build for web or node, or for neither
+        EditorPrefs.SetString(AppSpecificKey(BUILD_STATE, appName), success ? target : "");
+    }
+
+    private static string GetJSBuildState(string appName)
+    {
+        // fetch the build state recorded above, if any
+        return EditorPrefs.GetString(AppSpecificKey(BUILD_STATE, appName), "");
+    }
+
+    private static string KeyPrefixForAppPrefs()
+    {
+        // return a key for EditorPrefs settings that we need to be isolated to this project.
+
+        // our cache of the hash string will be wiped on each Play.  refresh if needed.
+        if (hashedProjectPath == "")
+        {
+            string keyBase = Application.streamingAssetsPath;
+            byte[] keyBaseBytes = new UTF8Encoding().GetBytes(keyBase);
+            byte[] hash = MD5.Create().ComputeHash(keyBaseBytes);
+            StringBuilder sb = new StringBuilder();
+            foreach (byte b in hash) sb.Append(b.ToString("X2"));
+            hashedProjectPath = sb.ToString().Substring(0, 16); // no point keeping whole thing
+        }
+
+        return hashedProjectPath;
+    }
     public static void StartBuild(bool startWatcher)
     {
         if (oneTimeBuildProcess != null) return; // already building
 
-        JSBuildDetails details = GetSceneBuildDetails();
+        JSBuildDetails details = GetSceneBuildDetails(); // includes forcing useNodeJS, if necessary (on Windows)
         string appName = details.appName;
-        if (appName == "") return; // don't know how to build
-
-        if (Application.platform == RuntimePlatform.OSXEditor && details.nodeExecutable == "")
-        {
-            Debug.LogError("Cannot build without a path to Node in the Settings object");
-            return;
-        }
-
-        string builderPath = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS", "build-tools"));
-        if (!Directory.Exists(builderPath))
-        {
-            Debug.LogError("Cannot find JS build tools. Did you copy them using the Croquet menu? You must then run 'npm install' in the Unity project's parent directory.");
-            return;
-        }
-
+        string builderPath = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", ".CroquetJS", "build-tools"));
         string nodeExecPath;
         string executable;
         string arguments = "";
@@ -162,6 +196,9 @@ public class CroquetBuilder
             default:
                 throw new PlatformNotSupportedException("Don't know how to support automatic builds on this platform");
         }
+
+        // record a failed build until we hear otherwise
+        RecordJSBuildState(appName, target, false);
 
         // arguments to the runwebpack script, however it is invoked:
         // 1. full path to the platform-relevant node engine
@@ -213,19 +250,27 @@ public class CroquetBuilder
 
             oneTimeBuildProcess = null;
 
-            LogProcessOutput(output, errors, "JS builder");
-
+            // pre-process the stdout to remove any line purely added by us
+            string[] stdoutLines = output.Split('\n');
+            List<string> filteredLines = new List<string>();
             int webpackExit = -1;
             string exitPrefix = "webpack-exit=";
-            string[] newLines = output.Split('\n');
-            foreach (string line in newLines)
+            foreach (string line in stdoutLines)
             {
-                if (!string.IsNullOrWhiteSpace(line) && line.StartsWith(exitPrefix))
+                if (!string.IsNullOrWhiteSpace(line))
                 {
-                    webpackExit = int.Parse(line.Substring(exitPrefix.Length));
+                    if (line.StartsWith(exitPrefix))
+                    {
+                        webpackExit = int.Parse(line.Substring(exitPrefix.Length));
+                    }
+                    else filteredLines.Add(line);
                 }
             }
-            if (webpackExit != 0) throw new Exception("JS build failed.");
+
+            int errorCount = LogProcessOutput(filteredLines.ToArray(), errors.Split('\n'), "JS builder");
+            bool success = webpackExit == 0 && errorCount == 0;
+            Debug.Log($"recording JS build state: app={appName}, target={target}, success={success}");
+            RecordJSBuildState(appName, target, success);
         }
         else
         {
@@ -233,10 +278,11 @@ public class CroquetBuilder
             if (output.StartsWith(prefix))
             {
                 int processId = int.Parse(output.Substring(prefix.Length));
-                Debug.Log($"started JS watcher for {appName} as process {processId}");
-                EditorPrefs.SetInt(ID_PROP, processId);
-                EditorPrefs.SetString(APP_PROP, appName);
-                EditorPrefs.SetString(LOG_PROP, logFile);
+                Debug.Log($"started JS watcher for {appName}, target \"{target}\", as process {processId}");
+                EditorPrefs.SetInt(ProjectSpecificKey(ID_PROP), processId);
+                EditorPrefs.SetString(ProjectSpecificKey(APP_PROP), appName);
+                EditorPrefs.SetString(ProjectSpecificKey(TARGET_PROP), target);
+                EditorPrefs.SetString(ProjectSpecificKey(LOG_PROP), logFile);
 
                 WatchLogFile(logFile, 0);
             }
@@ -263,13 +309,16 @@ public class CroquetBuilder
 
     private static async void WatchLogFile(string filePath, long initialLength)
     {
-        string appName = EditorPrefs.GetString(APP_PROP, "");
+        string appName = EditorPrefs.GetString(ProjectSpecificKey(APP_PROP), "");
+        string target = EditorPrefs.GetString(ProjectSpecificKey(TARGET_PROP));
         long lastFileLength = initialLength;
+        bool recordedSuccess = GetJSBuildState(appName) == target;
+
         // Debug.Log($"watching build log for {appName} from position {lastFileLength}");
 
         while (true)
         {
-            if (EditorPrefs.GetString(LOG_PROP, "") != filePath)
+            if (EditorPrefs.GetString(ProjectSpecificKey(LOG_PROP), "") != filePath)
             {
                 // Debug.Log($"stopping log watcher for {appName}");
                 break;
@@ -294,13 +343,35 @@ public class CroquetBuilder
                             {
                                 if (!string.IsNullOrWhiteSpace(line))
                                 {
-                                    if (line.Contains("compiled") && line.Contains("error"))
+                                    string labeledLine = $"JS watcher ({appName}): {line}";
+                                    if (line.Contains("ERROR")) Debug.LogError(labeledLine);
+                                    else if (line.Contains("compiled") && line.Contains("error"))
                                     {
-                                        Debug.LogError($"JS watcher ({appName}): " + line);
+                                        // end of an errored build
+                                        Debug.LogError(labeledLine);
+                                        // only record the failure if we previously had success
+                                        if (recordedSuccess)
+                                        {
+                                            Debug.Log($"recording JS build state: app={appName}, target={target}, success=false");
+                                            RecordJSBuildState(appName, target, false);
+                                            recordedSuccess = false;
+                                        }
                                     }
+                                    else if (line.Contains("WARNING")) Debug.LogWarning(labeledLine);
                                     else
                                     {
-                                        Debug.Log($"JS watcher ({appName}): " + line);
+                                        Debug.Log(labeledLine);
+                                        if (line.Contains("compiled successfully"))
+                                        {
+                                            // only record the success if we previously had failure
+                                            if (!recordedSuccess)
+                                            {
+                                                Debug.Log(
+                                                    $"recording JS build state: app={appName}, target={target}, success=true");
+                                                RecordJSBuildState(appName, target, true);
+                                                recordedSuccess = true;
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -322,32 +393,68 @@ public class CroquetBuilder
         }
     }
 
-    public static void EnteringPlayMode()
+    public static bool EnsureJSBuildAvailable(bool inPlayMode)
     {
-        // get build details, just to run the check that on Windows forces
-        // useNodeJS to true unless CroquetRunner is set to wait for user launch
-        GetSceneBuildDetails();
+        if (StateOfJSBuildTools() == "missing") return false; // explanatory error will already have been logged
 
-        // rebuild-on-Play is only available if a watcher *isn't* running
-        string logFile = EditorPrefs.GetString(LOG_PROP, "");
-        if (logFile == "" && BuildOnPlayEnabled)
+        string jsPath = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", ".CroquetJS"));
+
+        // getting build details also sets sceneBridgeComponent and sceneRunnerComponent, and runs
+        // the check that on Windows force useNodeJS to true unless CroquetRunner is set to wait
+        // for user launch
+        JSBuildDetails details = GetSceneBuildDetails();
+        if (sceneBridgeComponent == null)
+        {
+            Debug.LogError("Failed to find a Croquet Bridge component in the current scene");
+            return false;
+        }
+
+        string appName = details.appName;
+        if (appName == "")
+        {
+            Debug.LogError("App Name has not been set in Croquet Bridge");
+            return false;
+        }
+
+        string sourcePath = Path.GetFullPath(Path.Combine(jsPath, appName));
+        if (!Directory.Exists(sourcePath))
+        {
+            Debug.LogError($"Could not find source directory for app \"{appName}\" under .CroquetJS");
+            return false;
+        }
+
+        string target = sceneBridgeComponent.useNodeJS ? "node" : "web";
+
+        if (RunningWatcherApp() == appName)
+        {
+            // there is a watcher
+            bool success = GetJSBuildState(appName) == target;
+            if (!success) Debug.LogError($"JS Watcher has not reported a successful build for target \"{target}\".");
+            return success;
+        }
+
+        // no watcher; maybe we should rebuild on Play?
+        if (inPlayMode && BuildOnPlayEnabled)
         {
             try
             {
                 StartBuild(false); // false => no watcher
+                return GetJSBuildState(appName) == target;
             }
             catch (Exception e)
             {
                 Debug.LogError(e);
-                EditorApplication.ExitPlaymode();
+                return false;
             }
         }
+
+        return GetJSBuildState(appName) == target;
     }
 
     public static void EnteredEditMode()
     {
         // if there is a watcher, when play stops re-establish the process reporting its logs
-        string logFile = EditorPrefs.GetString(LOG_PROP, "");
+        string logFile = EditorPrefs.GetString(ProjectSpecificKey(LOG_PROP), "");
         if (logFile != "")
         {
             FileInfo info = new FileInfo(logFile);
@@ -360,23 +467,26 @@ public class CroquetBuilder
         Process process = RunningWatcherProcess();
         if (process != null)
         {
-            Debug.Log($"stopping JS watcher for {EditorPrefs.GetString(APP_PROP)}");
+            string appName = EditorPrefs.GetString(ProjectSpecificKey(APP_PROP));
+            string target = EditorPrefs.GetString(ProjectSpecificKey(TARGET_PROP));
+            Debug.Log($"stopping JS watcher for {appName}, target \"{target}\"");
             process.Kill();
             process.Dispose();
         }
 
-        string logFile = EditorPrefs.GetString(LOG_PROP, "");
+        string logFile = EditorPrefs.GetString(ProjectSpecificKey(LOG_PROP), "");
         if (logFile != "") FileUtil.DeleteFileOrDirectory(logFile);
 
-        EditorPrefs.SetInt(ID_PROP, -1);
-        EditorPrefs.SetString(APP_PROP, "");
-        EditorPrefs.SetString(LOG_PROP, "");
+        EditorPrefs.SetInt(ProjectSpecificKey(ID_PROP), -1);
+        EditorPrefs.SetString(ProjectSpecificKey(APP_PROP), "");
+        EditorPrefs.SetString(ProjectSpecificKey(TARGET_PROP), "");
+        EditorPrefs.SetString(ProjectSpecificKey(LOG_PROP), "");
     }
 
     private static Process RunningWatcherProcess()
     {
         Process process = null;
-        int lastBuildId = EditorPrefs.GetInt(ID_PROP, -1);
+        int lastBuildId = EditorPrefs.GetInt(ProjectSpecificKey(ID_PROP), -1);
         if (lastBuildId != -1)
         {
             try
@@ -399,9 +509,10 @@ public class CroquetBuilder
             if (process == null)
             {
                 // the id we had is no longer valid
-                EditorPrefs.SetInt(ID_PROP, -1);
-                EditorPrefs.SetString(APP_PROP, "");
-                EditorPrefs.SetString(LOG_PROP, "");
+                EditorPrefs.SetInt(ProjectSpecificKey(ID_PROP), -1);
+                EditorPrefs.SetString(ProjectSpecificKey(APP_PROP), "");
+                EditorPrefs.SetString(ProjectSpecificKey(TARGET_PROP), "");
+                EditorPrefs.SetString(ProjectSpecificKey(LOG_PROP), "");
             }
         }
 
@@ -415,7 +526,60 @@ public class CroquetBuilder
         // corresponds to a running process that has the name "node".
         // if the process was not found, we will have reset both the Path and Id.
         Process builderProcess = RunningWatcherProcess();
-        return builderProcess == null ? "" : EditorPrefs.GetString(APP_PROP);
+        return builderProcess == null ? "" : EditorPrefs.GetString(ProjectSpecificKey(APP_PROP));
+    }
+
+    private static string StateOfJSBuildTools()
+    {
+        // return one of three states
+        //   "ok" - we appear to be up to date with the package
+        //   "needsRefresh" - we have tools, but they are out of step with the package
+        //   "missing" - no sign that tools have been installed (possibly because even the Croquet package is missing), or (on Mac) no Node executable found
+
+#if UNITY_EDITOR_OSX
+        string nodeExecutable = GetSceneBuildDetails().nodeExecutable;
+        if (nodeExecutable == "" || !File.Exists(nodeExecutable))
+        {
+            Debug.LogError("Cannot build JS on MacOS without a valid path to Node in the Settings object");
+            return "missing";
+        }
+#endif
+
+        string croquetVersion = FindCroquetPackageVersion();
+        if (croquetVersion == "")
+        {
+            Debug.LogError("Cannot find the Croquet Multiplayer dependency");
+            return "missing";
+        }
+
+        string installedVersion = FindJSToolsPackageVersion();
+        if (installedVersion == "")
+        {
+            Debug.LogError("Need to run Croquet => Install JS Build Tools");
+            return "missing";
+        }
+
+        // we don't try to figure out an ordering between package versions.  if the .latest-installed-tools
+        // differs from the package version, we raise a warning.
+        if (installedVersion != croquetVersion)
+        {
+            Debug.LogWarning("Newer JS build tools are available; run Croquet => Install JS Build Tools to update");
+            return "needsRefresh";
+        }
+
+        return "ok";
+    }
+
+    public static string FindJSToolsPackageVersion()
+    {
+        string jsFolder = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", ".CroquetJS"));
+        if (!Directory.Exists(jsFolder)) return ""; // nothing installed
+
+        string installRecord = Path.Combine(jsFolder, ".last-installed-tools");
+        if (!File.Exists(installRecord)) return "";
+
+        string installRecordContents = File.ReadAllText(installRecord);
+        return installRecordContents.Trim();
     }
 
     public static string FindCroquetPackageVersion()
@@ -435,17 +599,6 @@ public class CroquetBuilder
 
     public static async Task InstallJSTools(bool forceUpdate)
     {
-        string nodePath = "";
-#if UNITY_EDITOR_OSX
-        string nodeExecutable = GetSceneBuildDetails().nodeExecutable;
-        if (string.IsNullOrWhiteSpace(nodeExecutable) || !File.Exists(nodeExecutable))
-        {
-            Debug.LogError("Cannot find Node executable; did you remember to set the path in the Settings object?");
-            return;
-        }
-        nodePath = Path.GetDirectoryName(nodeExecutable);
-#endif
-
         string packageVersion = FindCroquetPackageVersion();
         if (packageVersion == "")
         {
@@ -453,61 +606,56 @@ public class CroquetBuilder
             return;
         }
 
-        string unityParentFolder = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "..", ".."));
-
-        // $$$ WIP - need some way to decide whether the version has changed.
-        // the internal package.json does NOT (currently) include the version.
-        // bool doUpdate = forceUpdate;
-        // if (true || !doUpdate) // $$$
-        // {
-        //     string packageJsonPath = Path.Combine(unityParentFolder, "package.json");
-        //     if (!File.Exists(packageJsonPath))
-        //     {
-        //         doUpdate = true;
-        //     }
-        //     else
-        //     {
-        //         string packageJsonContents = File.ReadAllText(packageJsonPath);
-        //         PackageJson packageJson = JsonUtility.FromJson<PackageJson>(packageJsonContents);
-        //         Debug.Log($"prev package version {packageJson.version}");
-        //     }
-        // }
-        //
-        // if (!doUpdate) return;
-
-        // copy the various files
         string toolsRoot = CroquetBuildToolsInPackage;
-        string jsFolder = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS"));
+        string jsFolder = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", ".CroquetJS"));
         if (!Directory.Exists(jsFolder)) Directory.CreateDirectory(jsFolder);
 
-        // package.json and .eslintrc to parent of the entire Unity project
-        string[] files = new string[] { "package.json", ".eslintrc.json" };
+        // compare package.json before overwriting, to decide if it will be changing
+        string sourcePackageJson = Path.GetFullPath(Path.Combine(toolsRoot, "package.json"));
+        string installedPackageJson = Path.GetFullPath(Path.Combine(jsFolder, "package.json"));
+        bool needsNpmInstall = !File.Exists(installedPackageJson) || !FileEquals(sourcePackageJson, installedPackageJson);
+
+        // copy the various files to Assets/.CroquetJS/
+        string[] files = new string[] { "package.json", ".eslintrc.json", ".gitignore" };
         foreach (var file in files)
         {
             string fsrc = Path.GetFullPath(Path.Combine(toolsRoot, file));
-            string fdest = Path.GetFullPath(Path.Combine(unityParentFolder, file));
-            Debug.Log($"writing {fdest}"); // with {fsrc}");
+            string fdest = Path.GetFullPath(Path.Combine(jsFolder, file));
+            Debug.Log($"writing {fdest}");
             FileUtil.ReplaceFile(fsrc, fdest);
         }
 
-        // build-tools to Assets/CroquetJS/
         string dir = "build-tools";
         string dsrc = Path.GetFullPath(Path.Combine(toolsRoot, dir));
         string ddest = Path.GetFullPath(Path.Combine(jsFolder, dir));
-        Debug.Log($"writing directory {ddest}"); // with {dsrc}");
+        Debug.Log($"writing directory {ddest}");
         FileUtil.ReplaceDirectory(dsrc, ddest);
 
-        // now get ready to start the npm install.
-        Debug.Log("Running npm install...");
+        // and a record of which package version the files came from
+        string installRecord = Path.Combine(jsFolder, ".last-installed-tools");
+        File.WriteAllText(installRecord, packageVersion);
 
-        // introducing even a short delay gives the console a chance to show the logged messages
-        await Task.Delay(100);
+        if (needsNpmInstall)
+        {
+            string nodePath = "";
+#if UNITY_EDITOR_OSX
+            string nodeExecutable = GetSceneBuildDetails().nodeExecutable;
+            nodePath = Path.GetDirectoryName(nodeExecutable);
+#endif
 
-        Task task = (Application.platform == RuntimePlatform.OSXEditor)
-            ? new Task(() => InstallOSX(unityParentFolder, toolsRoot, nodePath))
-            : new Task(() => InstallWin(unityParentFolder, toolsRoot));
-        task.Start();
-        task.Wait();
+            // get ready to start the npm install.
+            Debug.Log("Running npm install...");
+
+            // introducing even a short delay gives the console a chance to show the logged messages
+            await Task.Delay(100);
+
+            Task task = (Application.platform == RuntimePlatform.OSXEditor)
+                ? new Task(() => InstallOSX(jsFolder, toolsRoot, nodePath))
+                : new Task(() => InstallWin(jsFolder, toolsRoot));
+            task.Start();
+            task.Wait();
+        }
+        else Debug.Log("Not running npm install; package.json has not changed");
     }
 
     private static void InstallOSX(string installDir, string toolsRoot, string nodePath) {
@@ -528,7 +676,7 @@ public class CroquetBuilder
 
         p.WaitForExit();
 
-        LogProcessOutput(output, errors, "npm install");
+        LogProcessOutput(output.Split('\n'), errors.Split('\n'), "npm install");
     }
 
     private static void InstallWin(string installDir, string toolsRoot)
@@ -550,36 +698,92 @@ public class CroquetBuilder
         File.Delete(stdoutFile);
         string errors = File.ReadAllText(stderrFile);
         File.Delete(stderrFile);
-        LogProcessOutput(output, errors, "npm install");
+        LogProcessOutput(output.Split('\n'), errors.Split('\n'), "npm install");
     }
 
-    private static void LogProcessOutput(string stdout, string stderr, string prefix)
+    // based on https://www.dotnetperls.com/file-equals
+    static bool FileEquals(string path1, string path2)
     {
-        string[] newLines = stdout.Split('\n');
-        foreach (string line in newLines)
+        byte[] file1 = File.ReadAllBytes(path1);
+        byte[] file2 = File.ReadAllBytes(path2);
+
+        if (file1.Length != file2.Length) return false;
+
+        for (int i = 0; i < file1.Length; i++)
+        {
+            if (file1[i] != file2[i]) return false;
+        }
+        return true;
+    }
+
+    private static int LogProcessOutput(string[] stdoutLines, string[] stderrLines, string prefix)
+    {
+        int errorCount = 0;
+        foreach (string line in stdoutLines)
         {
             if (!string.IsNullOrWhiteSpace(line))
             {
                 string labeledLine = $"{prefix}: {line}";
-                if (line.Contains("ERROR")) Debug.LogError(labeledLine);
+                if (line.Contains("ERROR"))
+                {
+                    errorCount++;
+                    Debug.LogError(labeledLine);
+                }
                 else if (line.Contains("WARNING")) Debug.LogWarning(labeledLine);
                 else Debug.Log(labeledLine);
             }
         }
-        newLines = stderr.Split('\n');
-        foreach (string line in newLines)
+
+        foreach (string line in stderrLines)
         {
-            if (!string.IsNullOrWhiteSpace(line)) Debug.LogError($"{prefix} error: {line}");
+            if (!string.IsNullOrWhiteSpace(line))
+            {
+                errorCount++;
+                Debug.LogError($"{prefix} error: {line}");
+            }
         }
 
+        return errorCount;
     }
-// this whole class is only defined when in the editor
+// this whole class (apart from one static string) is only defined when in the editor
 #endif
 }
 
-// [System.Serializable]
-// public class PackageJson
-// {
-//     public string version;
-// }
+#if UNITY_EDITOR
+class CroquetBuildPreprocess : IPreprocessBuildWithReport
+{
+    public int callbackOrder { get { return 0; } }
+    public void OnPreprocessBuild(BuildReport report)
+    {
+        // for Windows standalone, we temporarily place a copy of node.exe
+        // in the StreamingAssets folder for inclusion in the build.
+        BuildTarget target = report.summary.platform;
+        if (target == BuildTarget.StandaloneWindows || target == BuildTarget.StandaloneWindows64)
+        {
+            string src = CroquetBuilder.NodeExeInPackage;
+            string dest = CroquetBuilder.NodeExeInBuild;
+            string destDir = Path.GetDirectoryName(dest);
+            Directory.CreateDirectory(destDir);
+            FileUtil.CopyFileOrDirectory(src, dest);
+        }
+    }
+}
+
+class CroquetBuildPostprocess : IPostprocessBuildWithReport
+{
+    public int callbackOrder { get { return 0; } }
+    public void OnPostprocessBuild(BuildReport report)
+    {
+        // if we temporarily copied node.exe (see above), remove it again
+        BuildTarget target = report.summary.platform;
+        if (target == BuildTarget.StandaloneWindows || target == BuildTarget.StandaloneWindows64)
+        {
+            string dest = CroquetBuilder.NodeExeInBuild;
+            FileUtil.DeleteFileOrDirectory(dest);
+            FileUtil.DeleteFileOrDirectory(dest + ".meta");
+        }
+    }
+}
+
+#endif
 

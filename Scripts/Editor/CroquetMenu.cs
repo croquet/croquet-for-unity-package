@@ -1,30 +1,9 @@
 using UnityEngine;
 using UnityEditor;
-using UnityEditor.Build;
-using UnityEditor.Build.Reporting;
 using System.IO;
 using UnityEditor.SceneManagement;
 using UnityEngine.SceneManagement;
 using Debug = UnityEngine.Debug;
-
-class CroquetBuildPreprocess : IPreprocessBuildWithReport
-{
-    public int callbackOrder { get { return 0; } }
-    public void OnPreprocessBuild(BuildReport report)
-    {
-        // for Windows standalone, we temporarily place a copy of node.exe
-        // in the StreamingAssets folder for inclusion in the build.
-        BuildTarget target = report.summary.platform;
-        if (target == BuildTarget.StandaloneWindows || target == BuildTarget.StandaloneWindows64)
-        {
-            string src = CroquetBuilder.NodeExeInPackage;
-            string dest = CroquetBuilder.NodeExeInBuild;
-            string destDir = Path.GetDirectoryName(dest);
-            Directory.CreateDirectory(destDir);
-            FileUtil.CopyFileOrDirectory(src, dest);
-        }
-    }
-}
 
 [InitializeOnLoad]
 public static class SceneAndPlayWatcher
@@ -36,21 +15,18 @@ public static class SceneAndPlayWatcher
         // but we can detect whether the init is happening because of an imminent state change
         // https://gamedev.stackexchange.com/questions/157266/unity-why-does-playmodestatechanged-get-called-after-start
         EditorApplication.playModeStateChanged += HandlePlayModeState;
-        if (EditorApplication.isPlayingOrWillChangePlaymode)
-        {
-            CroquetBuilder.EnteringPlayMode();
-        }
+        // if (EditorApplication.isPlayingOrWillChangePlaymode)
+        // {
+        //     CroquetBuilder.EnteringPlayMode();
+        // }
 
         EditorSceneManager.activeSceneChangedInEditMode += HandleSceneChange;
     }
 
     private static void HandlePlayModeState(PlayModeStateChange state)
     {
-        // PlayModeStateChange.ExitingEditMode (i.e., entering Play) is handled above in the constructor
-        if (state == PlayModeStateChange.EnteredEditMode)
-        {
-            CroquetBuilder.EnteredEditMode();
-        }
+        // PlayModeStateChange.ExitingEditMode (i.e., before entering Play) - if needed - is handled above in the constructor
+        if (state == PlayModeStateChange.EnteredEditMode) CroquetBuilder.EnteredEditMode();
     }
 
     private static void HandleSceneChange(Scene current, Scene next)
@@ -59,23 +35,6 @@ public static class SceneAndPlayWatcher
     }
 }
 
-class CroquetBuildPostprocess : IPostprocessBuildWithReport
-{
-    public int callbackOrder { get { return 0; } }
-    public void OnPostprocessBuild(BuildReport report)
-    {
-        // if we temporarily copied node.exe (see above), remove it again
-        BuildTarget target = report.summary.platform;
-        if (target == BuildTarget.StandaloneWindows || target == BuildTarget.StandaloneWindows64)
-        {
-            string dest = CroquetBuilder.NodeExeInBuild;
-            FileUtil.DeleteFileOrDirectory(dest);
-            FileUtil.DeleteFileOrDirectory(dest + ".meta");
-        }
-    }
-}
-
-
 
 public class CroquetMenu
 {
@@ -83,8 +42,8 @@ public class CroquetMenu
     private const string BuildOnPlayItem = "Croquet/Build JS on Play";
 
     private const string StarterItem = "Croquet/Start JS Watcher";
-    private const string StopperItemHere = "Croquet/Stop JS Watcher (this scene)";
-    private const string StopperItemOther = "Croquet/Stop JS Watcher (other scene)";
+    private const string StopperItemHere = "Croquet/Stop JS Watcher (this app)";
+    private const string StopperItemOther = "Croquet/Stop JS Watcher (other app)";
 
     private const string InstallJSToolsItem = "Croquet/Install JS Build Tools";
 
@@ -97,14 +56,14 @@ public class CroquetMenu
     [MenuItem(BuildNowItem, true)]
     private static bool ValidateBuildNow()
     {
-        // this item is not available if either
+        // this item is not available if
         //   we don't know how to build for the current scene, or
         //   a watcher for any scene is running (MacOS only), or
         //   a build has been requested and hasn't finished yet
         if (!CroquetBuilder.KnowHowToBuildJS()) return false;
 
 #if !UNITY_EDITOR_WIN
-        if (CroquetBuilder.RunningWatcherApp() != "") return false;
+        if (CroquetBuilder.RunningWatcherApp() == CroquetBuilder.GetSceneBuildDetails().appName) return false;
 #endif
         if (CroquetBuilder.oneTimeBuildProcess != null) return false;
         return true;
@@ -120,6 +79,9 @@ public class CroquetMenu
     private static bool ValidateBuildOnPlayToggle()
     {
         if (!CroquetBuilder.KnowHowToBuildJS()) return false;
+#if !UNITY_EDITOR_WIN
+        if (CroquetBuilder.RunningWatcherApp() == CroquetBuilder.GetSceneBuildDetails().appName) return false;
+#endif
 
         Menu.SetChecked(BuildOnPlayItem, CroquetBuilder.BuildOnPlayEnabled);
         return true;
@@ -181,6 +143,9 @@ public class CroquetMenu
     [MenuItem(InstallJSToolsItem, true)]
     private static bool ValidateInstallJSTools()
     {
-        return CroquetBuilder.KnowHowToBuildJS();
+#if !UNITY_EDITOR_WIN
+        if (CroquetBuilder.RunningWatcherApp() != "") return false;
+#endif
+        return true;
     }
 }

@@ -1,1 +1,9 @@
-package-lock.json
+# .gitignore for .CroquetJS folder
+
+.gitignore
+package*.json
+node_modules
+build-tools
+.eslintrc.json
+dist
+.last-installed-tools
