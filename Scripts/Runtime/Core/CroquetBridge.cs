@@ -112,7 +112,7 @@ public class CroquetBridge : MonoBehaviour
 #if UNITY_EDITOR
             if (!croquetRunner.runOffline && (appProperties.apiKey == "" || appProperties.apiKey == "PUT_YOUR_API_KEY_HERE"))
             {
-                Debug.LogError("Cannot start Croquet without a valid API key in the Settings object");
+                Debug.LogError("Without an API key in the Settings object, you can only run Croquet if you select Run Offline.");
                 EditorApplication.ExitPlaymode();
                 return;
             }
