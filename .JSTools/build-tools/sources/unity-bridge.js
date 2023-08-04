@@ -628,7 +628,7 @@ export const GameViewManager = class extends ViewService {
         let tries = 1;
         const max = this.maxGameHandle;
         const pawns = this.pawnsByGameHandle;
-        while (true) {
+        while (true) { // eslint-disable-line no-constant-condition
             handle++;
             if (handle > max) handle = 1; // loop back
             if (!pawns[handle]) break; // found one!
@@ -1702,9 +1702,17 @@ export class GameInputManager extends ViewService {
 class TimeList {
     constructor() {
         this.firstNode = null;
+        this.deferredInsertions = [];
     }
 
     insert(delay, id) {
+        // if new timeouts are created by the callbacks we process, hold those
+        // back until the processing pass is finished.
+        if (this.processingList) {
+            this.deferredInsertions.push([delay, id]);
+            return;
+        }
+
         const now = performance.now();
         const newNode = { triggerTime: now + delay, id };
         if (!this.firstNode) {
@@ -1741,7 +1749,9 @@ class TimeList {
     }
 
     processUpTo(timeLimit, processor) {
-        if (!this.firstNode) return;
+        if (!this.firstNode || this.processingList) return; // this is non-re-entrant
+
+        this.processingList = true;
 
         let n = this.firstNode;
         while (n && n.triggerTime <= timeLimit) {
@@ -1749,6 +1759,10 @@ class TimeList {
             n = n.next;
         }
         this.firstNode = n; // maybe empty
+
+        this.processingList = false;
+        this.deferredInsertions.forEach(args => this.insert(...args));
+        this.deferredInsertions.length = 0;
     }
 }
 
@@ -1759,9 +1773,14 @@ class TimerClient {
 
         globalThis.setTimeout = (c, d) => this.setTimeout(c, d);
         globalThis.clearTimeout = id => this.clearTimeout(id);
+
+        globalThis.setInterval = (c, g) => this.setInterval(c, g);
+        globalThis.clearInterval = id => this.clearInterval(id);
     }
 
     setTimeout(callback, duration) {
+        // the _setxxx methods are there so we can insert code like the stuff
+        // below, to test the accuracy of our timing
         return this._setTimeout(callback, duration);
 
         // const target = Date.now() + duration;
@@ -1777,11 +1796,46 @@ class TimerClient {
         return id;
     }
 
+    setInterval(callback, gap) {
+        return this._setInterval(callback, gap);
+    }
+    _setInterval(callback, gap) {
+        let id;
+        let lastCall = null;
+        const intervalCallback = () => {
+            callback();
+            // if the timeout record for this id has gone, the callback must
+            // have called clearInterval.  we have nothing more to do.
+            if (!this.timeouts[id]) return;
+
+            // if we see that this call was late, adjust the timeout for
+            // the next one as a gesture towards catching up.  we're at
+            // the mercy of the calls that are ticking this timer itself,
+            // but can at least try to avoid falling further behind on
+            // every iteration.
+            const now = Date.now();
+            let nextGap = gap;
+            if (lastCall !== null) {
+                const thisGap = now - lastCall;
+                if (thisGap > gap) nextGap = Math.max(4, gap - (thisGap - gap));
+            }
+            lastCall = now;
+            this.timeouts[id] = { callback: intervalCallback };
+            this.timeList.insert(nextGap, id);
+        };
+        id = this._setTimeout(intervalCallback, gap);
+        return id;
+    }
+
     clearTimeout(id) {
         this._clearTimeout(id);
     }
     _clearTimeout(id) {
         delete this.timeouts[id];
+    }
+
+    clearInterval(id) {
+        this._clearTimeout(id); // [sic]
     }
 
     serviceTimeouts() {
@@ -1792,7 +1846,10 @@ class TimerClient {
             if (record) {
                 const { callback } = record;
                 if (callback) callback();
-                delete this.timeouts[id];
+                // if the callback has set up a new timeout record for the same id,
+                // leave it be (this happens in our interval handler).
+                // otherwise, the record has served its purpose and can be removed.
+                if (this.timeouts[id] === record) delete this.timeouts[id];
             }
         }));
     }
@@ -1973,7 +2030,7 @@ async function unityDrivenStartSession() {
         name,
         password,
         step: 'manual',
-        tps: 33, // deliberately out of phase with 25Hz ticks from Unity, aiming for decent stepping coverage in WebView sessions
+        tps: 33, // deliberately out of phase with 50Hz ticks from Unity, aiming for decent stepping coverage in WebView sessions
         autoSleep: false,
         expectedSimFPS: 0, // 0 => don't attempt to load-balance simulation
         eventRateLimit: 50, // we need a high rate for distributing scene definitions
@@ -2020,16 +2077,6 @@ async function unityDrivenStartSession() {
         };
         const { controller } = session.view.realm.vm;
         controller.tickHook = ticker;
-// $$$ TEMPORARY HACK TO KEEP OfflineSocket TICKING
-if (runOffline) {
-    const { socket } = controller.connection;
-    clearInterval(socket.ticker);
-    socket.tick = function() {
-        this.reply('TICK', { time: this.time });
-        setTimeout(() => this.tick(), this.ticks);
-    };
-    socket.tick();
-}
     }
 }
 
