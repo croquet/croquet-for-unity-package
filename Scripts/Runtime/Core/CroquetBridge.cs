@@ -62,7 +62,7 @@ public class CroquetBridge : MonoBehaviour
     // static float messageThrottle = 0.035f; // should result in deferred messages being sent on every other FixedUpdate tick (20ms)
     // static float tickThrottle = 0.015f; // if not a bunch of messages, at least send a tick every 20ms
     // private float lastMessageSend = 0; // realtimeSinceStartup
-    private bool sentOnLastUpdate = false;
+    // private bool sentOnLastUpdate = false;
 
     LoadingProgressDisplay loadingProgressDisplay;
 
@@ -476,17 +476,15 @@ public class CroquetBridge : MonoBehaviour
 
     public void SendToCroquetSync(params string[] strings)
     {
-        if (croquetSessionState != "running")
-        {
-            Debug.LogWarning($"attempt to send when Croquet session is not running: {string.Join(',', strings)}");
-            return;
-        }
+        // Aug 2023: now that we check for deferred messages every 20ms, this is currently identical to SendToCroquet()
         SendToCroquet(strings);
-        sentOnLastUpdate = false; // force to send on next tick
+        // sentOnLastUpdate = false; // force to send on next tick [removed; see note in SendDeferredMessages]
     }
 
     public void SendThrottledToCroquet(string throttleId, params string[] strings)
     {
+        // this simply replaces any message with the same throttleId that is waiting to be sent -
+        // thus it only "throttles" to our frequency of processing deferred messages (currently 50Hz),
         int i = 0;
         int foundIndex = -1;
         foreach ((string throttle, string msg) entry in deferredMessages)
@@ -516,14 +514,15 @@ public class CroquetBridge : MonoBehaviour
         // we expect this to be called 50 times per second.  usually on every other call we send
         // deferred messages if there are any, otherwise send a tick.  expediting message sends
         // is therefore a matter of clearing the sentOnLastUpdate flag.
-
-        if (sentOnLastUpdate)
-        {
-            sentOnLastUpdate = false;
-            return;
-        }
-
-        sentOnLastUpdate = true;
+        // UPDATE (4 Aug 2023): limiting ticks/messages to 25 times per second rather than 50 seems
+        // needlessly cautious, given websocket and JS engine capabilities.  see what happens if
+        // we send something every time.
+        // if (sentOnLastUpdate)
+        // {
+        //     sentOnLastUpdate = false;
+        //     return;
+        // }
+        // sentOnLastUpdate = true;
 
         if (deferredMessages.Count == 0)
         {
