@@ -7,3 +7,4 @@ build-tools
 .eslintrc.json
 dist
 .last-installed-tools
+.last-build-state
