@@ -97,10 +97,6 @@ public class CroquetRunner : MonoBehaviour
     {
         appSourcePath = Path.Combine(Application.streamingAssetsPath, appName);
 
-#if UNITY_EDITOR
-        CroquetBuilder.WaitUntilBuildComplete();
-#endif
-
         // options for running Croquet code (given lack of webview support on Windows):
         //
         //   editor on MacOS:

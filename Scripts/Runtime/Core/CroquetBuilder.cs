@@ -8,47 +8,145 @@ using System.Text;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEditor;
-using UnityEditor.Build;
-using UnityEditor.Build.Reporting;
-using UnityEditor.PackageManager;
 using Debug = UnityEngine.Debug;
 using Object = UnityEngine.Object;
 
 // CroquetBuilder is a class with only static methods.  Its responsibility is to manage the bundling of
 // the JavaScript code associated with an app that the user wants to play.
+
+[Serializable]
+public class PackageJson
+{
+    public string version; // all we need, for now
+}
+
+[Serializable]
+public class InstalledToolsRecord
+{
+    public string packageVersion;
+    public int localToolsLevel;
+}
+
+[Serializable]
+public class JSBuildStateRecord
+{
+    public string target;
+    public int localToolsLevel;
+}
+
 public class CroquetBuilder
 {
     public static string NodeExeInBuild =
         Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "croquet-bridge", "node", "node.exe"));
 
-#if UNITY_EDITOR
-    // on MacOS we offer the user the chance to start a webpack watcher that will
-    // re-bundle the Croquet app automatically whenever the code is updated.
-    // the console output from webpack is shown in the Unity console.  we do not
-    // currently support the watcher on Windows, because we have not yet found a way
-    // to stream the console output from a long-running webpack process.
-    //
-    // on both platforms we provide options for explicitly re-bundling by invocation
-    // from the Croquet menu (for example, before hitting Build), or automatically
-    // whenever the Play button is pressed.
-    public static Process oneTimeBuildProcess; // queried by CroquetMenu
-    private static string hashedProjectPath = ""; // a hash string representing this project, for use in EditorPrefs keys
+    private static string INSTALLED_TOOLS_RECORD = ".last-installed-tools"; // in .CroquetJS folder
+    private static string BUILD_STATE_RECORD = ".last-build-state"; // in each .CroquetJS/<appname> folder
+
     private static string sceneName;
     private static CroquetBridge sceneBridgeComponent;
-    private static CroquetRunner sceneRunnerComponent; // used in WIN editor
+    private static CroquetRunner sceneRunnerComponent;
     private static string sceneAppName;
 
-    private const string ID_PROP = "JS Builder Id";
-    private const string APP_PROP = "JS Builder App";
-    private const string TARGET_PROP = "JS Builder Target";
-    private const string LOG_PROP = "JS Builder Log";
-    private const string BUILD_ON_PLAY = "JS Build on Play";
-    private const string BUILD_STATE = "JS Build State";
-
-    public static bool BuildOnPlayEnabled
+    public static string StateOfJSBuildTools()
     {
-        get { return EditorPrefs.GetBool(ProjectSpecificKey(BUILD_ON_PLAY), false); }
-        set { EditorPrefs.SetBool(ProjectSpecificKey(BUILD_ON_PLAY), value); }
+        // return one of four states
+        //   "ok" - we appear to be up to date with the package
+        //   "needsRefresh" - we have tools, but they are out of step with the package
+        //   "needsInstall" - no sign that tools have been installed, but we can go ahead and try
+        //   "unavailable" - no way to install: Croquet package is missing, or (on Mac) no Node executable found
+
+#if UNITY_EDITOR_OSX
+        string nodeExecutable = GetSceneBuildDetails().nodeExecutable;
+        if (nodeExecutable == "" || !File.Exists(nodeExecutable))
+        {
+            Debug.LogError("Cannot build JS on MacOS without a valid path to Node in the Settings object");
+            return "unavailable";
+        }
+#endif
+
+        string croquetVersion = FindCroquetPackageVersion();
+        InstalledToolsRecord toolsRecord = FindJSToolsRecord();
+        if (toolsRecord == null)
+        {
+            return "needsInstall";
+        }
+
+        // we don't try to figure out an ordering between package versions.  if the .latest-installed-tools
+        // differs from the package version, we raise a warning.
+        if (toolsRecord.packageVersion != croquetVersion)
+        {
+            Debug.LogWarning("Updated JS build tools are available; run Croquet => Install JS Build Tools to install");
+            return "needsRefresh";
+        }
+
+        return "ok";
+    }
+
+    public static InstalledToolsRecord FindJSToolsRecord()
+    {
+        string jsFolder = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", ".CroquetJS"));
+        if (!Directory.Exists(jsFolder)) return null; // nothing installed
+
+        string installRecord = Path.Combine(jsFolder, INSTALLED_TOOLS_RECORD);
+        if (!File.Exists(installRecord)) return null;
+
+        string installRecordContents = File.ReadAllText(installRecord);
+        return JsonUtility.FromJson<InstalledToolsRecord>(installRecordContents);
+    }
+
+    public static string FindCroquetPackageVersion()
+    {
+        string packageJsonPath = Path.GetFullPath("Packages/com.croquet.multiplayer/package.json");
+        string packageJsonContents = File.ReadAllText(packageJsonPath);
+        PackageJson packageJson = JsonUtility.FromJson<PackageJson>(packageJsonContents);
+        return packageJson.version;
+    }
+
+    public static bool CheckJSBuildState(string appName, string target)
+    {
+        // check whether we have a build for the given app and target that is up to date with the JS tools
+        InstalledToolsRecord installedTools = FindJSToolsRecord(); // caller must have confirmed that this exists
+        int toolsLevel = installedTools.localToolsLevel;
+
+        string buildRecord = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", ".CroquetJS",
+            appName, BUILD_STATE_RECORD));
+        if (!File.Exists(buildRecord)) return false; // failed, or never built
+
+        string buildRecordContents = File.ReadAllText(buildRecord).Trim();
+        JSBuildStateRecord record = JsonUtility.FromJson<JSBuildStateRecord>(buildRecordContents);
+
+        return record.target == target && record.localToolsLevel >= toolsLevel;
+    }
+
+    public static bool PrepareSceneForBuildTarget(Scene scene, string jsTarget)
+    {
+        CacheSceneComponents(scene);
+
+        bool goodToGo = true;
+        if (sceneBridgeComponent.appProperties.apiKey == "" ||
+            sceneBridgeComponent.appProperties.apiKey == "PUT_YOUR_API_KEY_HERE")
+        {
+            Debug.LogWarning("Cannot build without a Croquet API Key in the Settings object");
+            goodToGo = false;
+        }
+
+        if (sceneBridgeComponent.useNodeJS != (jsTarget == "node"))
+        {
+            Debug.LogWarning("Croquet Bridge \"Use Node JS\" setting is incompatible with target \"{jsTarget}\"");
+            goodToGo = false;
+        };
+        if (sceneRunnerComponent.waitForUserLaunch)
+        {
+            Debug.LogWarning("Croquet Runner \"Wait For User Launch\" must be off");
+            goodToGo = false;
+        };
+        if (sceneRunnerComponent.runOffline)
+        {
+            Debug.LogWarning("Croquet Runner \"Run Offline\" must be off");
+            goodToGo = false;
+        };
+
+        return goodToGo;
     }
 
     public static void CacheSceneComponents(Scene scene)
@@ -68,6 +166,36 @@ public class CroquetBuilder
         sceneName = scene.name;
         sceneBridgeComponent = bridgeComp;
         sceneRunnerComponent = runnerComp;
+    }
+
+    // =========================================================================================
+    //              everything from here on is only relevant in the editor
+    // =========================================================================================
+
+#if UNITY_EDITOR
+    // on MacOS we offer the user the chance to start a webpack watcher that will
+    // re-bundle the Croquet app automatically whenever the code is updated.
+    // the console output from webpack is shown in the Unity console.  we do not
+    // currently support the watcher on Windows, because we have not yet found a way
+    // to stream the console output from a long-running webpack process.
+    //
+    // on both platforms we provide options for explicitly re-bundling by invocation
+    // from the Croquet menu (for example, before hitting Build), or automatically
+    // whenever the Play button is pressed.
+    public static Process oneTimeBuildProcess; // queried by CroquetMenu
+    private static string hashedProjectPath = ""; // a hash string representing this project, for use in EditorPrefs keys
+
+    private const string ID_PROP = "JS Builder Id";
+    private const string APP_PROP = "JS Builder App";
+    private const string TARGET_PROP = "JS Builder Target";
+    private const string LOG_PROP = "JS Builder Log";
+    private const string BUILD_ON_PLAY = "JS Build on Play";
+    private const string TOOLS_LEVEL = "JS Tools Level";
+
+    public static bool BuildOnPlayEnabled
+    {
+        get { return EditorPrefs.GetBool(ProjectSpecificKey(BUILD_ON_PLAY), true); }
+        set { EditorPrefs.SetBool(ProjectSpecificKey(BUILD_ON_PLAY), value); }
     }
 
     public static string CroquetBuildToolsInPackage = Path.GetFullPath("Packages/io.croquet.multiplayer/.JSTools");
@@ -143,33 +271,26 @@ public class CroquetBuilder
     private static void RecordJSBuildState(string appName, string target, bool success)
     {
         // record one of "web", "node", or "" to indicate whether StreamingAssets contains a successful
-        // build for web or node, or for neither
-        EditorPrefs.SetString(AppSpecificKey(BUILD_STATE, appName), success ? target : "");
-    }
-
-    private static string GetJSBuildState(string appName)
-    {
-        // fetch the build state recorded above, if any
-        return EditorPrefs.GetString(AppSpecificKey(BUILD_STATE, appName), "");
-    }
-
-    private static string KeyPrefixForAppPrefs()
-    {
-        // return a key for EditorPrefs settings that we need to be isolated to this project.
-
-        // our cache of the hash string will be wiped on each Play.  refresh if needed.
-        if (hashedProjectPath == "")
+        // build for web or node, or for neither.
+        // also record the tools level, so we can force a rebuild after a tools update.
+        string buildRecord = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", ".CroquetJS",
+            appName, CroquetBuilder.BUILD_STATE_RECORD));
+        if (success)
         {
-            string keyBase = Application.streamingAssetsPath;
-            byte[] keyBaseBytes = new UTF8Encoding().GetBytes(keyBase);
-            byte[] hash = MD5.Create().ComputeHash(keyBaseBytes);
-            StringBuilder sb = new StringBuilder();
-            foreach (byte b in hash) sb.Append(b.ToString("X2"));
-            hashedProjectPath = sb.ToString().Substring(0, 16); // no point keeping whole thing
+            int toolsLevel = EditorPrefs.GetInt(ProjectSpecificKey(TOOLS_LEVEL), 0);
+            JSBuildStateRecord record = new JSBuildStateRecord()
+            {
+                target = target,
+                localToolsLevel = toolsLevel
+            };
+            File.WriteAllText(buildRecord, JsonUtility.ToJson(record, true));
         }
-
-        return hashedProjectPath;
+        else
+        {
+            File.Delete(buildRecord);
+        }
     }
+
     public static void StartBuild(bool startWatcher)
     {
         if (oneTimeBuildProcess != null) return; // already building
@@ -289,30 +410,12 @@ public class CroquetBuilder
         }
     }
 
-    public static void WaitUntilBuildComplete()
-    {
-        // if a one-time build is in progress, await its exit.
-        // when running a watcher (MacOS only), this function will *not* wait at
-        // any point.  it is the user's responsibility when starting the watcher
-        // to hold off from any action that needs the build until the console shows
-        // that it has completed.  thereafter, rebuilds tend to happen so quickly
-        // that there is effectively no chance for an incomplete build to be used.
-
-        // may 2023: because StartBuild is synchronous, and already includes a
-        // WaitForExit, this method in fact never has anything to wait for.
-        if (oneTimeBuildProcess != null)
-        {
-            Debug.Log("waiting for one-time build to complete");
-            oneTimeBuildProcess.WaitForExit();
-        }
-    }
-
     private static async void WatchLogFile(string filePath, long initialLength)
     {
         string appName = EditorPrefs.GetString(ProjectSpecificKey(APP_PROP), "");
         string target = EditorPrefs.GetString(ProjectSpecificKey(TARGET_PROP));
         long lastFileLength = initialLength;
-        bool recordedSuccess = GetJSBuildState(appName) == target;
+        bool recordedSuccess = CheckJSBuildState(appName, target);
 
         // Debug.Log($"watching build log for {appName} from position {lastFileLength}");
 
@@ -393,14 +496,12 @@ public class CroquetBuilder
         }
     }
 
-    public static bool EnsureJSBuildAvailable(bool inPlayMode)
+    public static bool EnsureJSBuildAvailableToPlay()
     {
-        if (StateOfJSBuildTools() == "missing") return false; // explanatory error will already have been logged
-
         string jsPath = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", ".CroquetJS"));
 
         // getting build details also sets sceneBridgeComponent and sceneRunnerComponent, and runs
-        // the check that on Windows force useNodeJS to true unless CroquetRunner is set to wait
+        // the check that on Windows forces useNodeJS to true unless CroquetRunner is set to wait
         // for user launch
         JSBuildDetails details = GetSceneBuildDetails();
         if (sceneBridgeComponent == null)
@@ -424,22 +525,35 @@ public class CroquetBuilder
         }
 
         string target = sceneBridgeComponent.useNodeJS ? "node" : "web";
-
+#if !UNITY_EDITOR_WIN
         if (RunningWatcherApp() == appName)
         {
             // there is a watcher
-            bool success = GetJSBuildState(appName) == target;
-            if (!success) Debug.LogError($"JS Watcher has not reported a successful build for target \"{target}\".");
+            bool success = CheckJSBuildState(appName, target);
+            if (!success)
+            {
+                string watcherTarget = EditorPrefs.GetString(ProjectSpecificKey(TARGET_PROP));
+                if (watcherTarget != target)
+                {
+                    Debug.LogError($"We need a JS build for target \"{target}\", but there is a Watcher building for \"{watcherTarget}\"");
+                }
+                else
+                {
+                    // it's building for the right target, but hasn't succeeded
+                    Debug.LogError($"JS Watcher has not reported a successful build.");
+                }
+            }
             return success;
         }
+#endif
 
-        // no watcher; maybe we should rebuild on Play?
-        if (inPlayMode && BuildOnPlayEnabled)
+        // no watcher.  are we set up to rebuild on Play?
+        if (BuildOnPlayEnabled)
         {
             try
             {
                 StartBuild(false); // false => no watcher
-                return GetJSBuildState(appName) == target;
+                return CheckJSBuildState(appName, target);
             }
             catch (Exception e)
             {
@@ -448,7 +562,31 @@ public class CroquetBuilder
             }
         }
 
-        return GetJSBuildState(appName) == target;
+        bool alreadyBuilt = CheckJSBuildState(appName, target);
+        if (!alreadyBuilt)
+        {
+            Debug.LogError($"No up-to-date JS build found for app \"{appName}\", target \"{target}\".  For automatic building, set Croquet => Build JS on Play.");
+        }
+
+        return alreadyBuilt;
+    }
+
+    private static string KeyPrefixForAppPrefs()
+    {
+        // return a key for EditorPrefs settings that we need to be isolated to this project.
+
+        // our cache of the hash string will be wiped on each Play.  refresh if needed.
+        if (hashedProjectPath == "")
+        {
+            string keyBase = Application.streamingAssetsPath;
+            byte[] keyBaseBytes = new UTF8Encoding().GetBytes(keyBase);
+            byte[] hash = MD5.Create().ComputeHash(keyBaseBytes);
+            StringBuilder sb = new StringBuilder();
+            foreach (byte b in hash) sb.Append(b.ToString("X2"));
+            hashedProjectPath = sb.ToString().Substring(0, 16); // no point keeping whole thing
+        }
+
+        return hashedProjectPath;
     }
 
     public static void EnteredEditMode()
@@ -529,136 +667,120 @@ public class CroquetBuilder
         return builderProcess == null ? "" : EditorPrefs.GetString(ProjectSpecificKey(APP_PROP));
     }
 
-    private static string StateOfJSBuildTools()
+    public static async Task<bool> EnsureJSToolsAvailable()
     {
-        // return one of three states
-        //   "ok" - we appear to be up to date with the package
-        //   "needsRefresh" - we have tools, but they are out of step with the package
-        //   "missing" - no sign that tools have been installed (possibly because even the Croquet package is missing), or (on Mac) no Node executable found
-
-#if UNITY_EDITOR_OSX
-        string nodeExecutable = GetSceneBuildDetails().nodeExecutable;
-        if (nodeExecutable == "" || !File.Exists(nodeExecutable))
+        string state = StateOfJSBuildTools();
+        if (state == "unavailable") return false; // explanatory error will already have been logged
+        if (state == "needsInstall")
         {
-            Debug.LogError("Cannot build JS on MacOS without a valid path to Node in the Settings object");
-            return "missing";
-        }
-#endif
-
-        string croquetVersion = FindCroquetPackageVersion();
-        if (croquetVersion == "")
-        {
-            Debug.LogError("Cannot find the Croquet Multiplayer dependency");
-            return "missing";
-        }
-
-        string installedVersion = FindJSToolsPackageVersion();
-        if (installedVersion == "")
-        {
-            Debug.LogError("Need to run Croquet => Install JS Build Tools");
-            return "missing";
-        }
-
-        // we don't try to figure out an ordering between package versions.  if the .latest-installed-tools
-        // differs from the package version, we raise a warning.
-        if (installedVersion != croquetVersion)
-        {
-            Debug.LogWarning("Newer JS build tools are available; run Croquet => Install JS Build Tools to update");
-            return "needsRefresh";
-        }
-
-        return "ok";
-    }
-
-    public static string FindJSToolsPackageVersion()
-    {
-        string jsFolder = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", ".CroquetJS"));
-        if (!Directory.Exists(jsFolder)) return ""; // nothing installed
-
-        string installRecord = Path.Combine(jsFolder, ".last-installed-tools");
-        if (!File.Exists(installRecord)) return "";
-
-        string installRecordContents = File.ReadAllText(installRecord);
-        return installRecordContents.Trim();
-    }
-
-    public static string FindCroquetPackageVersion()
-    {
-        string[] packageJsons = AssetDatabase.FindAssets("package");
-        foreach (string guid1 in packageJsons)
-        {
-            string path = AssetDatabase.GUIDToAssetPath(guid1);
-            if (path.Contains("croquet.multiplayer"))
+            Debug.LogWarning("No JS build tools found.  Attempting to install...");
+            bool success = await InstallJSTools();
+            if (!success)
             {
-                UnityEditor.PackageManager.PackageInfo info = UnityEditor.PackageManager.PackageInfo.FindForAssetPath(path);
-                return info.version;
+                Debug.LogError("Install of JS build tools failed.");
+                return false;
             }
+
+            Debug.Log("Install of JS build tools completed");
         }
-        return "";
+
+        // if we didn't just install, state is either "needsRefresh" (in which case a warning will
+        // have been logged) or "ok".  caller can go ahead.
+        return true;
     }
 
-    public static async Task InstallJSTools(bool forceUpdate)
+    public static async Task<bool> InstallJSTools()
     {
-        string packageVersion = FindCroquetPackageVersion();
-        if (packageVersion == "")
-        {
-            Debug.LogError("Croquet Multiplayer package not found");
-            return;
-        }
-
         string toolsRoot = CroquetBuildToolsInPackage;
         string jsFolder = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", ".CroquetJS"));
-        if (!Directory.Exists(jsFolder)) Directory.CreateDirectory(jsFolder);
+        string installRecord = Path.Combine(jsFolder, INSTALLED_TOOLS_RECORD);
 
-        // compare package.json before overwriting, to decide if it will be changing
-        string sourcePackageJson = Path.GetFullPath(Path.Combine(toolsRoot, "package.json"));
-        string installedPackageJson = Path.GetFullPath(Path.Combine(jsFolder, "package.json"));
-        bool needsNpmInstall = !File.Exists(installedPackageJson) || !FileEquals(sourcePackageJson, installedPackageJson);
-
-        // copy the various files to Assets/.CroquetJS/
-        string[] files = new string[] { "package.json", ".eslintrc.json", ".gitignore" };
-        foreach (var file in files)
+        try
         {
-            string fsrc = Path.GetFullPath(Path.Combine(toolsRoot, file));
-            string fdest = Path.GetFullPath(Path.Combine(jsFolder, file));
-            Debug.Log($"writing {fdest}");
-            FileUtil.ReplaceFile(fsrc, fdest);
+            if (!Directory.Exists(jsFolder)) Directory.CreateDirectory(jsFolder);
+
+            bool needsNPMInstall;
+            if (FindJSToolsRecord() == null) needsNPMInstall = true; // nothing installed; run the whole process
+            else
+            {
+                // compare package.json before overwriting, to decide if it will be changing
+                string sourcePackageJson = Path.GetFullPath(Path.Combine(toolsRoot, "package.json"));
+                string installedPackageJson = Path.GetFullPath(Path.Combine(jsFolder, "package.json"));
+                needsNPMInstall = !File.Exists(installedPackageJson) ||
+                                  !FileEquals(sourcePackageJson, installedPackageJson);
+            }
+
+            // copy the various files to Assets/.CroquetJS/
+            string[] files = { "package.json", ".eslintrc.json", ".gitignore" };
+            foreach (var file in files)
+            {
+                string fsrc = Path.GetFullPath(Path.Combine(toolsRoot, file));
+                string fdest = Path.GetFullPath(Path.Combine(jsFolder, file));
+                Debug.Log($"writing {file}");
+                FileUtil.ReplaceFile(fsrc, fdest);
+            }
+
+            string dir = "build-tools";
+            string dsrc = Path.GetFullPath(Path.Combine(toolsRoot, dir));
+            string ddest = Path.GetFullPath(Path.Combine(jsFolder, dir));
+            Debug.Log($"writing directory {dir}");
+            FileUtil.ReplaceDirectory(dsrc, ddest);
+
+            int errorCount = 0; // look for errors in logging from npm i
+            if (needsNPMInstall)
+            {
+                // announce that we'll be running the npm install, then introduce a short delay to
+                // give the console a chance to display the messages logged so far.
+                Debug.Log("Running npm install...");
+                await Task.Delay(100);
+
+                string nodePath = "";
+                bool onOSX = Application.platform == RuntimePlatform.OSXEditor;
+                if (onOSX)
+                {
+                    string nodeExecutable = GetSceneBuildDetails().nodeExecutable;
+                    nodePath = Path.GetDirectoryName(nodeExecutable);
+                }
+
+                Task task = onOSX
+                    ? new Task(() => errorCount = InstallOSX(jsFolder, toolsRoot, nodePath))
+                    : new Task(() => errorCount = InstallWin(jsFolder, toolsRoot));
+                task.Start();
+                task.Wait();
+            }
+            else Debug.Log("package.json has not changed; skipping npm install");
+
+            if (errorCount == 0)
+            {
+                // update our local count of how many times the tools have been updated.  this will invalidate
+                // any build made with an earlier level.
+                string levelKey = ProjectSpecificKey(TOOLS_LEVEL);
+                int previousLevel = EditorPrefs.GetInt(levelKey, 0);
+                int toolsLevel = previousLevel + 1;
+                EditorPrefs.SetInt(levelKey, toolsLevel);
+
+                // add a record of which package version, and local copy of the JS tools, the files came from
+                InstalledToolsRecord record = new InstalledToolsRecord()
+                {
+                    packageVersion = FindCroquetPackageVersion(),
+                    localToolsLevel = toolsLevel
+                };
+                File.WriteAllText(installRecord, JsonUtility.ToJson(record, true));
+
+                return true; // success!
+            }
+        }
+        catch (Exception e)
+        {
+            Debug.LogError(e);
         }
 
-        string dir = "build-tools";
-        string dsrc = Path.GetFullPath(Path.Combine(toolsRoot, dir));
-        string ddest = Path.GetFullPath(Path.Combine(jsFolder, dir));
-        Debug.Log($"writing directory {ddest}");
-        FileUtil.ReplaceDirectory(dsrc, ddest);
-
-        // and a record of which package version the files came from
-        string installRecord = Path.Combine(jsFolder, ".last-installed-tools");
-        File.WriteAllText(installRecord, packageVersion);
-
-        if (needsNpmInstall)
-        {
-            string nodePath = "";
-#if UNITY_EDITOR_OSX
-            string nodeExecutable = GetSceneBuildDetails().nodeExecutable;
-            nodePath = Path.GetDirectoryName(nodeExecutable);
-#endif
-
-            // get ready to start the npm install.
-            Debug.Log("Running npm install...");
-
-            // introducing even a short delay gives the console a chance to show the logged messages
-            await Task.Delay(100);
-
-            Task task = (Application.platform == RuntimePlatform.OSXEditor)
-                ? new Task(() => InstallOSX(jsFolder, toolsRoot, nodePath))
-                : new Task(() => InstallWin(jsFolder, toolsRoot));
-            task.Start();
-            task.Wait();
-        }
-        else Debug.Log("Not running npm install; package.json has not changed");
+        // failed
+        if (File.Exists(installRecord)) File.Delete(installRecord); // make clear that the installation failed
+        return false;
     }
 
-    private static void InstallOSX(string installDir, string toolsRoot, string nodePath) {
+    private static int InstallOSX(string installDir, string toolsRoot, string nodePath) {
         string scriptPath = Path.GetFullPath(Path.Combine(toolsRoot, "runNPM.sh"));
         Process p = new Process();
         p.StartInfo.UseShellExecute = false;
@@ -676,10 +798,10 @@ public class CroquetBuilder
 
         p.WaitForExit();
 
-        LogProcessOutput(output.Split('\n'), errors.Split('\n'), "npm install");
+        return LogProcessOutput(output.Split('\n'), errors.Split('\n'), "npm install");
     }
 
-    private static void InstallWin(string installDir, string toolsRoot)
+    private static int InstallWin(string installDir, string toolsRoot)
     {
         string scriptPath = Path.GetFullPath(Path.Combine(toolsRoot, "runNPM.ps1"));
         string stdoutFile = Path.GetTempFileName();
@@ -698,7 +820,7 @@ public class CroquetBuilder
         File.Delete(stdoutFile);
         string errors = File.ReadAllText(stderrFile);
         File.Delete(stderrFile);
-        LogProcessOutput(output.Split('\n'), errors.Split('\n'), "npm install");
+        return LogProcessOutput(output.Split('\n'), errors.Split('\n'), "npm install");
     }
 
     // based on https://www.dotnetperls.com/file-equals
@@ -748,42 +870,4 @@ public class CroquetBuilder
 // this whole class (apart from one static string) is only defined when in the editor
 #endif
 }
-
-#if UNITY_EDITOR
-class CroquetBuildPreprocess : IPreprocessBuildWithReport
-{
-    public int callbackOrder { get { return 0; } }
-    public void OnPreprocessBuild(BuildReport report)
-    {
-        // for Windows standalone, we temporarily place a copy of node.exe
-        // in the StreamingAssets folder for inclusion in the build.
-        BuildTarget target = report.summary.platform;
-        if (target == BuildTarget.StandaloneWindows || target == BuildTarget.StandaloneWindows64)
-        {
-            string src = CroquetBuilder.NodeExeInPackage;
-            string dest = CroquetBuilder.NodeExeInBuild;
-            string destDir = Path.GetDirectoryName(dest);
-            Directory.CreateDirectory(destDir);
-            FileUtil.CopyFileOrDirectory(src, dest);
-        }
-    }
-}
-
-class CroquetBuildPostprocess : IPostprocessBuildWithReport
-{
-    public int callbackOrder { get { return 0; } }
-    public void OnPostprocessBuild(BuildReport report)
-    {
-        // if we temporarily copied node.exe (see above), remove it again
-        BuildTarget target = report.summary.platform;
-        if (target == BuildTarget.StandaloneWindows || target == BuildTarget.StandaloneWindows64)
-        {
-            string dest = CroquetBuilder.NodeExeInBuild;
-            FileUtil.DeleteFileOrDirectory(dest);
-            FileUtil.DeleteFileOrDirectory(dest + ".meta");
-        }
-    }
-}
-
-#endif
 

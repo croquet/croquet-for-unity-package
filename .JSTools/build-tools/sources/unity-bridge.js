@@ -10,7 +10,7 @@
 //   \x05 to mark the start of the data argument in a binary-encoded message, such as updateSpatial.
 
 
-import { ModelService, Actor, RegisterMixin, mix, Pawn, View, ViewRoot, ViewService, GetViewService, StartWorldcore, PawnManager, v3_equals, q_equals, q_normalize } from "@croquet/worldcore-kernel";
+import { Constants, ModelService, Actor, RegisterMixin, mix, Pawn, View, ViewRoot, ViewService, GetViewService, StartWorldcore, PawnManager, v3_equals, q_equals, q_normalize } from "@croquet/worldcore-kernel";
 
 globalThis.timedLog = msg => {
     // timing on the message itself is now added when forwarding
@@ -155,10 +155,11 @@ console.log(`PORT ${portStr}`);
                 break;
             }
             case 'readyForSession': {
-                const { apiKey, appId, sessionName, debugFlags, waitForUserLaunch } = JSON.parse(args[0]);
+                const { apiKey, appId, packageVersion, sessionName, debugFlags, waitForUserLaunch } = JSON.parse(args[0]);
                 globalThis.timedLog(`starting session of ${appId} with key ${apiKey}`);
                 this.apiKey = apiKey;
                 this.appId = appId;
+                this.packageVersion = packageVersion;
                 this.sessionName = sessionName;
                 this.debugFlags = debugFlags; // comma-separated list
                 this.runOffline = debugFlags.includes('offline');
@@ -2021,7 +2022,8 @@ export async function StartSession(model, view) {
 }
 
 async function unityDrivenStartSession() {
-    const { apiKey, appId, sessionName, debugFlags, runOffline } = theGameEngineBridge;
+    const { apiKey, appId, packageVersion, sessionName, debugFlags, runOffline } = theGameEngineBridge;
+    Constants.c4uPackageVersion = packageVersion;
     const name = `${sessionName}`;
     const password = 'password';
     session = await StartWorldcore({

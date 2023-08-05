@@ -28,7 +28,7 @@ public class CroquetBridge : MonoBehaviour
     public CroquetDebugTypes debugLoggingFlags;
 
     [Header("Session State")]
-    public static string bridgeState = "stopped"; // waitingForJSBuild, foundJSBuild, waitingForSocket, waitingForSessionName, waitingForSession, started
+    public static string bridgeState = "stopped"; // needJSBuild, waitingForJSBuild, foundJSBuild, waitingForSocket, waitingForSessionName, waitingForSession, started
     public string croquetSessionState = "stopped"; // requested, running, stopped
     public string sessionName = "";
     public string croquetViewId;
@@ -92,6 +92,12 @@ public class CroquetBridge : MonoBehaviour
     float inProcessingTime = 0;
     float lastMessageDiagnostics; // realtimeSinceStartup
 
+    private void SetBridgeState(string state)
+    {
+        bridgeState = state;
+        Log("session", $"bridge state: {bridgeState}");
+    }
+
     void Awake()
     {
         // Create Singleton Accessor
@@ -104,6 +110,8 @@ public class CroquetBridge : MonoBehaviour
         {
             Instance = this;
 
+            Application.runInBackground = true;
+
             SetCSharpLogOptions("info,session");
             SetCSharpMeasureOptions("bundle"); // for now, just report handling of message batches from Croquet
 
@@ -112,28 +120,17 @@ public class CroquetBridge : MonoBehaviour
 #if UNITY_EDITOR
             if (!croquetRunner.runOffline && (appProperties.apiKey == "" || appProperties.apiKey == "PUT_YOUR_API_KEY_HERE"))
             {
-                Debug.LogError("Without an API key in the Settings object, you can only run Croquet if you select Run Offline.");
-                EditorApplication.ExitPlaymode();
-                return;
+                Debug.LogWarning("No API key found in the Settings object; switching Croquet to run in Offline mode.");
+                croquetRunner.runOffline = true;
             }
 
-            bridgeState = "waitingForJSBuild";
-            Log("session", $"bridge state: {bridgeState}");
-
-            if (!CroquetBuilder.EnsureJSBuildAvailable(true))
-            {
-                EditorApplication.ExitPlaymode();
-                return;
-            }
+            SetBridgeState("needJSBuild");
+#else
+            SetBridgeState("foundJSBuild"); // assume that in a deployed app we always have a JS build
 #endif
 
-            bridgeState = "foundJSBuild"; // will be checked in Update()
-            Log("session", $"bridge state: {bridgeState}");
-
             DontDestroyOnLoad(gameObject);
-
             croquetSystems = gameObject.GetComponents<CroquetSystem>();
-
             Croquet.Subscribe("croquet", "viewCount", HandleViewCount);
         }
     }
@@ -145,6 +142,24 @@ public class CroquetBridge : MonoBehaviour
 
         SceneManager.activeSceneChanged += ChangedActiveScene; // in Start, so it's only set up once
     }
+
+#if UNITY_EDITOR
+    private async void WaitForJSBuild()
+    {
+        bool success = await CroquetBuilder.EnsureJSToolsAvailable();
+        if (success)
+        {
+            success = CroquetBuilder.EnsureJSBuildAvailableToPlay();
+            if (!success)
+            {
+                EditorApplication.ExitPlaymode();
+                return;
+            }
+        }
+
+        SetBridgeState("foundJSBuild"); // assume that in a deployed app we always have a JS build
+    }
+#endif
 
     public void SetSessionName(string newSessionName)
     {
@@ -307,7 +322,9 @@ public class CroquetBridge : MonoBehaviour
             }
             catch (Exception e)
             {
-                Debug.Log($"Exception detected for port {port}:{e}");
+                Debug.Log($"Port {port} is not available");
+                Log("debug", $"Error on trying port {port}: {e}");
+
                 port++;
                 remainingTries--;
                 wsAttempt.Stop();
@@ -422,6 +439,7 @@ public class CroquetBridge : MonoBehaviour
         ReadyForSessionProps props = new ReadyForSessionProps();
         props.apiKey = appProperties.apiKey;
         props.appId = appProperties.appPrefix + "." + appName;
+        props.packageVersion = CroquetBuilder.FindCroquetPackageVersion();
         props.sessionName = sessionName;
         string debugLogTypes = debugLoggingFlags.ToString();
         string debugFlags = debugLogTypes; // unless...
@@ -458,6 +476,7 @@ public class CroquetBridge : MonoBehaviour
     {
         public string apiKey;
         public string appId;
+        public string packageVersion;
         public string sessionName;
         public string debugFlags;
         public bool waitForUserLaunch;
@@ -588,21 +607,27 @@ public class CroquetBridge : MonoBehaviour
     void AdvanceBridgeStateWhenReady()
     {
         // go through the asynchronous steps involved in starting the bridge
+#if UNITY_EDITOR
+        if (bridgeState == "needJSBuild")
+        {
+            SetBridgeState("waitingForJSBuild");
+            WaitForJSBuild();
+            return;
+        }
+#endif
+
         if (bridgeState == "foundJSBuild")
         {
-            bridgeState = "waitingForSocket";
-            Log("session", $"bridge state: {bridgeState}");
+            SetBridgeState("waitingForSocket");
             StartWS();
         }
         else if (bridgeState == "waitingForSocket" && clientSock != null)
         {
-            bridgeState = "waitingForSessionName";
-            Log("session", $"bridge state: {bridgeState}");
+            SetBridgeState("waitingForSessionName");
         }
         else if (bridgeState == "waitingForSessionName" && sessionName != "")
         {
-            bridgeState = "waitingForSession";
-            Log("session", $"bridge state: {bridgeState}");
+            SetBridgeState("waitingForSession");
             StartCroquetSession();
         }
     }
@@ -1130,8 +1155,7 @@ public class CroquetBridge : MonoBehaviour
         // viewId we have in the session
         croquetViewId = viewId;
         Log("session", "Croquet session running!");
-        bridgeState = "started";
-        Log("session", $"bridge state: {bridgeState}");
+        SetBridgeState("started");
         croquetSessionState = "running";
         lastMessageDiagnostics = Time.realtimeSinceStartup;
         estimatedDateNowAtReflectorZero = -1; // reset, to accept first value from new view
