@@ -1,29 +1,13 @@
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
+using System.IO;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
-using System.IO;
 using UnityEditor.SceneManagement;
 using UnityEngine.SceneManagement;
-
-class CroquetBuildPreprocess : IPreprocessBuildWithReport
-{
-    public int callbackOrder { get { return 0; } }
-    public void OnPreprocessBuild(BuildReport report)
-    {
-        // for Windows standalone, we temporarily place a copy of node.exe
-        // in the StreamingAssets folder for inclusion in the build.
-        BuildTarget target = report.summary.platform;
-        if (target == BuildTarget.StandaloneWindows || target == BuildTarget.StandaloneWindows64)
-        {
-            string src = CroquetBuilder.NodeExeInPackage;
-            string dest = CroquetBuilder.NodeExeInBuild;
-            string destDir = Path.GetDirectoryName(dest);
-            Directory.CreateDirectory(destDir);
-            FileUtil.CopyFileOrDirectory(src, dest);
-        }
-    }
-}
+using Debug = UnityEngine.Debug;
 
 [InitializeOnLoad]
 public static class SceneAndPlayWatcher
@@ -35,45 +19,34 @@ public static class SceneAndPlayWatcher
         // but we can detect whether the init is happening because of an imminent state change
         // https://gamedev.stackexchange.com/questions/157266/unity-why-does-playmodestatechanged-get-called-after-start
         EditorApplication.playModeStateChanged += HandlePlayModeState;
-        if (EditorApplication.isPlayingOrWillChangePlaymode)
-        {
-            CroquetBuilder.EnteringPlayMode();
-        }
+        // if (EditorApplication.isPlayingOrWillChangePlaymode)
+        // {
+        //     CroquetBuilder.EnteringPlayMode();
+        // }
 
         EditorSceneManager.activeSceneChangedInEditMode += HandleSceneChange;
+
+        EditorApplication.quitting += EditorQuitting;
     }
 
     private static void HandlePlayModeState(PlayModeStateChange state)
     {
-        // PlayModeStateChange.ExitingEditMode (i.e., entering Play) is handled above in the constructor
-        if (state == PlayModeStateChange.EnteredEditMode)
-        {
-            CroquetBuilder.EnteredEditMode();
-        }
+        // PlayModeStateChange.ExitingEditMode (i.e., before entering Play) - if needed - is handled above in the constructor
+        if (state == PlayModeStateChange.EnteredEditMode) CroquetBuilder.EnteredEditMode();
     }
 
     private static void HandleSceneChange(Scene current, Scene next)
     {
         CroquetBuilder.CacheSceneComponents(next);
     }
-}
 
-class CroquetBuildPostprocess : IPostprocessBuildWithReport
-{
-    public int callbackOrder { get { return 0; } }
-    public void OnPostprocessBuild(BuildReport report)
+    private static void EditorQuitting()
     {
-        // if we temporarily copied node.exe (see above), remove it again
-        BuildTarget target = report.summary.platform;
-        if (target == BuildTarget.StandaloneWindows || target == BuildTarget.StandaloneWindows64)
-        {
-            string dest = CroquetBuilder.NodeExeInBuild;
-            FileUtil.DeleteFileOrDirectory(dest);
-            FileUtil.DeleteFileOrDirectory(dest + ".meta");
-        }
+#if UNITY_EDITOR_OSX
+        CroquetBuilder.StopWatcher(); // if any
+#endif
     }
 }
-
 
 
 public class CroquetMenu
@@ -82,10 +55,10 @@ public class CroquetMenu
     private const string BuildOnPlayItem = "Croquet/Build JS on Play";
 
     private const string StarterItem = "Croquet/Start JS Watcher";
-    private const string StopperItemHere = "Croquet/Stop JS Watcher (this scene)";
-    private const string StopperItemOther = "Croquet/Stop JS Watcher (other scene)";
+    private const string StopperItemHere = "Croquet/Stop JS Watcher (this app)";
+    private const string StopperItemOther = "Croquet/Stop JS Watcher (other app)";
 
-    private const string CopyJSItem = "Croquet/Copy JS Build Tools";
+    private const string InstallJSToolsItem = "Croquet/Install JS Build Tools";
 
     [MenuItem(BuildNowItem, false, 100)]
     private static void BuildNow()
@@ -96,14 +69,14 @@ public class CroquetMenu
     [MenuItem(BuildNowItem, true)]
     private static bool ValidateBuildNow()
     {
-        // this item is not available if either
+        // this item is not available if
         //   we don't know how to build for the current scene, or
         //   a watcher for any scene is running (MacOS only), or
         //   a build has been requested and hasn't finished yet
         if (!CroquetBuilder.KnowHowToBuildJS()) return false;
 
 #if !UNITY_EDITOR_WIN
-        if (CroquetBuilder.RunningWatcherApp() != "") return false;
+        if (CroquetBuilder.RunningWatcherApp() == CroquetBuilder.GetSceneBuildDetails().appName) return false;
 #endif
         if (CroquetBuilder.oneTimeBuildProcess != null) return false;
         return true;
@@ -119,6 +92,9 @@ public class CroquetMenu
     private static bool ValidateBuildOnPlayToggle()
     {
         if (!CroquetBuilder.KnowHowToBuildJS()) return false;
+#if !UNITY_EDITOR_WIN
+        if (CroquetBuilder.RunningWatcherApp() == CroquetBuilder.GetSceneBuildDetails().appName) return false;
+#endif
 
         Menu.SetChecked(BuildOnPlayItem, CroquetBuilder.BuildOnPlayEnabled);
         return true;
@@ -170,29 +146,116 @@ public class CroquetMenu
     }
 #endif
 
-
-    [MenuItem(CopyJSItem, false, 200)]
-    private static void CopyJS()
+    [MenuItem(InstallJSToolsItem, false, 200)]
+    private static async void InstallJSTools()
     {
-        string toolsRoot = CroquetBuilder.CroquetBuildToolsInPackage;
-        string unityParentFolder = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "..", ".."));
-        string jsFolder = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS"));
+        await CroquetBuilder.InstallJSTools();
+        Debug.Log("InstallJSTools finished");
+    }
 
-        // package.json and .eslintrc to parent of the entire Unity project
-        string[] files = new string[] { "package.json", ".eslintrc.json" };
-        foreach (var file in files)
-        {
-            string fsrc = Path.GetFullPath(Path.Combine(toolsRoot, file));
-            string fdest = Path.GetFullPath(Path.Combine(unityParentFolder, file));
-            Debug.Log($"replacing {fdest} with {fsrc}");
-            FileUtil.ReplaceFile(fsrc, fdest);
-        }
-
-        // build-tools to Assets/CroquetJS/
-        string dir = "build-tools";
-        string dsrc = Path.GetFullPath(Path.Combine(toolsRoot, dir));
-        string ddest = Path.GetFullPath(Path.Combine(jsFolder, dir));
-        Debug.Log($"replacing {ddest} with {dsrc}");
-        FileUtil.ReplaceDirectory(dsrc, ddest);
+    [MenuItem(InstallJSToolsItem, true)]
+    private static bool ValidateInstallJSTools()
+    {
+#if !UNITY_EDITOR_WIN
+        if (CroquetBuilder.RunningWatcherApp() != "") return false;
+#endif
+        return true;
     }
 }
+
+
+class CroquetBuildPreprocess : IPreprocessBuildWithReport
+{
+    public int callbackOrder { get { return 0; } }
+    public void OnPreprocessBuild(BuildReport report)
+    {
+        BuildTarget target = report.summary.platform;
+        bool isWindowsBuild = target == BuildTarget.StandaloneWindows || target == BuildTarget.StandaloneWindows64;
+        string jsTarget = isWindowsBuild ? "node" : "web";
+
+        Scene activeScene = EditorSceneManager.GetActiveScene();
+        if (!CroquetBuilder.PrepareSceneForBuildTarget(activeScene, jsTarget))
+        {
+            // reason for refusal will already have been logged
+            throw new BuildFailedException("You must fix some settings (see warnings above) before building");
+        }
+
+        bool readyToBuild = true;
+        string failureMessage = "Missing JS build tools";
+        string state = CroquetBuilder.StateOfJSBuildTools(); // ok, needsRefresh, needsInstall, unavailable
+        if (state == "unavailable") readyToBuild = false; // explanatory error will already have been logged
+        else if (state == "needsInstall")
+        {
+            Debug.LogError("No JS build tools found.  Use Croquet => Install JS Build Tools to install");
+            readyToBuild = false;
+        }
+
+        if (readyToBuild) // ok so far
+        {
+            // find all the appNames that are going into the build
+            HashSet<string> appNames = new HashSet<string>();
+            string previousScenePath = activeScene.path;
+            foreach (EditorBuildSettingsScene scene in EditorBuildSettings.scenes)
+            {
+                if (scene.enabled)
+                {
+                    // Debug.Log(scene.path);
+
+                    EditorSceneManager.OpenScene(scene.path);
+                    CroquetBridge[] allObjects = Resources.FindObjectsOfTypeAll<CroquetBridge>();
+                    foreach (CroquetBridge obj in allObjects)
+                    {
+                        // @@ the collection will contain the components and their gameObjects.  only the former
+                        // will have a meaningful appName field.
+                        if (obj.gameObject.activeSelf && !String.IsNullOrEmpty(obj.appName)) appNames.Add(obj.appName);
+                    }
+                }
+            }
+            // put it back to the scene where we started
+            EditorSceneManager.OpenScene(previousScenePath);
+
+            // for each appName, check its build directory to ensure that we
+            // have an up-to-date build for the current installed level of the JS build tools.
+            foreach (string appName in appNames)
+            {
+                if (!CroquetBuilder.CheckJSBuildState(appName, jsTarget))
+                {
+                    Debug.LogError($"Failed to find up-to-date build for \"{appName}\", target \"{jsTarget}\"");
+                    failureMessage = "Missing up-to-date JS build(s)";
+                    readyToBuild = false;
+                }
+            }
+        }
+
+        if (!readyToBuild) throw new BuildFailedException(failureMessage);
+
+        // everything seems fine.  on Windows, copy the node.exe into the right place.
+        if (isWindowsBuild) CopyNodeExe();
+    }
+
+    private void CopyNodeExe()
+    {
+        string src = CroquetBuilder.NodeExeInPackage;
+        string dest = CroquetBuilder.NodeExeInBuild;
+        string destDir = Path.GetDirectoryName(dest);
+        Directory.CreateDirectory(destDir);
+        FileUtil.CopyFileOrDirectory(src, dest);
+    }
+}
+
+class CroquetBuildPostprocess : IPostprocessBuildWithReport
+{
+    public int callbackOrder { get { return 0; } }
+    public void OnPostprocessBuild(BuildReport report)
+    {
+        // if we temporarily copied node.exe (see above), remove it again
+        BuildTarget target = report.summary.platform;
+        if (target == BuildTarget.StandaloneWindows || target == BuildTarget.StandaloneWindows64)
+        {
+            string dest = CroquetBuilder.NodeExeInBuild;
+            FileUtil.DeleteFileOrDirectory(dest);
+            FileUtil.DeleteFileOrDirectory(dest + ".meta");
+        }
+    }
+}
+

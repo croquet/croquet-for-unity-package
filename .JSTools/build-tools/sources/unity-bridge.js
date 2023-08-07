@@ -10,7 +10,7 @@
 //   \x05 to mark the start of the data argument in a binary-encoded message, such as updateSpatial.
 
 
-import { ModelService, Actor, RegisterMixin, mix, Pawn, View, ViewRoot, ViewService, GetViewService, StartWorldcore, PawnManager, v3_equals, q_equals, q_normalize } from "@croquet/worldcore-kernel";
+import { Constants, ModelService, Actor, RegisterMixin, mix, Pawn, View, ViewRoot, ViewService, GetViewService, StartWorldcore, PawnManager, v3_equals, q_equals, q_normalize } from "@croquet/worldcore-kernel";
 
 globalThis.timedLog = msg => {
     // timing on the message itself is now added when forwarding
@@ -74,6 +74,7 @@ console.log(`PORT ${portStr}`);
             };
         };
         sock.onclose = _evt => {
+            this.setJSLogForwarding([]); // restore to local logging
             globalThis.timedLog('bridge websocket closed');
             this.bridgeIsConnected = false;
             if (session) session.leave();
@@ -154,28 +155,30 @@ console.log(`PORT ${portStr}`);
                 break;
             }
             case 'readyForSession': {
-                const [apiKey, appId, sessionName, debugLogTypes, waitForUserLaunchStr] = args;
+                const { apiKey, appId, packageVersion, sessionName, debugFlags, waitForUserLaunch } = JSON.parse(args[0]);
                 globalThis.timedLog(`starting session of ${appId} with key ${apiKey}`);
                 this.apiKey = apiKey;
                 this.appId = appId;
+                this.packageVersion = packageVersion;
                 this.sessionName = sessionName;
-                this.debugLogTypes = debugLogTypes; // comma-separated list
+                this.debugFlags = debugFlags; // comma-separated list
+                this.runOffline = debugFlags.includes('offline');
                 // if this is an auto-launched session (i.e., not an external browser), set up logging so that warnings and errors appear in the Unity console.  for an external browser, we forward nothing.
                 // @@ should be configurable (especially so it can be turned off
                 // for a build).
-                this.setJSLogForwarding(waitForUserLaunchStr === 'false' ? ['warn', 'error'] : []);
+                this.setJSLogForwarding(waitForUserLaunch ? ['warn', 'error'] : []);
                 unityDrivenStartSession();
                 break;
             }
             case 'requestToLoadScene': {
                 // args are
                 //   scene name - if different from model's existing scene, request will always be accepted
-                //   forceReload - "true" or "false", determining whether init can override *same* scene in model
-                //   forceRebuild - "true" or "false", determining whether init can use cached scene details if available
+                //   forceReload - "True" or "False", determining whether init can override *same* scene in model
+                //   forceRebuild - "True" or "False", determining whether init can use cached scene details if available
                 if (this.preloadingView) {
                     const sceneName = args[0];
-                    const forceReload = args[1] === 'true';
-                    const forceRebuild = args[2] === 'true';
+                    const forceReload = args[1] === 'True';
+                    const forceRebuild = args[2] === 'True';
                     this.preloadingView.publishRequestToLoadScene(sceneName, forceReload, forceRebuild);
                 } else console.warn(`requestToLoadScene but no preloadingView!`);
                 break;
@@ -304,7 +307,6 @@ console.log(`PORT ${portStr}`);
     }
 
     setJSLogForwarding(toForward) {
-        console.log("categories of JS log forwarded to Unity:", toForward);
         const isNode = globalThis.CROQUET_NODE;
         const timeStamper = logVals => `${(globalThis.CroquetViewDate || Date).now() % 100000}: ` + logVals.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
         const forwarder = (logType, logVals) => this.sendCommand('logFromJS', logType, timeStamper(logVals));
@@ -320,7 +322,8 @@ console.log(`PORT ${portStr}`);
                 else console[logType] = console[`q_${logType}`]; // use system default
             }
         });
-    }
+        console.log("categories of JS log forwarded to Unity:", toForward);
+   }
 
     update(_time) {
         // sent by the gameViewManager on each update()
@@ -346,7 +349,11 @@ console.log(`PORT ${portStr}`);
         // from that, and the current values of performance.now and Date.now, we
         // calculate an estimate of what our Date.now would have been when the
         // reflector's raw time was zero.  that gets sent over the bridge.
-        if (!sessionOffsetEstimator?.offsetEstimate) return;
+
+        // if the Croquet session is running offline, the estimator
+        // will return a constant offset of 1.
+        const offset = sessionOffsetEstimator?.getOffsetEstimate();
+        if (!offset) return;
 
         const perfNow = performance.now();
         const reflectorNow = sessionOffsetEstimator.offsetEstimate + perfNow;
@@ -622,7 +629,7 @@ export const GameViewManager = class extends ViewService {
         let tries = 1;
         const max = this.maxGameHandle;
         const pawns = this.pawnsByGameHandle;
-        while (true) {
+        while (true) { // eslint-disable-line no-constant-condition
             handle++;
             if (handle > max) handle = 1; // loop back
             if (!pawns[handle]) break; // found one!
@@ -1696,9 +1703,17 @@ export class GameInputManager extends ViewService {
 class TimeList {
     constructor() {
         this.firstNode = null;
+        this.deferredInsertions = [];
     }
 
     insert(delay, id) {
+        // if new timeouts are created by the callbacks we process, hold those
+        // back until the processing pass is finished.
+        if (this.processingList) {
+            this.deferredInsertions.push([delay, id]);
+            return;
+        }
+
         const now = performance.now();
         const newNode = { triggerTime: now + delay, id };
         if (!this.firstNode) {
@@ -1735,7 +1750,9 @@ class TimeList {
     }
 
     processUpTo(timeLimit, processor) {
-        if (!this.firstNode) return;
+        if (!this.firstNode || this.processingList) return; // this is non-re-entrant
+
+        this.processingList = true;
 
         let n = this.firstNode;
         while (n && n.triggerTime <= timeLimit) {
@@ -1743,6 +1760,10 @@ class TimeList {
             n = n.next;
         }
         this.firstNode = n; // maybe empty
+
+        this.processingList = false;
+        this.deferredInsertions.forEach(args => this.insert(...args));
+        this.deferredInsertions.length = 0;
     }
 }
 
@@ -1753,9 +1774,14 @@ class TimerClient {
 
         globalThis.setTimeout = (c, d) => this.setTimeout(c, d);
         globalThis.clearTimeout = id => this.clearTimeout(id);
+
+        globalThis.setInterval = (c, g) => this.setInterval(c, g);
+        globalThis.clearInterval = id => this.clearInterval(id);
     }
 
     setTimeout(callback, duration) {
+        // the _setxxx methods are there so we can insert code like the stuff
+        // below, to test the accuracy of our timing
         return this._setTimeout(callback, duration);
 
         // const target = Date.now() + duration;
@@ -1771,11 +1797,46 @@ class TimerClient {
         return id;
     }
 
+    setInterval(callback, gap) {
+        return this._setInterval(callback, gap);
+    }
+    _setInterval(callback, gap) {
+        let id;
+        let lastCall = null;
+        const intervalCallback = () => {
+            callback();
+            // if the timeout record for this id has gone, the callback must
+            // have called clearInterval.  we have nothing more to do.
+            if (!this.timeouts[id]) return;
+
+            // if we see that this call was late, adjust the timeout for
+            // the next one as a gesture towards catching up.  we're at
+            // the mercy of the calls that are ticking this timer itself,
+            // but can at least try to avoid falling further behind on
+            // every iteration.
+            const now = Date.now();
+            let nextGap = gap;
+            if (lastCall !== null) {
+                const thisGap = now - lastCall;
+                if (thisGap > gap) nextGap = Math.max(4, gap - (thisGap - gap));
+            }
+            lastCall = now;
+            this.timeouts[id] = { callback: intervalCallback };
+            this.timeList.insert(nextGap, id);
+        };
+        id = this._setTimeout(intervalCallback, gap);
+        return id;
+    }
+
     clearTimeout(id) {
         this._clearTimeout(id);
     }
     _clearTimeout(id) {
         delete this.timeouts[id];
+    }
+
+    clearInterval(id) {
+        this._clearTimeout(id); // [sic]
     }
 
     serviceTimeouts() {
@@ -1786,7 +1847,10 @@ class TimerClient {
             if (record) {
                 const { callback } = record;
                 if (callback) callback();
-                delete this.timeouts[id];
+                // if the callback has set up a new timeout record for the same id,
+                // leave it be (this happens in our interval handler).
+                // otherwise, the record has served its purpose and can be removed.
+                if (this.timeouts[id] === record) delete this.timeouts[id];
             }
         }));
     }
@@ -1827,16 +1891,27 @@ class SessionOffsetEstimator {
     // maintain a best guess of the minimum offset between the local wall clock and the reflector's raw time as received on PING messages and their PONG responses.  this is used purely to judge when an event has been held up on one or other leg, and hence to adjust the calculation of the estimated offset between local and reflector time.
     // one problem we have to deal with is network batching of messages, meaning that they often arrive late.  so whenever a reflector event indicates that its raw time is earlier than our current guess, we assume that this is closer to the actual timing.  immediately adjust our estimate.
     // but then, in case the minimum offset is in fact gradually growing - i.e., the local wall clock is gradually gaining on the reflector's - the estimate is continually nudged forwards using a bias that adds 0.2ms per second (12ms per minute) of elapsed time since the last adjustment.  we expect that bias to be overridden every few seconds by an accurately timed event - but if the actual offset really is drifting by a few ms per minute, the bias should ensure that we capture that.
-    constructor(sess) {
+
+    // we now also support "offline" mode, in which case the offsetEstimate
+    // reports a fixed value (so reflector raw time appears to march exactly
+    // in step with Date.now)
+    constructor(sess, runOffline) {
         this.session = sess;
-        const controller = this.controller = sess.view.realm.vm.controller;
+        this.runOffline = runOffline;
+        if (!runOffline) {
+            const controller = this.controller = sess.view.realm.vm.controller;
 
-        this.offsetEstimate = null;
-        this.minRoundtrip = 0;
+            this.offsetEstimate = null;
+            this.minRoundtrip = 0;
 
-        controller.connection.pongHook = args => this.handlePong(args);
-        this.initReflectorOffsets();
-        this.sendPing();
+            controller.connection.pongHook = args => this.handlePong(args);
+            this.initReflectorOffsets();
+            this.sendPing();
+        }
+    }
+
+    getOffsetEstimate() {
+        return this.runOffline ? 1 : this.offsetEstimate;
     }
 
     sendPing() {
@@ -1947,7 +2022,8 @@ export async function StartSession(model, view) {
 }
 
 async function unityDrivenStartSession() {
-    const { apiKey, appId, sessionName, debugLogTypes } = theGameEngineBridge;
+    const { apiKey, appId, packageVersion, sessionName, debugFlags, runOffline } = theGameEngineBridge;
+    Constants.c4uPackageVersion = packageVersion;
     const name = `${sessionName}`;
     const password = 'password';
     session = await StartWorldcore({
@@ -1956,12 +2032,13 @@ async function unityDrivenStartSession() {
         name,
         password,
         step: 'manual',
-        tps: 33, // deliberately out of phase with 25Hz ticks from Unity, aiming for decent stepping coverage in WebView sessions
+        tps: 33, // deliberately out of phase with 50Hz ticks from Unity, aiming for decent stepping coverage in WebView sessions
         autoSleep: false,
         expectedSimFPS: 0, // 0 => don't attempt to load-balance simulation
         eventRateLimit: 50, // we need a high rate for distributing scene definitions
         flags: ['unity', 'rawtime'],
-        debug: debugLogTypes,
+        debug: debugFlags,
+        offline: runOffline,
         model: ModelRootClass,
         view: PreloadingViewRoot,
         progressReporter: ratio => {
@@ -1970,7 +2047,7 @@ async function unityDrivenStartSession() {
         }
     });
 
-    sessionOffsetEstimator = new SessionOffsetEstimator(session);
+    sessionOffsetEstimator = new SessionOffsetEstimator(session, runOffline);
 
     const STEP_DELAY = 26; // aiming to ensure that there will be a new 50ms physics update on every other step
     let stepCount = 0;
@@ -2000,7 +2077,8 @@ async function unityDrivenStartSession() {
 
             stepHandler();
         };
-        session.view.realm.vm.controller.tickHook = ticker;
+        const { controller } = session.view.realm.vm;
+        controller.tickHook = ticker;
     }
 }
 

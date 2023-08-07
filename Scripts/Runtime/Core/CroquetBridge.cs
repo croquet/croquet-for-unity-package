@@ -28,6 +28,7 @@ public class CroquetBridge : MonoBehaviour
     public CroquetDebugTypes debugLoggingFlags;
 
     [Header("Session State")]
+    public static string bridgeState = "stopped"; // needJSBuild, waitingForJSBuild, foundJSBuild, waitingForSocket, waitingForSessionName, waitingForSession, started
     public string croquetSessionState = "stopped"; // requested, running, stopped
     public string sessionName = "";
     public string croquetViewId;
@@ -61,7 +62,7 @@ public class CroquetBridge : MonoBehaviour
     // static float messageThrottle = 0.035f; // should result in deferred messages being sent on every other FixedUpdate tick (20ms)
     // static float tickThrottle = 0.015f; // if not a bunch of messages, at least send a tick every 20ms
     // private float lastMessageSend = 0; // realtimeSinceStartup
-    private bool sentOnLastUpdate = false;
+    // private bool sentOnLastUpdate = false;
 
     LoadingProgressDisplay loadingProgressDisplay;
 
@@ -91,6 +92,12 @@ public class CroquetBridge : MonoBehaviour
     float inProcessingTime = 0;
     float lastMessageDiagnostics; // realtimeSinceStartup
 
+    private void SetBridgeState(string state)
+    {
+        bridgeState = state;
+        Log("session", $"bridge state: {bridgeState}");
+    }
+
     void Awake()
     {
         // Create Singleton Accessor
@@ -102,15 +109,29 @@ public class CroquetBridge : MonoBehaviour
         else
         {
             Instance = this;
-            DontDestroyOnLoad(gameObject);
 
-            croquetRunner = gameObject.GetComponent<CroquetRunner>();
-            croquetSystems = gameObject.GetComponents<CroquetSystem>();
-
-            Croquet.Subscribe("croquet", "viewCount", HandleViewCount);
+            Application.runInBackground = true;
 
             SetCSharpLogOptions("info,session");
             SetCSharpMeasureOptions("bundle"); // for now, just report handling of message batches from Croquet
+
+            croquetRunner = gameObject.GetComponent<CroquetRunner>();
+
+#if UNITY_EDITOR
+            if (!croquetRunner.runOffline && (appProperties.apiKey == "" || appProperties.apiKey == "PUT_YOUR_API_KEY_HERE"))
+            {
+                Debug.LogWarning("No API key found in the Settings object; switching Croquet to run in Offline mode.");
+                croquetRunner.runOffline = true;
+            }
+
+            SetBridgeState("needJSBuild");
+#else
+            SetBridgeState("foundJSBuild"); // assume that in a deployed app we always have a JS build
+#endif
+
+            DontDestroyOnLoad(gameObject);
+            croquetSystems = gameObject.GetComponents<CroquetSystem>();
+            Croquet.Subscribe("croquet", "viewCount", HandleViewCount);
         }
     }
 
@@ -119,31 +140,35 @@ public class CroquetBridge : MonoBehaviour
         // Frame cap
         Application.targetFrameRate = 60;
 
-        LoadingProgressDisplay loadingObj = FindObjectOfType<LoadingProgressDisplay>();
-        if (loadingObj != null)
+        SceneManager.activeSceneChanged += ChangedActiveScene; // in Start, so it's only set up once
+    }
+
+#if UNITY_EDITOR
+    private async void WaitForJSBuild()
+    {
+        bool success = await CroquetBuilder.EnsureJSToolsAvailable();
+        if (success)
         {
-            DontDestroyOnLoad(loadingObj.gameObject);
-            loadingProgressDisplay = loadingObj.GetComponent<LoadingProgressDisplay>();
-            if (!launchThroughMenu)
+            success = CroquetBuilder.EnsureJSBuildAvailableToPlay();
+            if (!success)
             {
-                SetLoadingStage(0.25f, "Connecting...");
-            }
-            else
-            {
-                loadingProgressDisplay.Hide(); // until it's needed
+                EditorApplication.ExitPlaymode();
+                return;
             }
         }
 
-        SceneManager.activeSceneChanged += ChangedActiveScene; // in Start, so it's only set up once
-
-        lastMessageDiagnostics = Time.realtimeSinceStartup;
-
-        StartWS();
+        SetBridgeState("foundJSBuild"); // assume that in a deployed app we always have a JS build
     }
+#endif
 
     public void SetSessionName(string newSessionName)
     {
-        if (newSessionName == "")
+        if (croquetRunner.runOffline)
+        {
+            sessionName = "offline";
+            Debug.LogWarning("session name overridden for offline run");
+        }
+        else if (newSessionName == "")
         {
             sessionName = defaultSessionName;
             Log("session", $"session name defaulted to {defaultSessionName}");
@@ -261,14 +286,20 @@ public class CroquetBridge : MonoBehaviour
         // ...but I don't know how to apply this now that we're using HttpServer (plus WS service)
         // rather than WebSocketServer
 
-#if UNITY_EDITOR
-        if (appProperties.apiKey == "" || appProperties.apiKey == "PUT_YOUR_API_KEY_HERE")
+        LoadingProgressDisplay loadingObj = FindObjectOfType<LoadingProgressDisplay>();
+        if (loadingObj != null)
         {
-            Debug.LogError("Cannot play without a valid API key in the Settings object");
-            EditorApplication.ExitPlaymode();
-            return;
+            DontDestroyOnLoad(loadingObj.gameObject);
+            loadingProgressDisplay = loadingObj.GetComponent<LoadingProgressDisplay>();
+            if (!launchThroughMenu)
+            {
+                SetLoadingStage(0.25f, "Connecting...");
+            }
+            else
+            {
+                loadingProgressDisplay.Hide(); // until it's needed
+            }
         }
-#endif
 
         Log("session", "building WS Server on open port");
         int port = appProperties.preferredPort;
@@ -291,7 +322,9 @@ public class CroquetBridge : MonoBehaviour
             }
             catch (Exception e)
             {
-                Debug.Log($"Exception detected for port {port}:{e}");
+                Debug.Log($"Port {port} is not available");
+                Log("debug", $"Error on trying port {port}: {e}");
+
                 port++;
                 remainingTries--;
                 wsAttempt.Stop();
@@ -403,24 +436,30 @@ public class CroquetBridge : MonoBehaviour
         // out in.  if the session already has a running scene, we'll go there; if not, we'll
         // activate the scene with buildIndex 1 and propose to Croquet (knowing that another client
         // might get there first) that it load that one.
-        string apiKey = appProperties.apiKey;
-        string appId = appProperties.appPrefix + "." + appName;
+        ReadyForSessionProps props = new ReadyForSessionProps();
+        props.apiKey = appProperties.apiKey;
+        props.appId = appProperties.appPrefix + "." + appName;
+        props.packageVersion = CroquetBuilder.FindCroquetPackageVersion();
+        props.sessionName = sessionName;
         string debugLogTypes = debugLoggingFlags.ToString();
-
-        bool waitForUserLaunch = croquetRunner.waitForUserLaunch;
-
+        string debugFlags = debugLogTypes; // unless...
+        if (croquetRunner.runOffline)
+        {
+            // @@ minor hack: Croquet treats "offline" as just another debug flag.  since in Unity
+            // the option appears in the UI separately from the logging flags, add it in here.
+            debugFlags = debugFlags == "" ? "offline" : $"{debugFlags},offline";
+        }
+        props.debugFlags = debugFlags;
+        props.waitForUserLaunch = croquetRunner.waitForUserLaunch;
+        string propsJson = JsonUtility.ToJson(props);
         string[] command = new string[] {
             "readyForSession",
-            apiKey,
-            appId,
-            sessionName,
-            debugLogTypes,
-            waitForUserLaunch.ToString()
+            propsJson
         };
 
         // issue a warning if Croquet debug logging is enabled when not using an
         // external browser
-        if (!waitForUserLaunch && debugLogTypes != "")
+        if (!props.waitForUserLaunch && debugLogTypes != "")
         {
             Debug.LogWarning($"Croquet debug logging is set to \"{debugLogTypes}\"");
         }
@@ -431,6 +470,18 @@ public class CroquetBridge : MonoBehaviour
 
         croquetSessionState = "requested";
     }
+
+    [Serializable]
+    class ReadyForSessionProps
+    {
+        public string apiKey;
+        public string appId;
+        public string packageVersion;
+        public string sessionName;
+        public string debugFlags;
+        public bool waitForUserLaunch;
+    }
+
 
     public void SendToCroquet(params string[] strings)
     {
@@ -444,17 +495,15 @@ public class CroquetBridge : MonoBehaviour
 
     public void SendToCroquetSync(params string[] strings)
     {
-        if (croquetSessionState != "running")
-        {
-            Debug.LogWarning($"attempt to send when Croquet session is not running: {string.Join(',', strings)}");
-            return;
-        }
+        // Aug 2023: now that we check for deferred messages every 20ms, this is currently identical to SendToCroquet()
         SendToCroquet(strings);
-        sentOnLastUpdate = false; // force to send on next tick
+        // sentOnLastUpdate = false; // force to send on next tick [removed; see note in SendDeferredMessages]
     }
 
     public void SendThrottledToCroquet(string throttleId, params string[] strings)
     {
+        // this simply replaces any message with the same throttleId that is waiting to be sent -
+        // thus it only "throttles" to our frequency of processing deferred messages (currently 50Hz),
         int i = 0;
         int foundIndex = -1;
         foreach ((string throttle, string msg) entry in deferredMessages)
@@ -484,14 +533,15 @@ public class CroquetBridge : MonoBehaviour
         // we expect this to be called 50 times per second.  usually on every other call we send
         // deferred messages if there are any, otherwise send a tick.  expediting message sends
         // is therefore a matter of clearing the sentOnLastUpdate flag.
-
-        if (sentOnLastUpdate)
-        {
-            sentOnLastUpdate = false;
-            return;
-        }
-
-        sentOnLastUpdate = true;
+        // UPDATE (4 Aug 2023): limiting ticks/messages to 25 times per second rather than 50 seems
+        // needlessly cautious, given websocket and JS engine capabilities.  see what happens if
+        // we send something every time.
+        // if (sentOnLastUpdate)
+        // {
+        //     sentOnLastUpdate = false;
+        //     return;
+        // }
+        // sentOnLastUpdate = true;
 
         if (deferredMessages.Count == 0)
         {
@@ -516,7 +566,7 @@ public class CroquetBridge : MonoBehaviour
 
     void Update()
     {
-        if (clientSock != null && croquetSessionState == "stopped" && sessionName != "") StartCroquetSession();
+        if (bridgeState != "started") AdvanceBridgeStateWhenReady();
         else if (croquetSessionState == "running")
         {
             if (unitySceneState == "preparing" && SceneManager.GetActiveScene().name == croquetActiveScene)
@@ -551,6 +601,34 @@ public class CroquetBridge : MonoBehaviour
 
                 SendToCroquetSync("simulateNetworkGlitch", milliseconds.ToString());
             }
+        }
+    }
+
+    void AdvanceBridgeStateWhenReady()
+    {
+        // go through the asynchronous steps involved in starting the bridge
+#if UNITY_EDITOR
+        if (bridgeState == "needJSBuild")
+        {
+            SetBridgeState("waitingForJSBuild");
+            WaitForJSBuild();
+            return;
+        }
+#endif
+
+        if (bridgeState == "foundJSBuild")
+        {
+            SetBridgeState("waitingForSocket");
+            StartWS();
+        }
+        else if (bridgeState == "waitingForSocket" && clientSock != null)
+        {
+            SetBridgeState("waitingForSessionName");
+        }
+        else if (bridgeState == "waitingForSessionName" && sessionName != "")
+        {
+            SetBridgeState("waitingForSession");
+            StartCroquetSession();
         }
     }
 
@@ -647,22 +725,26 @@ public class CroquetBridge : MonoBehaviour
 
         long duration = DateTimeOffset.Now.ToUnixTimeMilliseconds() - start;
         if (duration == 0) duration++;
-        if (croquetSessionState == "running") Measure("update", start.ToString(), duration.ToString());
-
-        float now = Time.realtimeSinceStartup;
-        if (now - lastMessageDiagnostics > 1f)
+        if (croquetSessionState == "running")
         {
-            if (inBundleCount > 0 || inMessageCount > 0)
+            Measure("update", start.ToString(), duration.ToString());
+
+            float now = Time.realtimeSinceStartup;
+            if (now - lastMessageDiagnostics > 1f)
             {
-                Log("diagnostics", $"from Croquet: {inMessageCount} messages with {inBundleCount} bundles ({Mathf.Round((float)inBundleDelayMS / inBundleCount)}ms avg delay) handled in {Mathf.Round(inProcessingTime * 1000)}ms");
+                if (inBundleCount > 0 || inMessageCount > 0)
+                {
+                    Log("diagnostics", $"from Croquet: {inMessageCount} messages with {inBundleCount} bundles ({Mathf.Round((float)inBundleDelayMS / inBundleCount)}ms avg delay) handled in {Mathf.Round(inProcessingTime * 1000)}ms");
+                }
+
+                //Log("diagnostics", $"to Croquet: {outMessageCount} messages with {outBundleCount} bundles");
+                lastMessageDiagnostics = now;
+                inBundleCount = 0;
+                inMessageCount = 0;
+                inBundleDelayMS = 0; // long
+                inProcessingTime = 0;
+                outBundleCount = outMessageCount = 0;
             }
-            //Log("diagnostics", $"to Croquet: {outMessageCount} messages with {outBundleCount} bundles");
-            lastMessageDiagnostics = now;
-            inBundleCount = 0;
-            inMessageCount = 0;
-            inBundleDelayMS = 0; // long
-            inProcessingTime = 0;
-            outBundleCount = outMessageCount = 0;
         }
     }
 
@@ -1073,9 +1155,11 @@ public class CroquetBridge : MonoBehaviour
         // viewId we have in the session
         croquetViewId = viewId;
         Log("session", "Croquet session running!");
+        SetBridgeState("started");
         croquetSessionState = "running";
+        lastMessageDiagnostics = Time.realtimeSinceStartup;
         estimatedDateNowAtReflectorZero = -1; // reset, to accept first value from new view
-
+SetJSLogForwarding("log,warn,error"); // $$$
         if (waitingForFirstScene && !launchThroughMenu) Croquet.RequestToLoadScene(SceneManager.GetActiveScene().name, true, true);
     }
 
@@ -1153,8 +1237,8 @@ public class CroquetBridge : MonoBehaviour
         {
             "requestToLoadScene",
             sceneName,
-            forceReload ? "true" : "false",
-            forceRebuild ? "true" : "false"
+            forceReload.ToString(),
+            forceRebuild.ToString()
         };
         SendToCroquet(cmdAndArgs);
     }
