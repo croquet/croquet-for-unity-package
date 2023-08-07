@@ -96,7 +96,7 @@ public class CroquetBuilder
 
     public static string FindCroquetPackageVersion()
     {
-        string packageJsonPath = Path.GetFullPath("Packages/com.croquet.multiplayer/package.json");
+        string packageJsonPath = Path.GetFullPath("Packages/io.croquet.multiplayer/package.json");
         string packageJsonContents = File.ReadAllText(packageJsonPath);
         PackageJson packageJson = JsonUtility.FromJson<PackageJson>(packageJsonContents);
         return packageJson.version;
