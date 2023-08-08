@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
+using System.IO;
 using System.Linq;
 using System.Text;
 using UnityEditor;
@@ -28,6 +29,9 @@ public class CroquetBridge : MonoBehaviour
     public CroquetDebugTypes debugLoggingFlags;
 
     [Header("Session State")]
+    private List<string> sceneHarvestList; // joined pairs  sceneName:appName
+    private Dictionary<string, List<string>> sceneDefinitionsByApp =
+        new Dictionary<string, List<string>>(); // appName to list of scene definitions
     public static string bridgeState = "stopped"; // needJSBuild, waitingForJSBuild, foundJSBuild, waitingForSocket, waitingForSessionName, waitingForSession, started
     public string croquetSessionState = "stopped"; // requested, running, stopped
     public string sessionName = "";
@@ -118,13 +122,26 @@ public class CroquetBridge : MonoBehaviour
             croquetRunner = gameObject.GetComponent<CroquetRunner>();
 
 #if UNITY_EDITOR
-            if (!croquetRunner.runOffline && (appProperties.apiKey == "" || appProperties.apiKey == "PUT_YOUR_API_KEY_HERE"))
+            string harvestScenes = CroquetBuilder.HarvestSceneList;
+            if (harvestScenes != "")
             {
-                Debug.LogWarning("No API key found in the Settings object; switching Croquet to run in Offline mode.");
-                croquetRunner.runOffline = true;
+                // the overall string is a comma-separated list of sceneName:appName strings
+                sceneHarvestList = new List<string>(harvestScenes.Split(','));
+                CroquetBuilder.HarvestSceneList = ""; // clear immediately, in case something goes wrong
+                SetBridgeState("needSceneHarvest");
             }
+            else
+            {
+                if (!croquetRunner.runOffline &&
+                    (appProperties.apiKey == "" || appProperties.apiKey == "PUT_YOUR_API_KEY_HERE"))
+                {
+                    Debug.LogWarning(
+                        "No API key found in the Settings object; switching Croquet to run in Offline mode.");
+                    croquetRunner.runOffline = true;
+                }
 
-            SetBridgeState("needJSBuild");
+                SetBridgeState("needJSBuild");
+            }
 #else
             SetBridgeState("foundJSBuild"); // assume that in a deployed app we always have a JS build
 #endif
@@ -141,6 +158,14 @@ public class CroquetBridge : MonoBehaviour
         Application.targetFrameRate = 60;
 
         SceneManager.activeSceneChanged += ChangedActiveScene; // in Start, so it's only set up once
+
+        LoadingProgressDisplay loadingObj = FindObjectOfType<LoadingProgressDisplay>();
+        if (loadingObj != null)
+        {
+            DontDestroyOnLoad(loadingObj.gameObject);
+            loadingProgressDisplay = loadingObj.GetComponent<LoadingProgressDisplay>();
+            loadingProgressDisplay.Hide(); // until it's needed
+        }
     }
 
 #if UNITY_EDITOR
@@ -184,7 +209,9 @@ public class CroquetBridge : MonoBehaviour
     private void ChangedActiveScene(Scene previous, Scene current)
     {
         // this is triggered when we've already arrived in the "current" scene.
-        if (croquetSessionState != "stopped")
+        // either we arrived in the scene to harvest it, or - as long as Croquet is running
+        // - we've arrived to play here.
+        if (bridgeState == "waitingToHarvest" || croquetSessionState != "stopped")
         {
             ArrivedInGameScene(current);
         }
@@ -192,13 +219,16 @@ public class CroquetBridge : MonoBehaviour
 
     private void ArrivedInGameScene(Scene currentScene)
     {
-        if (currentScene.name != croquetActiveScene)
+        if (bridgeState != "waitingToHarvest")
         {
-            Debug.Log($"arrived in scene {currentScene.name} but waiting for {croquetActiveScene}");
-            return;
-        }
+            if (currentScene.name != croquetActiveScene)
+            {
+                Debug.Log($"arrived in scene {currentScene.name} but waiting for {croquetActiveScene}");
+                return;
+            }
 
-        waitingForFirstScene = false;
+            waitingForFirstScene = false;
+        }
 
         // immediately deactivate all Croquet objects, but keep a record of those that were active
         // in case we're asked to provide a scene definition
@@ -286,20 +316,7 @@ public class CroquetBridge : MonoBehaviour
         // ...but I don't know how to apply this now that we're using HttpServer (plus WS service)
         // rather than WebSocketServer
 
-        LoadingProgressDisplay loadingObj = FindObjectOfType<LoadingProgressDisplay>();
-        if (loadingObj != null)
-        {
-            DontDestroyOnLoad(loadingObj.gameObject);
-            loadingProgressDisplay = loadingObj.GetComponent<LoadingProgressDisplay>();
-            if (!launchThroughMenu)
-            {
-                SetLoadingStage(0.25f, "Connecting...");
-            }
-            else
-            {
-                loadingProgressDisplay.Hide(); // until it's needed
-            }
-        }
+        if (!launchThroughMenu) SetLoadingStage(0.25f, "Connecting...");
 
         Log("session", "building WS Server on open port");
         int port = appProperties.preferredPort;
@@ -608,7 +625,52 @@ public class CroquetBridge : MonoBehaviour
     {
         // go through the asynchronous steps involved in starting the bridge
 #if UNITY_EDITOR
-        if (bridgeState == "needJSBuild")
+        if (bridgeState == "needSceneHarvest")
+        {
+            string sceneAndApp = sceneHarvestList[0];
+            string sceneName = sceneAndApp.Split(':')[0];
+            SetBridgeState("waitingToHarvest");
+            Scene activeScene = SceneManager.GetActiveScene();
+            if (activeScene.name == sceneName)
+            {
+                ArrivedInGameScene(activeScene); // will trigger the systems to initialise for this scene
+            }
+            else
+            {
+                SceneManager.LoadScene(sceneName);
+            }
+        }
+        else if (bridgeState == "waitingToHarvest")
+        {
+            string sceneAndApp = sceneHarvestList[0];
+            string sceneName = sceneAndApp.Split(':')[0];
+            Scene activeScene = SceneManager.GetActiveScene();
+            if (activeScene.name == sceneName)
+            {
+                bool ready = true;
+                foreach (CroquetSystem system in croquetSystems)
+                {
+                    if (!system.ReadyToRunScene(sceneName)) ready = false;
+                }
+                if (!ready) return;
+
+                string appName = sceneAndApp.Split(':')[1];
+                HarvestSceneDefinition(sceneName, appName);
+
+                // now move on to the next scene, if any
+                sceneHarvestList.RemoveAt(0);
+                if (sceneHarvestList.Count > 0)
+                {
+                    SetBridgeState("needSceneHarvest"); // go round again
+                }
+                else
+                {
+                    WriteAllSceneDefinitions();
+                    EditorApplication.ExitPlaymode();
+                }
+            }
+        }
+        else if (bridgeState == "needJSBuild")
         {
             SetBridgeState("waitingForJSBuild");
             WaitForJSBuild();
@@ -632,6 +694,38 @@ public class CroquetBridge : MonoBehaviour
         }
     }
 
+    void HarvestSceneDefinition(string sceneName, string appName)
+    {
+        // the scene is ready.  get its definition.
+        Debug.Log($"ready to harvest scene \"{sceneName}\"");
+
+        List<string> sceneStrings = new List<string>() {
+            EarlySubscriptionTopicsAsString(),
+            CroquetEntitySystem.Instance.assetManifestString
+        };
+        sceneStrings.AddRange(GetSceneDefinitionStrings());
+        string sceneFullString = string.Join('\x01', sceneStrings.ToArray());
+
+        // in the list we interleave scene name and scene definition, for convenience of parsing the assembled file
+        if (!sceneDefinitionsByApp.ContainsKey(appName)) sceneDefinitionsByApp[appName] = new List<string>();
+        sceneDefinitionsByApp[appName].AddRange(new []{ sceneName, sceneFullString });
+        Debug.Log($"definition of {sceneFullString.Length} chars for scene {sceneName} in app {appName}");
+
+    }
+
+    void WriteAllSceneDefinitions()
+    {
+        foreach(KeyValuePair<string, List<string>> appScenes in sceneDefinitionsByApp)
+        {
+            string app = appScenes.Key;
+            string appDefinitions = string.Join('\x02', appScenes.Value.ToArray());
+            string filePath = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", ".CroquetJS", app, "scene-definitions.txt"));
+            File.WriteAllText(filePath, appDefinitions);
+        }
+
+        sceneDefinitionsByApp.Clear();
+    }
+
     void TellCroquetWeAreReadyForScene()
     {
         if (croquetActiveSceneState == "preload") SendDefineScene();
@@ -651,12 +745,23 @@ public class CroquetBridge : MonoBehaviour
         //   object string 1
         //   object string 2
         //   etc
-        List<string> definitionStrings = new List<string>() {
+        List<string> commandStrings = new List<string>() {
             "defineScene",
             SceneManager.GetActiveScene().name,
             EarlySubscriptionTopicsAsString(),
             CroquetEntitySystem.Instance.assetManifestString
         };
+
+        commandStrings.AddRange(GetSceneDefinitionStrings());
+
+        // send the message directly (bypassing the deferred-message queue)
+        string msg = String.Join('\x01', commandStrings.ToArray());
+        clientSock.Send(msg);
+    }
+
+    List<string> GetSceneDefinitionStrings()
+    {
+        List<string> definitionStrings = new List<string>();
 
         Dictionary<string, string> abbreviations = new Dictionary<string, string>();
         int tokens = 0;
@@ -694,9 +799,7 @@ public class CroquetBridge : MonoBehaviour
         }
 
         Log("session", $"scene definition with {tokens} tokens ({abbreviations.Count} unique)");
-        // send the message directly (bypassing the deferred-message queue)
-        string msg = String.Join('\x01', definitionStrings.ToArray());
-        clientSock.Send(msg);
+        return definitionStrings;
     }
 
     void SendReadyForScene()
@@ -1160,7 +1263,14 @@ public class CroquetBridge : MonoBehaviour
         lastMessageDiagnostics = Time.realtimeSinceStartup;
         estimatedDateNowAtReflectorZero = -1; // reset, to accept first value from new view
 SetJSLogForwarding("log,warn,error"); // $$$
-        if (waitingForFirstScene && !launchThroughMenu) Croquet.RequestToLoadScene(SceneManager.GetActiveScene().name, true, true);
+        // when starting directly from a game scene (not menu), force the scene to be
+        // rebuilt from the Unity side regardless of any pre-stored scene definition.
+        // but warn the user that it's happening.
+        if (waitingForFirstScene && !launchThroughMenu)
+        {
+            Debug.LogWarning($"Starting in a non-menu scene: model is forced to request scene definition from Unity, ignoring any pre-harvested definition.");
+            Croquet.RequestToLoadScene(SceneManager.GetActiveScene().name, true, true);
+        }
     }
 
     void HandleSceneStateUpdated(string[] args)
@@ -1281,6 +1391,7 @@ SetJSLogForwarding("log,warn,error"); // $$$
         croquetViewId = "";
         croquetActiveScene = ""; // wait for session to resume and tell us the scene
         croquetActiveSceneState = "";
+        SetBridgeState("waitingForSessionName"); // $$$$ not clear that this is what we need
 
         if (postTeardownScene != "")
         {

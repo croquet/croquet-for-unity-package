@@ -8,3 +8,4 @@ build-tools
 dist
 .last-installed-tools
 .last-build-state
+scene-definitions.txt

@@ -190,12 +190,19 @@ public class CroquetBuilder
     private const string TARGET_PROP = "JS Builder Target";
     private const string LOG_PROP = "JS Builder Log";
     private const string BUILD_ON_PLAY = "JS Build on Play";
+    private const string HARVEST_SCENES = "Harvest Scene List";
     private const string TOOLS_LEVEL = "JS Tools Level";
 
     public static bool BuildOnPlayEnabled
     {
         get { return EditorPrefs.GetBool(ProjectSpecificKey(BUILD_ON_PLAY), true); }
         set { EditorPrefs.SetBool(ProjectSpecificKey(BUILD_ON_PLAY), value); }
+    }
+
+    public static string HarvestSceneList
+    {
+        get { return EditorPrefs.GetString(ProjectSpecificKey(HARVEST_SCENES), ""); }
+        set { EditorPrefs.SetString(ProjectSpecificKey(HARVEST_SCENES), value); }
     }
 
     public static string CroquetBuildToolsInPackage = Path.GetFullPath("Packages/io.croquet.multiplayer/.JSTools");

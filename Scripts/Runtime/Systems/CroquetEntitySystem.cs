@@ -175,8 +175,8 @@ public class CroquetEntitySystem : CroquetSystem
         foreach (var loc in result) {
             if (loc.ToString().EndsWith(".prefab")) prefabs++;
         }
-        
-        Debug.Log($"Found {prefabs} addressable prefabs tagged as 'default' or ${sceneName}");
+
+        Debug.Log($"Found {prefabs} addressable prefabs tagged as 'default' or '{sceneName}'");
         Addressables.Release(handle);
 
         if (prefabs != 0)

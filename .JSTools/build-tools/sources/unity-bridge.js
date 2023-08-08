@@ -418,11 +418,19 @@ export class InitializationManager extends ModelService {
             this.activeSceneState = forceRebuild ? 'preload' : 'loading';
         } else {
             this.activeScene = sceneName;
-            this.lastInitString = null;
-            this.activeSceneState = 'preload';
             this.initializingView = null; // cut off any in-progress load for a previous scene
+            const definition = Constants.c4uSceneDefinitions?.[sceneName];
+            if (!definition || forceRebuild) {
+                this.lastInitString = null;
+                this.activeSceneState = 'preload';
+            } else {
+                console.log(`found pre-built definition of ${sceneName}`);
+                this.lastInitString = definition;
+                this.activeSceneState = 'loading';
+            }
         }
         console.log(`approved request to load ${sceneName}; state now "${this.activeSceneState}"`);
+        if (forceRebuild) console.warn(`forced to request fresh definition for ${sceneName} from Unity`);
 
         this.publishSceneState(); // will immediately ditch the main viewRoot
         this.client?.onPrepareForInitialization(); // clear out any non-persistent state from model
@@ -504,10 +512,10 @@ export class InitializationManager extends ModelService {
                             cls = false; // mark that we tried and failed
                         }
                         break;
-                    case 'position':
+                    case 'pos':
                         props.translation = value.split(',').map(Number); // note name change
                         break;
-                    case 'rotation':
+                    case 'rot':
                         props.rotation = q_normalize(value.split(',').map(Number));
                         break;
                     case 'scale':
@@ -2014,7 +2022,6 @@ class SessionOffsetEstimator {
     }
 }
 
-
 let ModelRootClass, ViewRootClass;
 export async function StartSession(model, view) {
     ModelRootClass = model;
@@ -2024,6 +2031,19 @@ export async function StartSession(model, view) {
 async function unityDrivenStartSession() {
     const { apiKey, appId, packageVersion, sessionName, debugFlags, runOffline } = theGameEngineBridge;
     Constants.c4uPackageVersion = packageVersion;
+    const response = await fetch("./scene-definitions.txt");
+    if (response.ok) {
+        const sceneDefinitions = (await response.text()).split('\x02');
+        // the file contains sceneName1 | definition1 | sceneName2 | definition2 etc
+        for (let i = 0; i < sceneDefinitions.length; i += 2) {
+            const sceneName = sceneDefinitions[i];
+            const definition = sceneDefinitions[i+1];
+            console.log(`definition of scene ${sceneName}: ${definition.length} chars`);
+            if (!Constants.c4uSceneDefinitions) Constants.c4uSceneDefinitions = {};
+            Constants.c4uSceneDefinitions[sceneName] = definition;
+        }
+    }
+
     const name = `${sessionName}`;
     const password = 'password';
     session = await StartWorldcore({
