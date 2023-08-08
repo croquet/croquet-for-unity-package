@@ -1,48 +1,59 @@
-# Croquet for Unity Package
+# Croquet for Unity 
+Croquet for Unity is a Multiplayer Package that allows you to build flawlessly synchronized, bit-identical simulations with JavaScript. Deploy effortlessly everywhere without the hassle of server management, complex netcode, or rollback. Author how something behaves **once**, and it will behave that way for everyone playing your game.
 
-This repo contains all Croquet functionality as a unitypackage ready to be dropped into a new project. This is for starting your own project. For usage examples please see our tutorials or other demo repos.
+## Unity Package Repo
+This repo contains all Croquet functionality as a unitypackage. This repo is the package for starting your own project. For *usage* examples please see our tutorials or other demo repos.
+
+Tutorials
+Demolition
+Guardians
+
 
 # Questions
-Please feel free to ask questions on our [discord](https://croquet.io/discord).
+Ask questions on our [discord](https://croquet.io/discord)!
 
 
 # Setup
+*Let's Get Started!*
 
 ## Unity Project
+Croquet for Unity has been built with and tested on projects using Unity editor version `2021.3.19f1`. The easiest way to get started is to use the same version - but feel free to try a new version and tell us how it goes!
+
+All Unity versions are available for download [here](https://unity.com/releases/editor/archive).
+
 Create a new Unity Project via the Unity Hub Application.
 
-So far, the Croquet for Unity (C4U) package has been built with and tested on projects using Unity editor version `2021.3.19f1`. The smoothest path to integration (and tracking of updates) would be into a project built for the same version - but if you are confident in managing a bit of divergence, this is not a strong restriction.
+Select a path to save your Unity project.
 
-Select 3D (URP) as the pipeline template.
-
-Select a place on disk for this to live (ideally a git repo).
-
-## Use our suggested gitignore for Unity
-TODO: Link sample gitignore files (for Unity and Croquet general files)
+## Suggested .gitignore
+- [Guardians gitignore](https://github.com/croquet/croquet-for-unity-guardians/blob/release/.gitignore)
+- [Guardians Unity gitignore](https://github.com/croquet/croquet-for-unity-guardians/blob/release/unity/.gitignore)
 
 ## Get the Dependencies and the Package
+Croquet for Unity has some networking dependencies that need to be set up to enable it to connect.
 
-#### WebSocket
+### WebSocket
 If you do not already have NuGet installed, add this to the package manager:
 ```
 https://github.com/GlitchEnzo/NuGetForUnity.git?path=/src/NuGetForUnity
 ```
-Then use the NuGet Menu item to search for and install `WebSocketSharp-netstandard`
 
-#### WebView
+Then use the Menu's `NuGet>Manage NuGet Packages` to search for and install `WebSocketSharp-netstandard`
+
+### WebView
 
 In Unity Package Manager add GREE, Inc.'s `unity-webview` package (using "Add package from git URL..."):
 ```
 https://github.com/gree/unity-webview.git?path=/dist/package-nofragment
 ```
 
-#### Croquet for Unity (C4U)
+### Croquet for Unity (C4U)
 Now that all dependencies are in place, add the C4U package using this git URL:
 ```
 https://github.com/croquet/croquet-for-unity-package.git
 ```
 
-## Copy the Croquet JavaScript build tools
+### Copy the Croquet JavaScript build tools
 Within the `Assets` folder of your Unity project, make a folder `CroquetJS`. This is where your JavaScript code will reside, along with the build tools that package the JavaScript code for execution and deployment.
 
 As part of the installation of the C4U package, the Unity editor will have been given a `Croquet` menu. On this menu, now invoke the option `Copy JS Build Tools`. This will copy some files into the `Assets/CroquetJS` that you just created, and others into the root of the repository (i.e., the parent directory of the Unity project itself).
@@ -74,20 +85,20 @@ C4U expects the `CroquetJS` folder of your project to be organized into the foll
 The `your_app_name` subdirectories can be used for independent apps - for example, in our `croquet-for-unity-tutorials` repository, there are independent directories for nine introductory apps. Each app is expected to be associated with a scene, as will be explained below.
 
 ## Create a Default Addressable Assets Group
-C4U expects to find a default addressable-assets group, which is how we associate particular assets across the bridge for spawning.  For now it is required to be present, even if your apps have no use for it.
+C4U expects to find a default addressable-assets group, which is how we associate particular assets across the bridge for spawning. Unity's Addressables are great system to use for asset naming and management. 
 
-The following menu item
-```
-Window => Asset Management => Group => "Create Asset Group"
-```
+Clicking `Window => Asset Management => Group => "Create Asset Group"`
 will create the group; an `AddressableAssetsData` folder will appear in your project.
+
+Add Prefabs to groups that correspond with the scene names you will use them in (Croquet will only load what is needed for each scene), _or_ add them to the "default" group if the asset should be loaded for every scene.
+
 
 ## Create and fill in a CroquetSettings asset
 Find the `CroquetDefaultSettings` asset within the C4U package, by going to `Packages/Croquet Multiplayer/Scripts/Runtime/Settings`. Copy the settings into your project - for example, into an `Assets/Settings` directory.
 
-The most important field to set up in the settings asset is the **Api Key**, which is a token of around 40 characters that you can create for yourself at https://croquet.io/account.  It provides access to the Croquet infrastructure.
+The most important field to set up in the settings asset is the **Api Key**, which is a token of around 40 characters that you can create for yourself at https://croquet.io/account. It provides access to the Croquet infrastructure.
 
-The **App Prefix** is the way of identifying with your organization the Croquet apps that you develop and run.  The combination of this prefix and the App Name provided on the Croquet Bridge component in each scene (see below) is a full App ID - for example, `io.croquet.worldcore.guardians`.  For running applications within one of Croquet's repositories (`tutorials`, `guardians` etc), it is fine to leave this prefix as is, but when you develop your own apps you must change the prefix so that the App ID is a globally unique identifier.  The ID must follow the Android reverse domain naming convention - i.e., each dot-separated segment must start with a letter, and only letters, digits, and underscores are allowed.
+The **App Prefix** is the way of identifying with your organization the Croquet apps that you develop and run.  The combination of this prefix and the App Name provided on the Croquet Bridge component in each scene (see below) is a full App ID - for example, `io.croquet.worldcore.guardians`.  When you are running our demonstration projects (`tutorials`, `guardians` etc), it is fine to leave this prefix as is, but when you develop your own apps you must change the prefix so that the App ID is a globally unique identifier. The ID must follow the Android reverse domain naming convention - i.e., each dot-separated segment must start with a letter, and only letters, digits, and underscores are allowed.
 
 **For MacOS:** Find the Path to your Node executable, by going to a terminal and running
 ```
@@ -113,13 +124,18 @@ Set the **App Name** to the `your_app_name` part of the path, illustrated above,
 ## Create your JS Model File(s)
 Create a file `Models.js` that implements the behavior you want for your app.  To get started, you can copy any Models file from under the `CroquetJS` folder of one of our demonstration repositories.
 
-**TBC...**
+## Create a base Actor
+TODO
+
+## Create an Actor that is associated with a prefab
+TODO
 
 ## Enable the Input Handler
 We provide a basic keypress and pointer forwarding template that uses Unity's new input system.
 See `Croquet/Runtime/UserInputActions` (lightning bolt icon).
 Select it and click "Make this the active input map"
 
+This allows most keypresses and pointer events to be forwarded.
 Skip this step if you want to use your own completely custom set of input events.
 
 
