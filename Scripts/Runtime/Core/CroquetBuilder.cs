@@ -699,7 +699,8 @@ public class CroquetBuilder
     public static async Task<bool> InstallJSTools()
     {
         string toolsRoot = CroquetBuildToolsInPackage;
-        string jsBuildFolder = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS", ".js-build"));
+        string croquetJSFolder = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS"));
+        string jsBuildFolder = Path.GetFullPath(Path.Combine(croquetJSFolder, ".js-build"));
         string installRecord = Path.Combine(jsBuildFolder, INSTALLED_TOOLS_RECORD);
 
         try
@@ -717,19 +718,19 @@ public class CroquetBuilder
                                   !FileEquals(sourcePackageJson, installedPackageJson);
             }
 
-            // copy the various files to Assets/CroquetJS/.js-build
-            string[] files = { "package.json", ".eslintrc.json", ".gitignore" };
+            // copy various files to CroquetJS and CroquetJS/.js-build
+            string[] files = { ".js-build/package.json", ".eslintrc.json", ".gitignore" }; // NB: all come *from* same directory
             foreach (var file in files)
             {
-                string fsrc = Path.GetFullPath(Path.Combine(toolsRoot, file));
-                string fdest = Path.GetFullPath(Path.Combine(jsBuildFolder, file));
+                string fsrc = Path.GetFullPath(Path.Combine(toolsRoot, Path.GetFileName(file)));
+                string fdest = Path.GetFullPath(Path.Combine(croquetJSFolder, file));
                 Debug.Log($"writing {file}");
                 FileUtil.ReplaceFile(fsrc, fdest);
             }
 
-            string dir = "build-tools";
-            string dsrc = Path.GetFullPath(Path.Combine(toolsRoot, dir));
-            string ddest = Path.GetFullPath(Path.Combine(jsBuildFolder, dir));
+            string dir = ".js-build/build-tools";
+            string dsrc = Path.GetFullPath(Path.Combine(toolsRoot, Path.GetFileName(dir)));
+            string ddest = Path.GetFullPath(Path.Combine(croquetJSFolder, dir));
             Debug.Log($"writing directory {dir}");
             FileUtil.ReplaceDirectory(dsrc, ddest);
 
