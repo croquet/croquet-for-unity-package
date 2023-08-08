@@ -29,10 +29,6 @@ public class CroquetBridge : MonoBehaviour
     public CroquetDebugTypes debugLoggingFlags;
 
     [Header("Session State")]
-    private List<string> sceneHarvestList; // joined pairs  sceneName:appName
-    private Dictionary<string, List<string>> sceneDefinitionsByApp =
-        new Dictionary<string, List<string>>(); // appName to list of scene definitions
-    public static string bridgeState = "stopped"; // needJSBuild, waitingForJSBuild, foundJSBuild, waitingForSocket, waitingForSessionName, waitingForSession, started
     public string croquetSessionState = "stopped"; // requested, running, stopped
     public string sessionName = "";
     public string croquetViewId;
@@ -41,10 +37,15 @@ public class CroquetBridge : MonoBehaviour
     public string croquetActiveSceneState; // the model's scene state (preload, loading, running)
     public string unitySceneState = "preparing"; // our scene state (preparing, ready, running)
     private List<CroquetActorManifest> sceneDefinitionManifests = new List<CroquetActorManifest>();
+    private List<string> sceneHarvestList; // joined pairs  sceneName:appName
+    private Dictionary<string, List<string>> sceneDefinitionsByApp =
+        new Dictionary<string, List<string>>(); // appName to list of scene definitions
 
     [Header("Network Glitch Simulator")]
     public bool triggerGlitchNow = false;
     public float glitchDuration = 3.0f;
+
+    private static string bridgeState = "stopped"; // needJSBuild, waitingForJSBuild, foundJSBuild, waitingForSocket, waitingForSessionName, waitingForSession, started
 
     HttpServer ws = null;
     WebSocketBehavior wsb = null; // not currently used
@@ -719,7 +720,7 @@ public class CroquetBridge : MonoBehaviour
         {
             string app = appScenes.Key;
             string appDefinitions = string.Join('\x02', appScenes.Value.ToArray());
-            string filePath = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", ".CroquetJS", app, "scene-definitions.txt"));
+            string filePath = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS", app, "scene-definitions.txt"));
             File.WriteAllText(filePath, appDefinitions);
         }
 

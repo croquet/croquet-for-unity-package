@@ -11,14 +11,14 @@ module.exports = env => ({
         // if custom index-node.js exists in the app directory, use it
         if (env.buildTarget === 'node') {
             try {
-                const index = `../${env.appName}/index-node.js`;
+                const index = `../../${env.appName}/index-node.js`;
                 require.resolve(index);
                 return index;
             } catch (e) {/* fall through and try index.js next */}
         }
         // if custom index.js exists in the app directory, use it
         try {
-            const index = `../${env.appName}/index.js`;
+            const index = `../../${env.appName}/index.js`;
             require.resolve(index);
             return index;
         } catch (e) {
@@ -27,7 +27,7 @@ module.exports = env => ({
         }
     },
     output: {
-        path: path.join(__dirname, `../../StreamingAssets/${env.appName}/`),
+        path: path.join(__dirname, `../../../StreamingAssets/${env.appName}/`),
         pathinfo: false,
         filename: env.buildTarget === 'node' ? 'node-main.js' : 'index-[contenthash:8].js',
         chunkFilename: 'chunk-[contenthash:8].js',
@@ -41,6 +41,7 @@ module.exports = env => ({
         }
     },
     resolve: {
+        modules: [path.resolve(__dirname, '../node_modules')],
         fallback: { "crypto": false }
     },
     experiments: {
@@ -58,7 +59,7 @@ module.exports = env => ({
     plugins: [
         new CopyPlugin({
             patterns: [
-                { from: `../${env.appName}/scene-definitions.txt`, to: 'scene-definitions.txt', noErrorOnMissing: true }
+                { from: `../../${env.appName}/scene-definitions.txt`, to: 'scene-definitions.txt', noErrorOnMissing: true }
             ]
         })].concat(env.buildTarget === 'node' ? [] : [
             new HtmlWebPackPlugin({

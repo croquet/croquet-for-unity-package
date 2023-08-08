@@ -14,10 +14,10 @@ if (!(Test-Path ..\node_modules\webpack)) {
   Exit
 }
 
-get-content sources\index-node.generic.js | % { $_ -replace '__APP_SOURCE__' , "../../$APPNAME" } | set-content sources\index-node.tmp.js
-get-content sources\index.generic.js | % { $_ -replace '__APP_SOURCE__' , "../../$APPNAME" } | set-content sources\index.tmp.js
+get-content sources\index-node.generic.js | % { $_ -replace '__APP_SOURCE__' , "../../../$APPNAME" } | set-content sources\index-node.tmp.js
+get-content sources\index.generic.js | % { $_ -replace '__APP_SOURCE__' , "../../../$APPNAME" } | set-content sources\index.tmp.js
 
-& "$NODE" ..\..\..\..\node_modules\webpack\bin\webpack.js --config webpack.config.js --mode development --env appName="$APPNAME" --env buildTarget="$TARGET" --no-color
+& "$NODE" ..\node_modules\webpack\bin\webpack.js --config webpack.config.js --mode development --env appName="$APPNAME" --env buildTarget="$TARGET" --no-color
 
 # this output will be read by CroquetBuilder, to keep a record of the webpack process id
 echo "webpack-exit=$LASTEXITCODE"

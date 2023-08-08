@@ -1,4 +1,4 @@
-# .gitignore for .CroquetJS folder
+# .gitignore for CroquetJS folder
 
 .gitignore
 package*.json
