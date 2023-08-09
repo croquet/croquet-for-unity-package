@@ -308,7 +308,8 @@ console.log(`PORT ${portStr}`);
 
     setJSLogForwarding(toForward) {
         const isNode = globalThis.CROQUET_NODE;
-        const timeStamper = logVals => `${(globalThis.CroquetViewDate || Date).now() % 100000}: ` + logVals.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+        const stringify = obj => { try { return JSON.stringify(obj) } catch (e) { return "[non-JSONable object]" }};
+        const timeStamper = logVals => `${(globalThis.CroquetViewDate || Date).now() % 100000}: ` + logVals.map(a => typeof a === 'object' ? stringify(a) : String(a)).join(' ');
         const forwarder = (logType, logVals) => this.sendCommand('logFromJS', logType, timeStamper(logVals));
         ['log', 'warn', 'error'].forEach(logType => {
             if (isNode) {
@@ -318,7 +319,10 @@ console.log(`PORT ${portStr}`);
                 else console[logType] = () => {}; // suppress
             } else {
                 // eslint-disable-next-line no-lonely-if
-                if (toForward.includes(logType)) console[logType] = (...logVals) => forwarder(logType, logVals);
+                if (toForward.includes(logType)) console[logType] = (...logVals) => {
+                    console[`q_${logType}`](...logVals); // log locally
+                    forwarder(logType, logVals); // and also forward
+                };
                 else console[logType] = console[`q_${logType}`]; // use system default
             }
         });
