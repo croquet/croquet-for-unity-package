@@ -27,7 +27,7 @@ public class CroquetBridge : MonoBehaviour
     private bool waitingForFirstScene = true;
     public string firstLevelScene; // the scene that will be loaded in a new session
     public CroquetDebugTypes croquetDebugLogging;
-    public CroquetLogForwarding croquetLogForwarding;
+    public CroquetLogForwarding JSLogForwarding;
 
     [Header("Session State")]
     public string croquetSessionState = "stopped"; // requested, running, stopped
@@ -294,7 +294,7 @@ public class CroquetBridge : MonoBehaviour
             Instance.Log("session", "server socket opened");
 
             // configure which logs are forwarded
-            Instance.SetJSLogForwarding(Instance.croquetLogForwarding.ToString());
+            Instance.SetJSLogForwarding(Instance.JSLogForwarding.ToString());
 
             // if we're not waiting for a menu to launch the session, set the session name immediately
             if (!Instance.launchThroughMenu) Instance.SetSessionName(""); // use the default name
