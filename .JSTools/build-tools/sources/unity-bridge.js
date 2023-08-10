@@ -23,7 +23,7 @@ globalThis.timedLog = msg => {
 globalThis.CROQUET_NODE = typeof window === 'undefined';
 
 
-let theGameInputManager, session, sessionOffsetEstimator;
+let theGameInputManager, session, sessionOffsetEstimator, sceneDefinitions;
 
 // theGameEngineBridge is a singleton instance of BridgeToUnity, built immediately
 // on loading of this file.  it is never rebuilt.
@@ -411,7 +411,6 @@ export class InitializationManager extends ModelService {
         // if sceneName is the same as activeScene, and the state is 'preload' or 'loading', ignore.  it's already being dealt with.
         // else if sceneName is the same as activeScene (so the state must be 'running'), then iff forceFlag is true accept the request and reset state to 'loading', otherwise ignore
         // else (new scene name) accept by setting a new activeScene and state 'preload'
-
         const { activeScene, activeSceneState } = this;
         if (sceneName === activeScene) {
             if (activeSceneState === 'preload' || activeSceneState === 'loading' || !forceReload) {
@@ -423,7 +422,7 @@ export class InitializationManager extends ModelService {
         } else {
             this.activeScene = sceneName;
             this.initializingView = null; // cut off any in-progress load for a previous scene
-            const definition = Constants.c4uSceneDefinitions?.[sceneName];
+            const definition = sceneDefinitions?.[sceneName];
             if (!definition || forceRebuild) {
                 this.lastInitString = null;
                 this.activeSceneState = 'preload';
@@ -2034,27 +2033,38 @@ export async function StartSession(model, view) {
 
 async function unityDrivenStartSession() {
     const { apiKey, appId, packageVersion, sessionName, debugFlags, runOffline } = theGameEngineBridge;
-    Constants.c4uPackageVersion = packageVersion;
-    const response = await fetch("./scene-definitions.txt");
-    if (response.ok) {
-        const sceneDefinitions = (await response.text()).split('\x02');
-        // the file contains sceneName1 | definition1 | sceneName2 | definition2 etc
-        for (let i = 0; i < sceneDefinitions.length; i += 2) {
-            const sceneName = sceneDefinitions[i];
-            const definition = sceneDefinitions[i+1];
-            console.log(`definition of scene ${sceneName}: ${definition.length} chars`);
-            if (!Constants.c4uSceneDefinitions) Constants.c4uSceneDefinitions = {};
-            Constants.c4uSceneDefinitions[sceneName] = definition;
+    let sceneText = '';
+    sceneDefinitions = {}; // unless we find some
+    const sceneFile = './scene-definitions.txt';
+    // our server will respond to HEAD with status 200 if file is found, 204 otherwise
+    const headResponse = await fetch(sceneFile, { method: 'HEAD' });
+    if (headResponse.status === 200) {
+        const contentResponse = await fetch(sceneFile);
+        if (contentResponse.status === 200) {
+            sceneText = await contentResponse.text();
+            const sceneDefArray = sceneText.split('\x02');
+
+            // the file contains sceneName1 | definition1 | sceneName2 | definition2 etc
+            for (let i = 0; i < sceneDefArray.length; i += 2) {
+                const sceneName = sceneDefArray[i];
+                const definition = sceneDefArray[i+1];
+                console.log(`definition of scene ${sceneName}: ${definition.length} chars`);
+                sceneDefinitions[sceneName] = definition;
+            }
         }
     }
 
     const name = `${sessionName}`;
     const password = 'password';
+    // include package version and the scene-definition string as options
+    // just to force sessions with different values to be distinct
+    const options = { c4uPackageVersion: packageVersion, sceneText };
     session = await StartWorldcore({
         appId,
         apiKey,
         name,
         password,
+        options,
         step: 'manual',
         tps: 33, // deliberately out of phase with 50Hz ticks from Unity, aiming for decent stepping coverage in WebView sessions
         autoSleep: false,

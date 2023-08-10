@@ -358,6 +358,7 @@ public class CroquetBridge : MonoBehaviour
             return;
         }
 
+        ws.OnHead += OnHeadHandler;
         ws.OnGet += OnGetHandler;
 
         Log("session", $"started HTTP/WS Server on port {port}");
@@ -375,17 +376,62 @@ public class CroquetBridge : MonoBehaviour
         StartCoroutine(croquetRunner.StartCroquetConnection(port, appName, useNodeJS, pathToNode));
     }
 
+    void OnHeadHandler(object sender, HttpRequestEventArgs e)
+    {
+        // extremely simple response.  always sets a ContentLength64 of zero (because otherwise
+        // Chrome complains ERR_EMPTY_RESPONSE if there's no body of that length).  sets status
+        // to 200 for a file that is present, and 204 for one that is not found.
+        var req = e.Request;
+        var res = e.Response;
+
+        var path = req.Url.LocalPath;
+        if (path == "/") path += "index.html";
+
+        bool success = TryToGetFile(e, path, out byte[] contents);
+        res.ContentLength64 = 0;
+        res.StatusCode = success ? (int) HttpStatusCode.OK : (int) HttpStatusCode.NoContent;
+    }
+
     void OnGetHandler(object sender, HttpRequestEventArgs e)
     {
         var req = e.Request;
         var res = e.Response;
 
         var path = req.Url.LocalPath;
+        if (path == "/") path += "index.html";
 
-        if (path == "/")
-            path += "index.html";
+        bool success = TryToGetFile(e, path, out byte[] contents);
+        if (success)
+        {
+            if (path.EndsWith(".html"))
+            {
+                res.ContentType = "text/html";
+                res.ContentEncoding = Encoding.UTF8;
+            }
+            else if (path.EndsWith(".js"))
+            {
+                res.ContentType = "application/javascript";
+                res.ContentEncoding = Encoding.UTF8;
+            }
+            else if (path.EndsWith(".wasm"))
+            {
+                res.ContentType = "application/wasm";
+            }
 
-        byte[] contents;
+            res.ContentLength64 = contents.LongLength;
+
+            res.Close(contents, true);
+        }
+        else
+        {
+            res.StatusCode = (int) HttpStatusCode.NotFound; // whatever the error
+            // res.Close();  no need; will be done for us
+        }
+    }
+
+    bool TryToGetFile(HttpRequestEventArgs e, string path, out byte[] contents)
+    {
+        bool success;
 
 #if UNITY_ANDROID && !UNITY_EDITOR
         string src = Application.streamingAssetsPath + path;
@@ -402,34 +448,19 @@ public class CroquetBridge : MonoBehaviour
         {
             if (unityWebRequest.error != null) UnityEngine.Debug.Log(src + ": " + unityWebRequest.error);
             contents = new byte[0];
-            res.StatusCode = (int) HttpStatusCode.NotFound; // whatever the error
+            success = false;
         }
         else
         {
             contents = unityWebRequest.downloadHandler.data; // binary
+            success = true;
         }
         unityWebRequest.Dispose();
 #else
-        if (!e.TryReadFile (path, out contents)) {
-            res.StatusCode = (int) HttpStatusCode.NotFound;
-        }
+        success = e.TryReadFile(path, out contents);
 #endif
 
-        if (path.EndsWith (".html")) {
-            res.ContentType = "text/html";
-            res.ContentEncoding = Encoding.UTF8;
-        }
-        else if (path.EndsWith (".js")) {
-            res.ContentType = "application/javascript";
-            res.ContentEncoding = Encoding.UTF8;
-        }
-        else if (path.EndsWith (".wasm")) {
-            res.ContentType = "application/wasm";
-        }
-
-        res.ContentLength64 = contents.LongLength;
-
-        res.Close (contents, true);
+        return success;
     }
 
     // WebSocket messages come in on a separate thread.  Put each message on a queue to be
@@ -716,6 +747,7 @@ public class CroquetBridge : MonoBehaviour
 
     void WriteAllSceneDefinitions()
     {
+        // $$$$ make sure that if a scene doesn't provide a definition, we remove its def file
         foreach(KeyValuePair<string, List<string>> appScenes in sceneDefinitionsByApp)
         {
             string app = appScenes.Key;
@@ -1378,7 +1410,9 @@ SetJSLogForwarding("log,warn,error"); // $$$
     void HandleSessionTeardown(string postTeardownScene)
     {
         // this is triggered by the disappearance (temporary or otherwise) of the Croquet session,
-        // or the processing of a "shutdown" command sent from here.
+        // or the processing of a "shutdown" command sent from here.  in the latter case, we'll have
+        // specified which scene is to be loaded locally in order to stay in the game.  typically a
+        // menu scene.
         string postTeardownMsg = postTeardownScene == "" ? "" : $" (and jump to {postTeardownScene})";
         Log("session", $"Croquet session teardown{postTeardownMsg}");
         deferredMessages.Clear();
@@ -1388,14 +1422,15 @@ SetJSLogForwarding("log,warn,error"); // $$$
             system.TearDownSession();
         }
 
-        sessionName = "";
         croquetViewId = "";
         croquetActiveScene = ""; // wait for session to resume and tell us the scene
         croquetActiveSceneState = "";
-        SetBridgeState("waitingForSessionName"); // $$$$ not clear that this is what we need
 
         if (postTeardownScene != "")
         {
+            sessionName = ""; // the session has really gone
+            SetBridgeState("waitingForSessionName");
+
             int buildIndex = int.Parse(postTeardownScene);
             SceneManager.LoadScene(buildIndex);
         }
