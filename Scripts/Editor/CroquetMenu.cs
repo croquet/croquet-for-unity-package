@@ -286,9 +286,21 @@ class CroquetBuildPreprocess : IPreprocessBuildWithReport
 
         if (!readyToBuild) throw new BuildFailedException(failureMessage);
 
-        // everything seems fine.  on Windows, copy the node.exe into the right place.
+        // everything seems fine.  copy the tools record into the StreamableAssets folder
+        CopyJSToolsRecord();
+        // and on Windows, copy our pre-supplied node.exe too.
         if (isWindowsBuild) CopyNodeExe();
     }
+
+    private void CopyJSToolsRecord()
+    {
+        string src = CroquetBuilder.JSToolsRecordInEditor;
+        string dest = CroquetBuilder.JSToolsRecordInBuild;
+        string destDir = Path.GetDirectoryName(dest);
+        Directory.CreateDirectory(destDir);
+        FileUtil.ReplaceFile(src, dest);
+    }
+
 
     private void CopyNodeExe()
     {
@@ -296,7 +308,7 @@ class CroquetBuildPreprocess : IPreprocessBuildWithReport
         string dest = CroquetBuilder.NodeExeInBuild;
         string destDir = Path.GetDirectoryName(dest);
         Directory.CreateDirectory(destDir);
-        FileUtil.CopyFileOrDirectory(src, dest);
+        FileUtil.ReplaceFile(src, dest);
     }
 }
 

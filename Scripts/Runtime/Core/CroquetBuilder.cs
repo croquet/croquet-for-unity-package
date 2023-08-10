@@ -8,6 +8,7 @@ using System.Text;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEditor;
+using UnityEngine.Networking;
 using Debug = UnityEngine.Debug;
 using Object = UnityEngine.Object;
 
@@ -36,11 +37,17 @@ public class JSBuildStateRecord
 
 public class CroquetBuilder
 {
-    public static string NodeExeInBuild =
-        Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "croquet-bridge", "node", "node.exe"));
-
-    private static string INSTALLED_TOOLS_RECORD = ".last-installed-tools"; // in CroquetJS folder
+    private static string INSTALLED_TOOLS_RECORD = "last-installed-tools"; // in .js-build folder (also preceded by .)
     private static string BUILD_STATE_RECORD = ".last-build-state"; // in each CroquetJS/<appname> folder
+
+    public static string JSToolsRecordInEditor =
+        Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS", ".js-build", $".{INSTALLED_TOOLS_RECORD}"));
+    // NB: a file name beginning with . won't make it into a build (at least, not on Android)
+    // NB: using GetFullPath would add a leading slash that confuses at least an Android UnityWebRequest
+    public static string JSToolsRecordInBuild =
+        Path.Combine(Application.streamingAssetsPath, "croquet-bridge", INSTALLED_TOOLS_RECORD);
+    public static string NodeExeInBuild =
+        Path.Combine(Application.streamingAssetsPath, "croquet-bridge", "node", "node.exe");
 
     private static string sceneName;
     private static CroquetBridge sceneBridgeComponent;
@@ -84,13 +91,35 @@ public class CroquetBuilder
 
     public static InstalledToolsRecord FindJSToolsRecord()
     {
-        string jsFolder = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS", ".js-build"));
-        if (!Directory.Exists(jsFolder)) return null; // nothing installed
+        string installRecordContents = "";
 
-        string installRecord = Path.Combine(jsFolder, INSTALLED_TOOLS_RECORD);
+#if UNITY_EDITOR
+        string installRecord = JSToolsRecordInEditor;
         if (!File.Exists(installRecord)) return null;
 
-        string installRecordContents = File.ReadAllText(installRecord);
+        installRecordContents = File.ReadAllText(installRecord);
+#else
+        // find the file in a build.  Android needs extra care.
+        string src = JSToolsRecordInBuild;
+  #if UNITY_ANDROID
+        var unityWebRequest = UnityWebRequest.Get(src);
+        unityWebRequest.SendWebRequest();
+        while (!unityWebRequest.isDone) { } // meh
+        if (unityWebRequest.result != UnityWebRequest.Result.Success)
+        {
+            if (unityWebRequest.error != null) UnityEngine.Debug.Log($"{src}: {unityWebRequest.error}");
+        }
+        else
+        {
+            byte[] contents = unityWebRequest.downloadHandler.data;
+            installRecordContents = Encoding.UTF8.GetString(contents);
+        }
+        unityWebRequest.Dispose();
+  #else
+        installRecordContents = File.ReadAllText(src);
+  #endif
+#endif
+
         return JsonUtility.FromJson<InstalledToolsRecord>(installRecordContents);
     }
 
@@ -701,7 +730,7 @@ public class CroquetBuilder
         string toolsRoot = CroquetBuildToolsInPackage;
         string croquetJSFolder = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS"));
         string jsBuildFolder = Path.GetFullPath(Path.Combine(croquetJSFolder, ".js-build"));
-        string installRecord = Path.Combine(jsBuildFolder, INSTALLED_TOOLS_RECORD);
+        string installRecord = JSToolsRecordInEditor;
 
         try
         {

@@ -488,7 +488,7 @@ public class CroquetBridge : MonoBehaviour
         ReadyForSessionProps props = new ReadyForSessionProps();
         props.apiKey = appProperties.apiKey;
         props.appId = appProperties.appPrefix + "." + appName;
-        props.packageVersion = CroquetBuilder.FindCroquetPackageVersion();
+        props.packageVersion = CroquetBuilder.FindJSToolsRecord().packageVersion; // location differs in editor and in a build
         props.sessionName = sessionName;
         string debugLogTypes = debugLoggingFlags.ToString();
         string debugFlags = debugLogTypes; // unless...
