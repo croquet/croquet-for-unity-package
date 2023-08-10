@@ -8,6 +8,7 @@ using System.Text;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEditor;
+using UnityEngine.Networking;
 using Debug = UnityEngine.Debug;
 using Object = UnityEngine.Object;
 
@@ -36,11 +37,17 @@ public class JSBuildStateRecord
 
 public class CroquetBuilder
 {
-    public static string NodeExeInBuild =
-        Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "croquet-bridge", "node", "node.exe"));
+    private static string INSTALLED_TOOLS_RECORD = "last-installed-tools"; // in .js-build folder (also preceded by .)
+    private static string BUILD_STATE_RECORD = ".last-build-state"; // in each CroquetJS/<appname> folder
 
-    private static string INSTALLED_TOOLS_RECORD = ".last-installed-tools"; // in .CroquetJS folder
-    private static string BUILD_STATE_RECORD = ".last-build-state"; // in each .CroquetJS/<appname> folder
+    public static string JSToolsRecordInEditor =
+        Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS", ".js-build", $".{INSTALLED_TOOLS_RECORD}"));
+    // NB: a file name beginning with . won't make it into a build (at least, not on Android)
+    // NB: using GetFullPath would add a leading slash that confuses at least an Android UnityWebRequest
+    public static string JSToolsRecordInBuild =
+        Path.Combine(Application.streamingAssetsPath, "croquet-bridge", INSTALLED_TOOLS_RECORD);
+    public static string NodeExeInBuild =
+        Path.Combine(Application.streamingAssetsPath, "croquet-bridge", "node", "node.exe");
 
     private static string sceneName;
     private static CroquetBridge sceneBridgeComponent;
@@ -84,13 +91,35 @@ public class CroquetBuilder
 
     public static InstalledToolsRecord FindJSToolsRecord()
     {
-        string jsFolder = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", ".CroquetJS"));
-        if (!Directory.Exists(jsFolder)) return null; // nothing installed
+        string installRecordContents = "";
 
-        string installRecord = Path.Combine(jsFolder, INSTALLED_TOOLS_RECORD);
+#if UNITY_EDITOR
+        string installRecord = JSToolsRecordInEditor;
         if (!File.Exists(installRecord)) return null;
 
-        string installRecordContents = File.ReadAllText(installRecord);
+        installRecordContents = File.ReadAllText(installRecord);
+#else
+        // find the file in a build.  Android needs extra care.
+        string src = JSToolsRecordInBuild;
+  #if UNITY_ANDROID
+        var unityWebRequest = UnityWebRequest.Get(src);
+        unityWebRequest.SendWebRequest();
+        while (!unityWebRequest.isDone) { } // meh
+        if (unityWebRequest.result != UnityWebRequest.Result.Success)
+        {
+            if (unityWebRequest.error != null) UnityEngine.Debug.Log($"{src}: {unityWebRequest.error}");
+        }
+        else
+        {
+            byte[] contents = unityWebRequest.downloadHandler.data;
+            installRecordContents = Encoding.UTF8.GetString(contents);
+        }
+        unityWebRequest.Dispose();
+  #else
+        installRecordContents = File.ReadAllText(src);
+  #endif
+#endif
+
         return JsonUtility.FromJson<InstalledToolsRecord>(installRecordContents);
     }
 
@@ -108,7 +137,7 @@ public class CroquetBuilder
         InstalledToolsRecord installedTools = FindJSToolsRecord(); // caller must have confirmed that this exists
         int toolsLevel = installedTools.localToolsLevel;
 
-        string buildRecord = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", ".CroquetJS",
+        string buildRecord = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS",
             appName, BUILD_STATE_RECORD));
         if (!File.Exists(buildRecord)) return false; // failed, or never built
 
@@ -190,12 +219,19 @@ public class CroquetBuilder
     private const string TARGET_PROP = "JS Builder Target";
     private const string LOG_PROP = "JS Builder Log";
     private const string BUILD_ON_PLAY = "JS Build on Play";
+    private const string HARVEST_SCENES = "Harvest Scene List";
     private const string TOOLS_LEVEL = "JS Tools Level";
 
     public static bool BuildOnPlayEnabled
     {
         get { return EditorPrefs.GetBool(ProjectSpecificKey(BUILD_ON_PLAY), true); }
         set { EditorPrefs.SetBool(ProjectSpecificKey(BUILD_ON_PLAY), value); }
+    }
+
+    public static string HarvestSceneList
+    {
+        get { return EditorPrefs.GetString(ProjectSpecificKey(HARVEST_SCENES), ""); }
+        set { EditorPrefs.SetString(ProjectSpecificKey(HARVEST_SCENES), value); }
     }
 
     public static string CroquetBuildToolsInPackage = Path.GetFullPath("Packages/io.croquet.multiplayer/.JSTools");
@@ -273,8 +309,8 @@ public class CroquetBuilder
         // record one of "web", "node", or "" to indicate whether StreamingAssets contains a successful
         // build for web or node, or for neither.
         // also record the tools level, so we can force a rebuild after a tools update.
-        string buildRecord = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", ".CroquetJS",
-            appName, CroquetBuilder.BUILD_STATE_RECORD));
+        string buildRecord = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS",
+            appName, BUILD_STATE_RECORD));
         if (success)
         {
             int toolsLevel = EditorPrefs.GetInt(ProjectSpecificKey(TOOLS_LEVEL), 0);
@@ -297,7 +333,7 @@ public class CroquetBuilder
 
         JSBuildDetails details = GetSceneBuildDetails(); // includes forcing useNodeJS, if necessary (on Windows)
         string appName = details.appName;
-        string builderPath = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", ".CroquetJS", "build-tools"));
+        string builderPath = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS", ".js-build", "build-tools"));
         string nodeExecPath;
         string executable;
         string arguments = "";
@@ -498,7 +534,7 @@ public class CroquetBuilder
 
     public static bool EnsureJSBuildAvailableToPlay()
     {
-        string jsPath = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", ".CroquetJS"));
+        string jsPath = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS"));
 
         // getting build details also sets sceneBridgeComponent and sceneRunnerComponent, and runs
         // the check that on Windows forces useNodeJS to true unless CroquetRunner is set to wait
@@ -520,7 +556,7 @@ public class CroquetBuilder
         string sourcePath = Path.GetFullPath(Path.Combine(jsPath, appName));
         if (!Directory.Exists(sourcePath))
         {
-            Debug.LogError($"Could not find source directory for app \"{appName}\" under .CroquetJS");
+            Debug.LogError($"Could not find source directory for app \"{appName}\" under CroquetJS");
             return false;
         }
 
@@ -692,12 +728,13 @@ public class CroquetBuilder
     public static async Task<bool> InstallJSTools()
     {
         string toolsRoot = CroquetBuildToolsInPackage;
-        string jsFolder = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", ".CroquetJS"));
-        string installRecord = Path.Combine(jsFolder, INSTALLED_TOOLS_RECORD);
+        string croquetJSFolder = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS"));
+        string jsBuildFolder = Path.GetFullPath(Path.Combine(croquetJSFolder, ".js-build"));
+        string installRecord = JSToolsRecordInEditor;
 
         try
         {
-            if (!Directory.Exists(jsFolder)) Directory.CreateDirectory(jsFolder);
+            if (!Directory.Exists(jsBuildFolder)) Directory.CreateDirectory(jsBuildFolder);
 
             bool needsNPMInstall;
             if (FindJSToolsRecord() == null) needsNPMInstall = true; // nothing installed; run the whole process
@@ -705,24 +742,24 @@ public class CroquetBuilder
             {
                 // compare package.json before overwriting, to decide if it will be changing
                 string sourcePackageJson = Path.GetFullPath(Path.Combine(toolsRoot, "package.json"));
-                string installedPackageJson = Path.GetFullPath(Path.Combine(jsFolder, "package.json"));
+                string installedPackageJson = Path.GetFullPath(Path.Combine(jsBuildFolder, "package.json"));
                 needsNPMInstall = !File.Exists(installedPackageJson) ||
                                   !FileEquals(sourcePackageJson, installedPackageJson);
             }
 
-            // copy the various files to Assets/.CroquetJS/
-            string[] files = { "package.json", ".eslintrc.json", ".gitignore" };
+            // copy various files to CroquetJS and CroquetJS/.js-build
+            string[] files = { ".js-build/package.json", ".eslintrc.json", ".gitignore" }; // NB: all come *from* same directory
             foreach (var file in files)
             {
-                string fsrc = Path.GetFullPath(Path.Combine(toolsRoot, file));
-                string fdest = Path.GetFullPath(Path.Combine(jsFolder, file));
+                string fsrc = Path.GetFullPath(Path.Combine(toolsRoot, Path.GetFileName(file)));
+                string fdest = Path.GetFullPath(Path.Combine(croquetJSFolder, file));
                 Debug.Log($"writing {file}");
                 FileUtil.ReplaceFile(fsrc, fdest);
             }
 
-            string dir = "build-tools";
-            string dsrc = Path.GetFullPath(Path.Combine(toolsRoot, dir));
-            string ddest = Path.GetFullPath(Path.Combine(jsFolder, dir));
+            string dir = ".js-build/build-tools";
+            string dsrc = Path.GetFullPath(Path.Combine(toolsRoot, Path.GetFileName(dir)));
+            string ddest = Path.GetFullPath(Path.Combine(croquetJSFolder, dir));
             Debug.Log($"writing directory {dir}");
             FileUtil.ReplaceDirectory(dsrc, ddest);
 
@@ -743,8 +780,8 @@ public class CroquetBuilder
                 }
 
                 Task task = onOSX
-                    ? new Task(() => errorCount = InstallOSX(jsFolder, toolsRoot, nodePath))
-                    : new Task(() => errorCount = InstallWin(jsFolder, toolsRoot));
+                    ? new Task(() => errorCount = InstallOSX(jsBuildFolder, toolsRoot, nodePath))
+                    : new Task(() => errorCount = InstallWin(jsBuildFolder, toolsRoot));
                 task.Start();
                 task.Wait();
             }

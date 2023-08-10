@@ -52,6 +52,7 @@ public static class SceneAndPlayWatcher
 public class CroquetMenu
 {
     private const string BuildNowItem = "Croquet/Build JS Now";
+    private const string HarvestDefinitionsItem = "Croquet/Harvest Scene Definitions Now";
     private const string BuildOnPlayItem = "Croquet/Build JS on Play";
 
     private const string StarterItem = "Croquet/Start JS Watcher";
@@ -79,6 +80,62 @@ public class CroquetMenu
         if (CroquetBuilder.RunningWatcherApp() == CroquetBuilder.GetSceneBuildDetails().appName) return false;
 #endif
         if (CroquetBuilder.oneTimeBuildProcess != null) return false;
+        return true;
+    }
+
+    [MenuItem(HarvestDefinitionsItem, false, 100)]
+    private static void HarvestNow()
+    {
+        if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+
+        // before entering play mode, go through all scenes that will be included in a build and
+        // make a list of the scenes and the app associated with each scene.
+        // store the list in an EditorPref using the format
+        //   scene1:appName1,scene2:appName2...
+        List<string> scenesAndApps = new List<string>();
+        Scene activeScene = EditorSceneManager.GetActiveScene();
+        string previousScenePath = activeScene.path;
+        foreach (EditorBuildSettingsScene scene in EditorBuildSettings.scenes)
+        {
+            if (scene.enabled)
+            {
+                EditorSceneManager.OpenScene(scene.path);
+                CroquetBridge[] allObjects = Resources.FindObjectsOfTypeAll<CroquetBridge>();
+                foreach (CroquetBridge obj in allObjects)
+                {
+                    // the collection will contain components from the scene and from any known prefab.
+                    // filter out the latter.
+                    if (string.IsNullOrEmpty(obj.gameObject.scene.name)) continue; // prefab
+                    if (obj.launchThroughMenu || string.IsNullOrEmpty(obj.appName)) continue; // not relevant
+
+                    string sceneName = Path.GetFileNameWithoutExtension(scene.path);
+                    scenesAndApps.Add($"{sceneName}:{obj.appName}");
+                }
+            }
+        }
+        // return to the scene where we started
+        EditorSceneManager.OpenScene(previousScenePath);
+
+        if (scenesAndApps.Count == 0)
+        {
+            Debug.LogError("Found no scenes to harvest from.  Do all your scenes have a Croquet object that specifies its associated App Name?");
+            CroquetBuilder.HarvestSceneList = "";        }
+        else
+        {
+            string harvestString = string.Join(',', scenesAndApps.ToArray());
+            CroquetBuilder.HarvestSceneList = harvestString;
+            EditorApplication.EnterPlaymode();
+        }
+    }
+
+    [MenuItem(HarvestDefinitionsItem, true)]
+    private static bool ValidateHarvestNow()
+    {
+        if (!CroquetBuilder.KnowHowToBuildJS() || !CroquetBuilder.BuildOnPlayEnabled) return false;
+#if !UNITY_EDITOR_WIN
+        if (CroquetBuilder.RunningWatcherApp() == CroquetBuilder.GetSceneBuildDetails().appName) return false;
+#endif
+
         return true;
     }
 
@@ -199,14 +256,14 @@ class CroquetBuildPreprocess : IPreprocessBuildWithReport
             {
                 if (scene.enabled)
                 {
-                    // Debug.Log(scene.path);
-
                     EditorSceneManager.OpenScene(scene.path);
                     CroquetBridge[] allObjects = Resources.FindObjectsOfTypeAll<CroquetBridge>();
                     foreach (CroquetBridge obj in allObjects)
                     {
-                        // @@ the collection will contain the components and their gameObjects.  only the former
-                        // will have a meaningful appName field.
+                        // the collection will contain components from the scene and from all known prefabs.
+                        // filter out the latter.
+                        if (string.IsNullOrEmpty(obj.gameObject.scene.name)) continue;
+
                         if (obj.gameObject.activeSelf && !String.IsNullOrEmpty(obj.appName)) appNames.Add(obj.appName);
                     }
                 }
@@ -229,9 +286,21 @@ class CroquetBuildPreprocess : IPreprocessBuildWithReport
 
         if (!readyToBuild) throw new BuildFailedException(failureMessage);
 
-        // everything seems fine.  on Windows, copy the node.exe into the right place.
+        // everything seems fine.  copy the tools record into the StreamableAssets folder
+        CopyJSToolsRecord();
+        // and on Windows, copy our pre-supplied node.exe too.
         if (isWindowsBuild) CopyNodeExe();
     }
+
+    private void CopyJSToolsRecord()
+    {
+        string src = CroquetBuilder.JSToolsRecordInEditor;
+        string dest = CroquetBuilder.JSToolsRecordInBuild;
+        string destDir = Path.GetDirectoryName(dest);
+        Directory.CreateDirectory(destDir);
+        FileUtil.ReplaceFile(src, dest);
+    }
+
 
     private void CopyNodeExe()
     {
@@ -239,7 +308,7 @@ class CroquetBuildPreprocess : IPreprocessBuildWithReport
         string dest = CroquetBuilder.NodeExeInBuild;
         string destDir = Path.GetDirectoryName(dest);
         Directory.CreateDirectory(destDir);
-        FileUtil.CopyFileOrDirectory(src, dest);
+        FileUtil.ReplaceFile(src, dest);
     }
 }
 

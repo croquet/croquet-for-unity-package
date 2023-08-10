@@ -78,11 +78,6 @@ public abstract class CroquetSystem : MonoBehaviour
         TearDownScene();
     }
 
-    public virtual string InitializationStringForObject(GameObject go)
-    {
-        return "";
-    }
-
     public virtual List<string> InitializationStringsForObject(GameObject go)
     {
         return new List<string>();

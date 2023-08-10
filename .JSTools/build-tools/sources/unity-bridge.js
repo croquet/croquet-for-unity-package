@@ -10,7 +10,7 @@
 //   \x05 to mark the start of the data argument in a binary-encoded message, such as updateSpatial.
 
 
-import { Constants, ModelService, Actor, RegisterMixin, mix, Pawn, View, ViewRoot, ViewService, GetViewService, StartWorldcore, PawnManager, v3_equals, q_equals, q_normalize } from "@croquet/worldcore-kernel";
+import { ModelService, Actor, RegisterMixin, mix, Pawn, View, ViewRoot, ViewService, GetViewService, StartWorldcore, PawnManager, v3_equals, q_equals, q_normalize } from "@croquet/worldcore-kernel";
 
 globalThis.timedLog = msg => {
     // timing on the message itself is now added when forwarding
@@ -23,7 +23,7 @@ globalThis.timedLog = msg => {
 globalThis.CROQUET_NODE = typeof window === 'undefined';
 
 
-let theGameInputManager, session, sessionOffsetEstimator;
+let theGameInputManager, session, sessionOffsetEstimator, sceneDefinitions;
 
 // theGameEngineBridge is a singleton instance of BridgeToUnity, built immediately
 // on loading of this file.  it is never rebuilt.
@@ -50,23 +50,25 @@ class BridgeToUnity {
 
     startWS() {
         globalThis.timedLog('starting socket client');
-        const portStr = (!globalThis.CROQUET_NODE
+        const portStr = this.socketPortStr = (!globalThis.CROQUET_NODE
             ? window.location.port
             : process.argv[2])
             || '5555';
 console.log(`PORT ${portStr}`);
         const sock = this.socket = new WebSocket(`ws://127.0.0.1:${portStr}/Bridge`);
         sock.onopen = _evt => {
-            // prepare for Unity to ask for some of the JS logs (see 'setJSLogForwarding' below)
+            // until Unity tells us otherwise (with 'setJSLogForwarding'), forward
+            // all JS logs across the bridge
             if (!console.q_log) {
                 console.q_log = console.log;
                 console.q_warn = console.warn;
                 console.q_error = console.error;
             }
+            this.resetMessageStats();
+            this.setJSLogForwarding(['log', 'warn', 'error'], true);
 
             globalThis.timedLog('opened socket');
             this.bridgeIsConnected = true;
-            this.resetMessageStats();
             sock.onmessage = event => {
                 const msg = event.data;
                 if (msg !== 'tick') this.handleUnityMessageOrBundle(msg);
@@ -74,7 +76,7 @@ console.log(`PORT ${portStr}`);
             };
         };
         sock.onclose = _evt => {
-            this.setJSLogForwarding([]); // restore to local logging
+            this.setJSLogForwarding([], true); // restore to local logging
             globalThis.timedLog('bridge websocket closed');
             this.bridgeIsConnected = false;
             if (session) session.leave();
@@ -150,23 +152,23 @@ console.log(`PORT ${portStr}`);
             case 'setJSLogForwarding': {
                 // args[0] is comma-separated list of log types (log,warn,error)
                 // that are to be sent over to Unity
+                // args[1] is a flag waitForUserLaunch
                 const toForward = args[0].split(',');
-                this.setJSLogForwarding(toForward);
+                const waitForUserLaunch = args[1] === "True";
+                console.log("categories of JS log forwarded to Unity:", toForward);
+                this.setJSLogForwarding(toForward, waitForUserLaunch);
                 break;
             }
             case 'readyForSession': {
-                const { apiKey, appId, packageVersion, sessionName, debugFlags, waitForUserLaunch } = JSON.parse(args[0]);
+                const { apiKey, appId, appName, packageVersion, sessionName, debugFlags } = JSON.parse(args[0]);
                 globalThis.timedLog(`starting session of ${appId} with key ${apiKey}`);
                 this.apiKey = apiKey;
                 this.appId = appId;
+                this.appName = appName;
                 this.packageVersion = packageVersion;
                 this.sessionName = sessionName;
                 this.debugFlags = debugFlags; // comma-separated list
                 this.runOffline = debugFlags.includes('offline');
-                // if this is an auto-launched session (i.e., not an external browser), set up logging so that warnings and errors appear in the Unity console.  for an external browser, we forward nothing.
-                // @@ should be configurable (especially so it can be turned off
-                // for a build).
-                this.setJSLogForwarding(waitForUserLaunch ? ['warn', 'error'] : []);
                 unityDrivenStartSession();
                 break;
             }
@@ -306,27 +308,34 @@ console.log(`PORT ${portStr}`);
         if (this.bridgeIsConnected) this.sendCommand('tearDownSession', sceneStr);
     }
 
-    setJSLogForwarding(toForward) {
+    setJSLogForwarding(toForward, userLaunched) {
         const isNode = globalThis.CROQUET_NODE;
         const stringify = obj => { try { return JSON.stringify(obj) } catch (e) { return "[non-JSONable object]" }};
         const timeStamper = logVals => `${(globalThis.CroquetViewDate || Date).now() % 100000}: ` + logVals.map(a => typeof a === 'object' ? stringify(a) : String(a)).join(' ');
         const forwarder = (logType, logVals) => this.sendCommand('logFromJS', logType, timeStamper(logVals));
         ['log', 'warn', 'error'].forEach(logType => {
+            const wantsForwarding = toForward.includes(logType);
             if (isNode) {
-                // in Node, everything output to the console is (for now) automatically
-                // echoed to Unity.  so anything _not_ in the list needs to be suppressed.
-                if (toForward.includes(logType)) console[logType] = (...logVals) => console[`q_${logType}`](timeStamper(logVals)); // use native logger to write the output
-                else console[logType] = () => {}; // suppress
+                // in Node, when not user-launched, everything output to the console is (for now) automatically echoed to Unity.  so in that case, anything _not_ in the list needs to be completely suppressed.
+                const logLocally = userLaunched || wantsForwarding;
+                const explicitlyForward = userLaunched && wantsForwarding;
+                if (!logLocally && !explicitlyForward) console[logType] = () => { }; // suppress
+                else {
+                    console[logType] = (...logVals) => {
+                        const stamped = timeStamper(logVals);
+                        if (logLocally) console[`q_${logType}`](stamped); // use native logger to write time-stamped output
+                        if (explicitlyForward) this.sendCommand('logFromJS', logType, stamped);
+                    };
+                }
             } else {
                 // eslint-disable-next-line no-lonely-if
-                if (toForward.includes(logType)) console[logType] = (...logVals) => {
+                if (wantsForwarding) console[logType] = (...logVals) => {
                     console[`q_${logType}`](...logVals); // log locally
                     forwarder(logType, logVals); // and also forward
                 };
                 else console[logType] = console[`q_${logType}`]; // use system default
             }
         });
-        console.log("categories of JS log forwarded to Unity:", toForward);
    }
 
     update(_time) {
@@ -411,7 +420,6 @@ export class InitializationManager extends ModelService {
         // if sceneName is the same as activeScene, and the state is 'preload' or 'loading', ignore.  it's already being dealt with.
         // else if sceneName is the same as activeScene (so the state must be 'running'), then iff forceFlag is true accept the request and reset state to 'loading', otherwise ignore
         // else (new scene name) accept by setting a new activeScene and state 'preload'
-
         const { activeScene, activeSceneState } = this;
         if (sceneName === activeScene) {
             if (activeSceneState === 'preload' || activeSceneState === 'loading' || !forceReload) {
@@ -422,11 +430,19 @@ export class InitializationManager extends ModelService {
             this.activeSceneState = forceRebuild ? 'preload' : 'loading';
         } else {
             this.activeScene = sceneName;
-            this.lastInitString = null;
-            this.activeSceneState = 'preload';
             this.initializingView = null; // cut off any in-progress load for a previous scene
+            const definition = sceneDefinitions?.[sceneName];
+            if (!definition || forceRebuild) {
+                this.lastInitString = null;
+                this.activeSceneState = 'preload';
+            } else {
+                console.log(`found pre-built definition of ${sceneName}`);
+                this.lastInitString = definition;
+                this.activeSceneState = 'loading';
+            }
         }
         console.log(`approved request to load ${sceneName}; state now "${this.activeSceneState}"`);
+        if (forceRebuild) console.warn(`forced to request fresh definition for ${sceneName} from Unity`);
 
         this.publishSceneState(); // will immediately ditch the main viewRoot
         this.client?.onPrepareForInitialization(); // clear out any non-persistent state from model
@@ -508,10 +524,10 @@ export class InitializationManager extends ModelService {
                             cls = false; // mark that we tried and failed
                         }
                         break;
-                    case 'position':
+                    case 'pos':
                         props.translation = value.split(',').map(Number); // note name change
                         break;
-                    case 'rotation':
+                    case 'rot':
                         props.rotation = q_normalize(value.split(',').map(Number));
                         break;
                     case 'scale':
@@ -2018,7 +2034,6 @@ class SessionOffsetEstimator {
     }
 }
 
-
 let ModelRootClass, ViewRootClass;
 export async function StartSession(model, view) {
     ModelRootClass = model;
@@ -2026,15 +2041,42 @@ export async function StartSession(model, view) {
 }
 
 async function unityDrivenStartSession() {
-    const { apiKey, appId, packageVersion, sessionName, debugFlags, runOffline } = theGameEngineBridge;
-    Constants.c4uPackageVersion = packageVersion;
+    const { apiKey, appId, appName, packageVersion, sessionName, debugFlags, runOffline, socketPortStr } = theGameEngineBridge;
+    const sceneFileName = 'scene-definitions.txt';
+    let sceneText = '';
+    sceneDefinitions = {}; // unless we find some
+    const sceneFile = globalThis.CROQUET_NODE
+        ? `http://127.0.0.1:${socketPortStr}/${appName}/${sceneFileName}`
+        : `./${sceneFileName}`;
+    // our server will respond to HEAD with status 200 if file is found, 204 otherwise
+    const headResponse = await fetch(sceneFile, { method: 'HEAD' });
+    if (headResponse.status === 200) {
+        const contentResponse = await fetch(sceneFile);
+        if (contentResponse.status === 200) {
+            sceneText = await contentResponse.text();
+            const sceneDefArray = sceneText.split('\x02');
+
+            // the file contains sceneName1 | definition1 | sceneName2 | definition2 etc
+            for (let i = 0; i < sceneDefArray.length; i += 2) {
+                const sceneName = sceneDefArray[i];
+                const definition = sceneDefArray[i+1];
+                console.log(`definition of scene ${sceneName}: ${definition.length} chars`);
+                sceneDefinitions[sceneName] = definition;
+            }
+        }
+    }
+
     const name = `${sessionName}`;
     const password = 'password';
+    // include package version and the scene-definition string as options
+    // just to force sessions with different values to be distinct
+    const options = { c4uPackageVersion: packageVersion, sceneText };
     session = await StartWorldcore({
         appId,
         apiKey,
         name,
         password,
+        options,
         step: 'manual',
         tps: 33, // deliberately out of phase with 50Hz ticks from Unity, aiming for decent stepping coverage in WebView sessions
         autoSleep: false,
@@ -2042,7 +2084,6 @@ async function unityDrivenStartSession() {
         eventRateLimit: 50, // we need a high rate for distributing scene definitions
         flags: ['unity', 'rawtime'],
         debug: debugFlags,
-        offline: runOffline,
         model: ModelRootClass,
         view: PreloadingViewRoot,
         progressReporter: ratio => {

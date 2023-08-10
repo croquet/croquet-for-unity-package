@@ -49,13 +49,13 @@ public class CroquetSpatialSystem : CroquetSystem
         if (position.magnitude > (sc ? sc.positionEpsilon : 0.01f))
         {
             int precision = sc ? sc.positionMaxDecimals : 4;
-            strings.Add($"position:{FormatFloats(new []{position.x,position.y,position.z}, precision)}");
+            strings.Add($"pos:{FormatFloats(new []{position.x,position.y,position.z}, precision)}");
         }
         Quaternion rotation = t.rotation;
         if (Quaternion.Angle(rotation,Quaternion.identity) > (sc ? sc.rotationEpsilon : 0.01f))
         {
             int precision = sc ? sc.rotationMaxDecimals : 6;
-            strings.Add($"rotation:{FormatFloats(new []{rotation.x,rotation.y,rotation.z,rotation.w}, precision)}");
+            strings.Add($"rot:{FormatFloats(new []{rotation.x,rotation.y,rotation.z,rotation.w}, precision)}");
         }
         Vector3 scale = t.lossyScale;
         if (Vector3.Distance(scale,new Vector3(1f, 1f, 1f)) > (sc ? sc.scaleEpsilon : 0.01f))

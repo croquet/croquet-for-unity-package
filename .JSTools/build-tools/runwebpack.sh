@@ -14,7 +14,7 @@ NODE=$1
 APPNAME=$2
 TARGET=$3
 
-# node_modules in the .CroquetJS folder, one above here
+# node_modules in the CroquetJS/.js-build folder, one above here
 NODE_MODULES=../node_modules
 
 if [ ! -d $NODE_MODULES/webpack ]; then
@@ -22,8 +22,8 @@ if [ ! -d $NODE_MODULES/webpack ]; then
 	exit
 fi
 
-sed -e "s/__APP_SOURCE__/..\/..\/$APPNAME/g" sources/index.generic.js > sources/index.tmp.js
-sed -e "s/__APP_SOURCE__/..\/..\/$APPNAME/g" sources/index-node.generic.js > sources/index-node.tmp.js
+sed -e "s/__APP_SOURCE__/..\/..\/..\/$APPNAME/g" sources/index.generic.js > sources/index.tmp.js
+sed -e "s/__APP_SOURCE__/..\/..\/..\/$APPNAME/g" sources/index-node.generic.js > sources/index-node.tmp.js
 
 if [ $# -eq 4 ]; then
 	LOGFILE=$4
