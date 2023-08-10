@@ -747,19 +747,25 @@ public class CroquetBuilder
                                   !FileEquals(sourcePackageJson, installedPackageJson);
             }
 
-            // copy various files to CroquetJS and CroquetJS/.js-build
-            string[] files = { ".js-build/package.json", ".eslintrc.json", ".gitignore" }; // NB: all come *from* same directory
-            foreach (var file in files)
+            // copy various files to CroquetJS
+            // dictionary maps sourceFile => destinationPath
+            Dictionary<string, string> copyDetails = new Dictionary<string, string>();
+            copyDetails["package.json"] = ".js-build/package.json";
+            copyDetails[".eslintrc.json"] = ".eslintrc.json";
+            copyDetails["tools-gitignore"] = ".gitignore";
+            foreach (KeyValuePair<string,string> keyValuePair in copyDetails)
             {
-                string fsrc = Path.GetFullPath(Path.Combine(toolsRoot, Path.GetFileName(file)));
-                string fdest = Path.GetFullPath(Path.Combine(croquetJSFolder, file));
-                Debug.Log($"writing {file}");
+                string from = keyValuePair.Key;
+                string to = keyValuePair.Value;
+                string fsrc = Path.Combine(toolsRoot, from);
+                string fdest = Path.Combine(croquetJSFolder, to);
+                Debug.Log($"writing {from} as {to}");
                 FileUtil.ReplaceFile(fsrc, fdest);
             }
 
             string dir = ".js-build/build-tools";
-            string dsrc = Path.GetFullPath(Path.Combine(toolsRoot, Path.GetFileName(dir)));
-            string ddest = Path.GetFullPath(Path.Combine(croquetJSFolder, dir));
+            string dsrc = Path.Combine(toolsRoot, Path.GetFileName(dir));
+            string ddest = Path.Combine(croquetJSFolder, dir);
             Debug.Log($"writing directory {dir}");
             FileUtil.ReplaceDirectory(dsrc, ddest);
 
