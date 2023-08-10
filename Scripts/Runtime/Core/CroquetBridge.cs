@@ -26,7 +26,8 @@ public class CroquetBridge : MonoBehaviour
     public bool launchThroughMenu = false;
     private bool waitingForFirstScene = true;
     public string firstLevelScene; // the scene that will be loaded in a new session
-    public CroquetDebugTypes debugLoggingFlags;
+    public CroquetDebugTypes croquetDebugLogging;
+    public CroquetLogForwarding croquetLogForwarding;
 
     [Header("Session State")]
     public string croquetSessionState = "stopped"; // requested, running, stopped
@@ -292,6 +293,9 @@ public class CroquetBridge : MonoBehaviour
 
             Instance.Log("session", "server socket opened");
 
+            // configure which logs are forwarded
+            Instance.SetJSLogForwarding(Instance.croquetLogForwarding.ToString());
+
             // if we're not waiting for a menu to launch the session, set the session name immediately
             if (!Instance.launchThroughMenu) Instance.SetSessionName(""); // use the default name
         }
@@ -481,16 +485,14 @@ public class CroquetBridge : MonoBehaviour
     {
         SetLoadingStage(0.5f, "Starting...");
 
-        // jul 2023: we now join the session without knowing which scene we're going to start
-        // out in.  if the session already has a running scene, we'll go there; if not, we'll
-        // activate the scene with buildIndex 1 and propose to Croquet (knowing that another client
-        // might get there first) that it load that one.
-        ReadyForSessionProps props = new ReadyForSessionProps();
-        props.apiKey = appProperties.apiKey;
-        props.appId = appProperties.appPrefix + "." + appName;
-        props.packageVersion = CroquetBuilder.FindJSToolsRecord().packageVersion; // location differs in editor and in a build
-        props.sessionName = sessionName;
-        string debugLogTypes = debugLoggingFlags.ToString();
+        string debugLogTypes = croquetDebugLogging.ToString();
+        // issue a warning if Croquet debug logging is enabled when not using an
+        // external browser
+        if (!croquetRunner.waitForUserLaunch && debugLogTypes != "")
+        {
+            Debug.LogWarning($"Croquet debug logging is set to \"{debugLogTypes}\"");
+        }
+
         string debugFlags = debugLogTypes; // unless...
         if (croquetRunner.runOffline)
         {
@@ -498,20 +500,22 @@ public class CroquetBridge : MonoBehaviour
             // the option appears in the UI separately from the logging flags, add it in here.
             debugFlags = debugFlags == "" ? "offline" : $"{debugFlags},offline";
         }
-        props.debugFlags = debugFlags;
-        props.waitForUserLaunch = croquetRunner.waitForUserLaunch;
+
+        ReadyForSessionProps props = new ReadyForSessionProps()
+        {
+            apiKey = appProperties.apiKey,
+            appId = appProperties.appPrefix + "." + appName,
+            appName = appName,
+            packageVersion =
+                CroquetBuilder.FindJSToolsRecord().packageVersion, // uses different lookups in editor and in a build
+            sessionName = sessionName,
+            debugFlags = debugFlags
+        };
         string propsJson = JsonUtility.ToJson(props);
         string[] command = new string[] {
             "readyForSession",
             propsJson
         };
-
-        // issue a warning if Croquet debug logging is enabled when not using an
-        // external browser
-        if (!props.waitForUserLaunch && debugLogTypes != "")
-        {
-            Debug.LogWarning($"Croquet debug logging is set to \"{debugLogTypes}\"");
-        }
 
         // send the message directly (bypassing the deferred-message queue)
         string msg = String.Join('\x01', command);
@@ -525,10 +529,10 @@ public class CroquetBridge : MonoBehaviour
     {
         public string apiKey;
         public string appId;
+        public string appName;
         public string packageVersion;
         public string sessionName;
         public string debugFlags;
-        public bool waitForUserLaunch;
     }
 
 
@@ -1295,7 +1299,7 @@ public class CroquetBridge : MonoBehaviour
         croquetSessionState = "running";
         lastMessageDiagnostics = Time.realtimeSinceStartup;
         estimatedDateNowAtReflectorZero = -1; // reset, to accept first value from new view
-SetJSLogForwarding("log,warn,error"); // $$$
+
         // when starting directly from a game scene (not menu), force the scene to be
         // rebuilt from the Unity side regardless of any pre-stored scene definition.
         // but warn the user that it's happening.
@@ -1478,18 +1482,17 @@ SetJSLogForwarding("log,warn,error"); // $$$
         }
     }
 
-    // NOT USED
     void SetJSLogForwarding(string optionString)
     {
-        // @@ this was previously sent during processing of the socket open, but turned out to be the only
-        // instance of message that was being sent before the Croquet session was in progress.  to clean that
-        // up, equivalent behaviour is for now handled on the Croquet side... but eventually we should make
-        // it a user-configurable session setting that Unity forwards.
-
-        // arg is a comma-separated list of the log types (log,warn,error) that we want
+        // first arg is a comma-separated list of the log types (log,warn,error) that we want
         // the JS side to send for logging here
-        string[] cmdAndArgs = { "setJSLogForwarding", optionString };
-        SendToCroquet(cmdAndArgs);
+        // second is a stringified boolean of waitForUserLaunch
+        string[] cmdAndArgs = { "setJSLogForwarding", optionString, croquetRunner.waitForUserLaunch.ToString() };
+
+        // send the message directly (bypassing the deferred-message queue), because this can
+        // be sent regardless of whether a session is running
+        string msg = String.Join('\x01', cmdAndArgs);
+        clientSock.Send(msg);
     }
 
     void SetLoadingStage(float ratio, string msg)
@@ -1569,6 +1572,24 @@ public class CroquetDebugTypes
         if (subscribe) flags.Add("subscribe");
         if (classes) flags.Add("classes");
         if (ticks) flags.Add("ticks");
+
+        return string.Join(',', flags.ToArray());
+    }
+}
+
+[System.Serializable]
+public class CroquetLogForwarding
+{
+    public bool log;
+    public bool warn;
+    public bool error;
+
+    public override string ToString()
+    {
+        List<string> flags = new List<string>();
+        if (log) flags.Add("log");
+        if (warn) flags.Add("warn");
+        if (error) flags.Add("error");
 
         return string.Join(',', flags.ToArray());
     }
