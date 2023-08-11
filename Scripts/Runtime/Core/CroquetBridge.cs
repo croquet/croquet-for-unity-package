@@ -1577,9 +1577,9 @@ public class CroquetDebugTypes
 [System.Serializable]
 public class CroquetLogForwarding
 {
-    public bool log;
-    public bool warn;
-    public bool error;
+    public bool log = false;
+    public bool warn = true;
+    public bool error = true;
 
     public override string ToString()
     {
