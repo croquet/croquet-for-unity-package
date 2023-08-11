@@ -1245,6 +1245,7 @@ export class GameViewRoot extends ViewRoot {
 
         const sceneName = this.wellKnownModel('InitializationManager').activeScene;
         theGameEngineBridge.sendCommand('sceneRunning', sceneName);
+        this.publish('croquet', 'sceneRunning', sceneName); // so Unity objects can subscribe
 
         this.lastViewCount = null;
         this.announceViewCount();

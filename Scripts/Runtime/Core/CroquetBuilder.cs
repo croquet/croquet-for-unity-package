@@ -165,6 +165,11 @@ public class CroquetBuilder
             else Debug.LogWarning($"Croquet Bridge component's \"Use Node JS\" is checked, but must be off for a non-Windows build");
             goodToGo = false;
         };
+        if (sceneBridgeComponent.debugForceSceneRebuild)
+        {
+            Debug.LogWarning("Croquet Bridge component's \"Debug Force Scene Rebuild\" must be off");
+            goodToGo = false;
+        };
         if (sceneRunnerComponent.waitForUserLaunch)
         {
             Debug.LogWarning("Croquet Runner component's \"Wait For User Launch\" must be off");

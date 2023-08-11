@@ -106,7 +106,7 @@ public class CroquetMenu
                     // the collection will contain components from the scene and from any known prefab.
                     // filter out the latter.
                     if (string.IsNullOrEmpty(obj.gameObject.scene.name)) continue; // prefab
-                    if (obj.launchThroughMenu || string.IsNullOrEmpty(obj.appName)) continue; // not relevant
+                    if (obj.launchViaMenuIntoScene != "" || string.IsNullOrEmpty(obj.appName)) continue; // not relevant
 
                     string sceneName = Path.GetFileNameWithoutExtension(scene.path);
                     scenesAndApps.Add($"{sceneName}:{obj.appName}");
