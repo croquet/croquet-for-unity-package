@@ -1,6 +1,7 @@
 # Croquet for Unity 
 Croquet for Unity is a Multiplayer Package that allows you to build flawlessly synchronized, bit-identical simulations with JavaScript. Deploy effortlessly everywhere without the hassle of server management, complex netcode, or rollback. Author how something behaves **once**, and it will behave that way for everyone playing your game.
 
+
 ## Unity Package Repo
 This repo contains all Croquet for Unity functionality to be added from the Unity Package Manager. 
 This repo is the starting point to create your own project. 
@@ -19,7 +20,7 @@ Ask questions on our [discord](https://croquet.io/discord)!
 *Let's Get Started!*
 Overall, you will need to create a unity project and repo, set up all the dependencies, and create a basic javascript model to drive your game. The concepts are covered in more detail in Tutorial 1 of our tutorials repo.
 
-For a visual representation of this information please see our [getting started](https://docs.google.com/presentation/d/1nBt84oJudSvyxtjO0kchKUkLuTCf4O7emlzj-d58_xk/edit)
+For a visual representation of this information please see our [getting started guide](https://docs.google.com/presentation/d/1nBt84oJudSvyxtjO0kchKUkLuTCf4O7emlzj-d58_xk/edit).
 
 ## Unity Project
 Croquet for Unity has been built with and tested on projects using Unity editor version `2021.3.19f1`. The easiest way to get started is to use the same version - but feel free to try a new version and tell us how it goes!
@@ -30,13 +31,15 @@ Create a new Unity Project via the Unity Hub Application.
 
 Select a path to save your Unity project.
 
-## Suggested .git files
+## Suggested .gitignore and .gitattributes files
 - [Guardians root gitignore](https://github.com/croquet/croquet-for-unity-guardians/blob/release/.gitignore)
 - [Guardians Unity gitignore](https://github.com/croquet/croquet-for-unity-guardians/blob/release/unity/.gitignore)
 - [Guardians Root gitattributes](https://github.com/croquet/croquet-for-unity-guardians/blob/release/.gitattributes)
 
+
 ## Get the Dependencies and the Package
 Croquet for Unity has some networking dependencies that need to be set up to enable it to connect.
+
 
 ### WebSocket
 If you do not already have NuGet installed, add this to the package manager:
@@ -182,7 +185,8 @@ You should now run the game, a basicCube will spawn in the scene. You can contro
 # Contribution
 Contributions to the package are welcome as these projects are open source and we encourage community involvement.
 
-1. Base your `feature/my-feature-name` branch off of `develop` branch
+1. Base your `feature/my-feature-name` or `bugfix/descriptor` branch off of `develop` branch
 2. Make your changes
 3. Open a PR against the `develop` branch
 4. Discuss and Review the PR with the team
+5. Changes will be merged into `develop` after PR approval
