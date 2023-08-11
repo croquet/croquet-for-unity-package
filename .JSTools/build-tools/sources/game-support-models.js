@@ -2,7 +2,7 @@
 //
 // Croquet Corporation, 2023
 
-import { ModelService, Actor, RegisterMixin, q_normalize } from "@croquet/worldcore-kernel";
+import { ModelRoot, ModelService, Actor, RegisterMixin, q_normalize } from "@croquet/worldcore-kernel";
 
 // InitializationManager is a model service that knows how to instantiate a set of actors from an init chunk
 export class InitializationManager extends ModelService {
@@ -227,3 +227,9 @@ export const AM_InitializationClient = superclass => class extends superclass {
 };
 RegisterMixin(AM_InitializationClient);
 
+export class GameModelRoot extends ModelRoot {
+    static modelServices() {
+        return [InitializationManager];
+    }
+}
+GameModelRoot.register('GameModelRoot');
