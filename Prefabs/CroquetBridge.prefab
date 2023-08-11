@@ -51,7 +51,7 @@ MonoBehaviour:
   defaultSessionName: 
   launchThroughMenu: 0
   firstLevelScene: 
-  debugLoggingFlags:
+  croquetDebugLogging:
     session: 0
     messages: 0
     sends: 0
@@ -61,6 +61,10 @@ MonoBehaviour:
     subscribe: 0
     classes: 0
     ticks: 0
+  JSLogForwarding:
+    log: 0
+    warn: 1
+    error: 1
   croquetSessionState: stopped
   sessionName: 
   croquetViewId: 
@@ -84,5 +88,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   waitForUserLaunch: 0
+  runOffline: 0
   localReflector: 
   showWebview: 0

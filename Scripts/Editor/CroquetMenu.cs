@@ -231,7 +231,7 @@ class CroquetBuildPreprocess : IPreprocessBuildWithReport
         string jsTarget = isWindowsBuild ? "node" : "web";
 
         Scene activeScene = EditorSceneManager.GetActiveScene();
-        if (!CroquetBuilder.PrepareSceneForBuildTarget(activeScene, jsTarget))
+        if (!CroquetBuilder.PrepareSceneForBuildTarget(activeScene, isWindowsBuild))
         {
             // reason for refusal will already have been logged
             throw new BuildFailedException("You must fix some settings (see warnings above) before building");

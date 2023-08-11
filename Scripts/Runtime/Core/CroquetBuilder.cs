@@ -147,7 +147,7 @@ public class CroquetBuilder
         return record.target == target && record.localToolsLevel >= toolsLevel;
     }
 
-    public static bool PrepareSceneForBuildTarget(Scene scene, string jsTarget)
+    public static bool PrepareSceneForBuildTarget(Scene scene, bool buildForWindows)
     {
         CacheSceneComponents(scene);
 
@@ -159,19 +159,20 @@ public class CroquetBuilder
             goodToGo = false;
         }
 
-        if (sceneBridgeComponent.useNodeJS != (jsTarget == "node"))
+        if (sceneBridgeComponent.useNodeJS != buildForWindows)
         {
-            Debug.LogWarning("Croquet Bridge \"Use Node JS\" setting is incompatible with target \"{jsTarget}\"");
+            if (buildForWindows) Debug.LogWarning("Croquet Bridge component's \"Use Node JS\" is off, but must be checked for a Windows build");
+            else Debug.LogWarning($"Croquet Bridge component's \"Use Node JS\" is checked, but must be off for a non-Windows build");
             goodToGo = false;
         };
         if (sceneRunnerComponent.waitForUserLaunch)
         {
-            Debug.LogWarning("Croquet Runner \"Wait For User Launch\" must be off");
+            Debug.LogWarning("Croquet Runner component's \"Wait For User Launch\" must be off");
             goodToGo = false;
         };
         if (sceneRunnerComponent.runOffline)
         {
-            Debug.LogWarning("Croquet Runner \"Run Offline\" must be off");
+            Debug.LogWarning("Croquet Runner component's \"Run Offline\" must be off");
             goodToGo = false;
         };
 
@@ -271,14 +272,14 @@ public class CroquetBuilder
             // for Windows, we include a version of node.exe in the package.
             // it can be used for JS building, for running scenes in the editor,
             // and for inclusion in a Windows standalone build.
-#if UNITY_EDITOR_OSX
+#if !UNITY_EDITOR_WIN
             string pathToNode = sceneBridgeComponent.appProperties.pathToNode;
 #else
             // assume we're in a Windows editor
             string pathToNode = NodeExeInPackage;
             if (!sceneRunnerComponent.waitForUserLaunch && !sceneBridgeComponent.useNodeJS)
             {
-                Debug.Log("Switching to Node JS for non-user-launched Croquet");
+                Debug.LogWarning("Switching to Node JS for non-user-launched Croquet on Windows");
                 sceneBridgeComponent.useNodeJS = true;
             }
 #endif
@@ -747,19 +748,25 @@ public class CroquetBuilder
                                   !FileEquals(sourcePackageJson, installedPackageJson);
             }
 
-            // copy various files to CroquetJS and CroquetJS/.js-build
-            string[] files = { ".js-build/package.json", ".eslintrc.json", ".gitignore" }; // NB: all come *from* same directory
-            foreach (var file in files)
+            // copy various files to CroquetJS
+            // dictionary maps sourceFile => destinationPath
+            Dictionary<string, string> copyDetails = new Dictionary<string, string>();
+            copyDetails["package.json"] = ".js-build/package.json";
+            copyDetails[".eslintrc.json"] = ".eslintrc.json";
+            copyDetails["tools-gitignore"] = ".gitignore";
+            foreach (KeyValuePair<string,string> keyValuePair in copyDetails)
             {
-                string fsrc = Path.GetFullPath(Path.Combine(toolsRoot, Path.GetFileName(file)));
-                string fdest = Path.GetFullPath(Path.Combine(croquetJSFolder, file));
-                Debug.Log($"writing {file}");
+                string from = keyValuePair.Key;
+                string to = keyValuePair.Value;
+                string fsrc = Path.Combine(toolsRoot, from);
+                string fdest = Path.Combine(croquetJSFolder, to);
+                Debug.Log($"writing {from} as {to}");
                 FileUtil.ReplaceFile(fsrc, fdest);
             }
 
             string dir = ".js-build/build-tools";
-            string dsrc = Path.GetFullPath(Path.Combine(toolsRoot, Path.GetFileName(dir)));
-            string ddest = Path.GetFullPath(Path.Combine(croquetJSFolder, dir));
+            string dsrc = Path.Combine(toolsRoot, Path.GetFileName(dir));
+            string ddest = Path.Combine(croquetJSFolder, dir);
             Debug.Log($"writing directory {dir}");
             FileUtil.ReplaceDirectory(dsrc, ddest);
 

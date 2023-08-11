@@ -173,15 +173,12 @@ public class CroquetBridge : MonoBehaviour
 #if UNITY_EDITOR
     private async void WaitForJSBuild()
     {
-        bool success = await CroquetBuilder.EnsureJSToolsAvailable();
-        if (success)
+        bool success = (await CroquetBuilder.EnsureJSToolsAvailable())
+                       && CroquetBuilder.EnsureJSBuildAvailableToPlay();
+        if (!success)
         {
-            success = CroquetBuilder.EnsureJSBuildAvailableToPlay();
-            if (!success)
-            {
-                EditorApplication.ExitPlaymode();
-                return;
-            }
+            EditorApplication.ExitPlaymode();
+            return;
         }
 
         SetBridgeState("foundJSBuild"); // assume that in a deployed app we always have a JS build
@@ -292,12 +289,6 @@ public class CroquetBridge : MonoBehaviour
             clientSock = Context.WebSocket;
 
             Instance.Log("session", "server socket opened");
-
-            // configure which logs are forwarded
-            Instance.SetJSLogForwarding(Instance.JSLogForwarding.ToString());
-
-            // if we're not waiting for a menu to launch the session, set the session name immediately
-            if (!Instance.launchThroughMenu) Instance.SetSessionName(""); // use the default name
         }
 
         protected override void OnMessage(MessageEventArgs e)
@@ -721,7 +712,13 @@ public class CroquetBridge : MonoBehaviour
         }
         else if (bridgeState == "waitingForSocket" && clientSock != null)
         {
+            // configure which logs are forwarded
+            SetJSLogForwarding(JSLogForwarding.ToString());
+
             SetBridgeState("waitingForSessionName");
+
+            // if we're not waiting for a menu to launch the session, set the session name immediately
+            if (!launchThroughMenu) SetSessionName(""); // use the default name
         }
         else if (bridgeState == "waitingForSessionName" && sessionName != "")
         {
@@ -1580,9 +1577,9 @@ public class CroquetDebugTypes
 [System.Serializable]
 public class CroquetLogForwarding
 {
-    public bool log;
-    public bool warn;
-    public bool error;
+    public bool log = false;
+    public bool warn = true;
+    public bool error = true;
 
     public override string ToString()
     {
