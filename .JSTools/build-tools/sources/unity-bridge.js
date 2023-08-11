@@ -10,7 +10,7 @@
 //   \x05 to mark the start of the data argument in a binary-encoded message, such as updateSpatial.
 
 
-import { ModelService, Actor, RegisterMixin, mix, Pawn, View, ViewRoot, ViewService, GetViewService, StartWorldcore, PawnManager, v3_equals, q_equals, q_normalize } from "@croquet/worldcore-kernel";
+import { mix, Pawn, View, ViewRoot, ViewService, GetViewService, StartWorldcore, PawnManager, v3_equals, q_equals } from "@croquet/worldcore-kernel";
 
 globalThis.timedLog = msg => {
     // timing on the message itself is now added when forwarding
@@ -23,7 +23,7 @@ globalThis.timedLog = msg => {
 globalThis.CROQUET_NODE = typeof window === 'undefined';
 
 
-let theGameInputManager, session, sessionOffsetEstimator, sceneDefinitions;
+let theGameInputManager, session, sessionOffsetEstimator;
 
 // theGameEngineBridge is a singleton instance of BridgeToUnity, built immediately
 // on loading of this file.  it is never rebuilt.
@@ -1839,9 +1839,9 @@ export async function StartSession(model, view) {
 
 async function unityDrivenStartSession() {
     const { apiKey, appId, appName, packageVersion, sessionName, debugFlags, runOffline, socketPortStr } = theGameEngineBridge;
+
     const sceneFileName = 'scene-definitions.txt';
     let sceneText = '';
-    sceneDefinitions = {}; // unless we find some
     const sceneFile = globalThis.CROQUET_NODE
         ? `http://127.0.0.1:${socketPortStr}/${appName}/${sceneFileName}`
         : `./${sceneFileName}`;
@@ -1851,17 +1851,13 @@ async function unityDrivenStartSession() {
         const contentResponse = await fetch(sceneFile);
         if (contentResponse.status === 200) {
             sceneText = await contentResponse.text();
-            const sceneDefArray = sceneText.split('\x02');
-
-            // the file contains sceneName1 | definition1 | sceneName2 | definition2 etc
-            for (let i = 0; i < sceneDefArray.length; i += 2) {
-                const sceneName = sceneDefArray[i];
-                const definition = sceneDefArray[i+1];
-                console.log(`definition of scene ${sceneName}: ${definition.length} chars`);
-                sceneDefinitions[sceneName] = definition;
-            }
         }
     }
+    // @@ workaround until we're able to request that Croquet.Constants not be
+    // frozen.  this value is examined in the model (by the InitializationManager),
+    // but this is a legitimate case of reading a view-defined value into the
+    // model because we're also hashing this value to determine the sessionId.
+    globalThis.GameConstants = { sceneText };
 
     const name = `${sessionName}`;
     const password = 'password';

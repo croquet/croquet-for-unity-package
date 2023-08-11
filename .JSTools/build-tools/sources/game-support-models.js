@@ -14,6 +14,14 @@ export class InitializationManager extends ModelService {
         this.initializingView = ""; // the view that has permission from us to provide the data for activeScene
 
         this.client = null; // needs to handle onPrepareForInitialization, onInitializationStart, onObjectInitialization
+
+        // @@ DON'T TRY THIS AT HOME
+        // workaround for Constants being frozen
+        this.sceneDefinitions = null;
+        if (globalThis.GameConstants?.sceneText) { // undefined, or empty string
+            this.setSceneDefinitions(globalThis.GameConstants.sceneText);
+        }
+
         this.initBufferCollector = [];
         this.lastInitString = null; // if activeSceneState is running, this is the string that was used to initialise it.  we can reload the scene instantly by reusing this.
 
@@ -21,6 +29,18 @@ export class InitializationManager extends ModelService {
         this.subscribe(this.sessionId, 'requestToInitScene', this.handleRequestToInitScene);
         this.subscribe(this.sessionId, 'sceneInitChunk', this.sceneInitChunk);
         this.subscribe(this.sessionId, 'view-exit', this.handleViewExit);
+    }
+
+    setSceneDefinitions(sceneText) {
+        this.sceneDefinitions = {};
+        const sceneDefArray = sceneText.split('\x02');
+        // the file contains sceneName1 | definition1 | sceneName2 | definition2 etc
+        for (let i = 0; i < sceneDefArray.length; i += 2) {
+            const sceneName = sceneDefArray[i];
+            const definition = sceneDefArray[i + 1];
+            console.log(`definition of scene ${sceneName}: ${definition.length} chars`);
+            this.sceneDefinitions[sceneName] = definition;
+        }
     }
 
     setClient(model) {
@@ -33,7 +53,6 @@ export class InitializationManager extends ModelService {
         // if sceneName is the same as activeScene, and the state is 'preload' or 'loading', ignore.  it's already being dealt with.
         // else if sceneName is the same as activeScene (so the state must be 'running'), then iff forceFlag is true accept the request and reset state to 'loading', otherwise ignore
         // else (new scene name) accept by setting a new activeScene and state 'preload'
-
         const { activeScene, activeSceneState } = this;
         if (sceneName === activeScene) {
             if (activeSceneState === 'preload' || activeSceneState === 'loading' || !forceReload) {
@@ -44,24 +63,27 @@ export class InitializationManager extends ModelService {
             this.activeSceneState = forceRebuild ? 'preload' : 'loading';
         } else {
             this.activeScene = sceneName;
-            this.lastInitString = null;
-            this.activeSceneState = 'preload';
             this.initializingView = null; // cut off any in-progress load for a previous scene
+            const definition = this.sceneDefinitions?.[sceneName];
+            if (!definition || forceRebuild) {
+                this.lastInitString = null;
+                this.activeSceneState = 'preload';
+            } else {
+                console.log(`found pre-built definition of ${sceneName}`);
+                this.lastInitString = definition;
+                this.activeSceneState = 'loading';
+            }
         }
         console.log(`approved request to load ${sceneName}; state now "${this.activeSceneState}"`);
+        if (forceRebuild) console.warn(`forced to request fresh definition for ${sceneName} from Unity`);
 
         this.publishSceneState(); // will immediately ditch the main viewRoot
-        this.client.onPrepareForInitialization(); // clear out any non-persistent state from model
+        this.client?.onPrepareForInitialization(); // clear out any non-persistent state from model
 
         if (this.activeSceneState === 'loading') this.loadFromString(this.lastInitString);
     }
 
     handleRequestToInitScene({ viewId, sceneName }) {
-        if (!this.client) {
-            console.warn("Attempt to initialize scene without an appointed AM_InitializationClient object");
-            return;
-        }
-
         // it's possible that this is an out-of-date request to init a scene that we're no longer interested in.
         // if sceneName is not the same as our activeScene, or if activeSceneState is anything other than 'preload', or there is already an initializingView, the request is denied.
         const { activeScene, initializingView } = this;
@@ -107,10 +129,16 @@ export class InitializationManager extends ModelService {
     }
 
     loadFromString(initString) {
-        this.client.onInitializationStart();
+        this.client?.onInitializationStart();
 
         const abbreviations = [];
         const [_earlySubscriptionTopics, _assetManifestString, ...entities] = initString.split('\x01');
+
+        if (entities.length && !this.client) {
+            console.warn("Attempt to initialize scene entities without an appointed AM_InitializationClient object");
+            entities.length = 0; // just ignore them
+        }
+
         entities.forEach(entityString => {
             // console.log(entityString);
             const propertyStrings = entityString.split('|');
@@ -129,10 +157,10 @@ export class InitializationManager extends ModelService {
                             cls = false; // mark that we tried and failed
                         }
                         break;
-                    case 'position':
+                    case 'pos':
                         props.translation = value.split(',').map(Number); // note name change
                         break;
-                    case 'rotation':
+                    case 'rot':
                         props.rotation = q_normalize(value.split(',').map(Number));
                         break;
                     case 'scale':
@@ -198,3 +226,4 @@ export const AM_InitializationClient = superclass => class extends superclass {
 
 };
 RegisterMixin(AM_InitializationClient);
+
