@@ -1,10 +1,10 @@
-# Croquet for Unity 
+# Croquet for Unity
 Croquet for Unity is a Multiplayer Package that allows you to build flawlessly synchronized, bit-identical simulations with JavaScript. Deploy effortlessly everywhere without the hassle of server management, complex netcode, or rollback. Author how something behaves **once**, and it will behave that way for everyone playing your game.
 
 
 ## Unity Package Repo
-This repo contains all Croquet for Unity functionality to be added from the Unity Package Manager. 
-This repo is the starting point to create your own project. 
+This repo contains all Croquet for Unity functionality to be added from the Unity Package Manager.
+This repo is the starting point to create your own project.
 
 For more examples please see our tutorials or other demo repos:
 - [Tutorials](https://github.com/croquet/croquet-for-unity-tutorials)
@@ -82,11 +82,11 @@ That option will create a "CroquetJS" folder that expects the following applicat
 
 NB: The `/.js-build` directory is where Croquet will automatically prepare npm modules and build artifacts. Generally, you should not need to inspect/change these files directly. Our package handles automatically installing JS dependencies and building for you.
 
-The `your_app_name` subdirectories can be used for independent apps - for example, in our `croquet-for-unity-tutorials` repository, there are independent directories for nine introductory apps. 
+The `your_app_name` subdirectories can be used for independent apps - for example, in our `croquet-for-unity-tutorials` repository, there are independent directories for nine introductory apps.
 
 
 ## Create a Default Addressable Assets Group
-C4U expects to find a default addressable-assets group, which is how we associate particular assets across the bridge for spawning. Unity's Addressables are great system to use for asset naming and management. 
+C4U expects to find a default addressable-assets group, which is how we associate particular assets across the bridge for spawning. Unity's Addressables are great system to use for asset naming and management.
 
 Clicking `Window => Asset Management => Group => "Create Asset Group"`
 will create the group; an `AddressableAssetsData` folder will appear in your project.
@@ -125,7 +125,9 @@ Set the **App Name** to the `your_app_name` part of the path, illustrated above,
 ## Create your JS Model File(s)
 Create a file `Models.js` that implements the behavior you want for your app.  To get started, you can copy any Models file from under the `CroquetJS` folder of one of our demonstration repositories.
 
-## Hello World 
+## Hello World
+
+*Note [Aug 2023]: the code here elides the current need for an additional import of **GameModelRoot** from a helper file (see the **Models.js** for any of the apps in the Tutorials repository for the details).  A more elegant mechanism will be provided shortly.*
 ### Create a Basic Actor in Models.js
 ```javascript
 import { ModelRoot, Actor, mix, AM_Spatial } from "@croquet/worldcore-kernel";
@@ -152,7 +154,7 @@ class TestActor extends mix(Actor).with(AM_Spatial) {
 
     }
 }
-TestActor.register('TestActor'); 
+TestActor.register('TestActor');
 
 export class MyModelRoot extends ModelRoot {
 
