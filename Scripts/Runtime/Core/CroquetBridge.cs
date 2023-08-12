@@ -23,9 +23,9 @@ public class CroquetBridge : MonoBehaviour
     public bool useNodeJS;
     public string appName;
     public string defaultSessionName = "ABCDE";
-    public bool launchThroughMenu = false;
+    public string launchViaMenuIntoScene = "";
     private bool waitingForFirstScene = true;
-    public string firstLevelScene; // the scene that will be loaded in a new session
+    public bool debugForceSceneRebuild = false;
     public CroquetDebugTypes croquetDebugLogging;
     public CroquetLogForwarding JSLogForwarding;
 
@@ -312,7 +312,7 @@ public class CroquetBridge : MonoBehaviour
         // ...but I don't know how to apply this now that we're using HttpServer (plus WS service)
         // rather than WebSocketServer
 
-        if (!launchThroughMenu) SetLoadingStage(0.25f, "Connecting...");
+        if (launchViaMenuIntoScene == "") SetLoadingStage(0.25f, "Connecting...");
 
         Log("session", "building WS Server on open port");
         int port = appProperties.preferredPort;
@@ -718,7 +718,7 @@ public class CroquetBridge : MonoBehaviour
             SetBridgeState("waitingForSessionName");
 
             // if we're not waiting for a menu to launch the session, set the session name immediately
-            if (!launchThroughMenu) SetSessionName(""); // use the default name
+            if (launchViaMenuIntoScene == "") SetSessionName(""); // use the default name
         }
         else if (bridgeState == "waitingForSessionName" && sessionName != "")
         {
@@ -1297,12 +1297,11 @@ public class CroquetBridge : MonoBehaviour
         lastMessageDiagnostics = Time.realtimeSinceStartup;
         estimatedDateNowAtReflectorZero = -1; // reset, to accept first value from new view
 
-        // when starting directly from a game scene (not menu), force the scene to be
-        // rebuilt from the Unity side regardless of any pre-stored scene definition.
-        // but warn the user that it's happening.
-        if (waitingForFirstScene && !launchThroughMenu)
+        // when starting directly from a scene that has the debugForceSceneRebuild
+        // flag set, we ask Croquet to abandon whatever scene it had running and reload
+        // this one.
+        if (waitingForFirstScene && debugForceSceneRebuild)
         {
-            Debug.LogWarning($"Starting in a non-menu scene: model is forced to request scene definition from Unity, ignoring any pre-harvested definition.");
             Croquet.RequestToLoadScene(SceneManager.GetActiveScene().name, true, true);
         }
     }
@@ -1324,11 +1323,11 @@ public class CroquetBridge : MonoBehaviour
         croquetActiveSceneState = args[1];
         Log("session", $"Croquet scene \"{croquetActiveScene}\", state \"{croquetActiveSceneState}\"");
 
-        if (waitingForFirstScene && !launchThroughMenu) {
-            // on session startup without going through a menu, the first scene load is triggered in
-            // HandleSessionRunning.  when the Croquet
-            // session successfully switches to the scene (starting in "preload" state, because we
-            // force a rebuild), we can start preparing the scene to provide its definition.
+        if (waitingForFirstScene && debugForceSceneRebuild) {
+            // on session startup with debugForceSceneRebuild, the first scene load is triggered in
+            // HandleSessionRunning.  when the Croquet session reveals that it has arrived at preload
+            // for that scene (whatever it was doing before), we can start preparing the scene here to
+            // provide its definition.
             // if the user later moves on to other scenes, and perhaps even comes back to this one,
             // we use the normal state-change handling below.
             if (croquetActiveScene == "") return; // get back to us when you have a scene
@@ -1345,19 +1344,28 @@ public class CroquetBridge : MonoBehaviour
         if (croquetActiveScene == "")
         {
             // propose to Croquet that we load the initial game scene
-            if (firstLevelScene == "")
+            if (launchViaMenuIntoScene == "")
             {
-                Debug.LogWarning("No initial scene name set; defaulting to buildIndex 1");
-                Croquet.RequestToLoadScene(1, false);
+                Debug.Log("No initial scene name set; requesting to load current scene");
+                string sceneName = SceneManager.GetActiveScene().name;
+                Croquet.RequestToLoadScene(sceneName, debugForceSceneRebuild, debugForceSceneRebuild);
             }
             else
             {
-                Croquet.RequestToLoadScene(firstLevelScene,
-                    false); // false => don't force if scene's already loaded/loading
+                Croquet.RequestToLoadScene(launchViaMenuIntoScene, debugForceSceneRebuild, debugForceSceneRebuild);
             }
+        }
+        else if (waitingForFirstScene && croquetActiveScene == SceneManager.GetActiveScene().name)
+        {
+            // we're just getting started, and Croquet has an active scene - perhaps because
+            // we requested it above.  if we're already there, start preparing.
+            Scene currentScene = SceneManager.GetActiveScene();
+            ArrivedInGameScene(currentScene);
         }
         else if (croquetActiveScene != SceneManager.GetActiveScene().name)
         {
+            // Croquet has switched to a scene that we're not currently in.  we need to head
+            // over there.
             // Debug.Log($"preparing for scene {croquetActiveScene}");
             unitySceneState = "preparing"; // will trigger repeated checks until we can tell Croquet we're ready (with assets, etc)
             if (loadingProgressDisplay && !loadingProgressDisplay.gameObject.activeSelf)
