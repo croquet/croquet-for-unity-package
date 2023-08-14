@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Diagnostics;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using System.Text;
@@ -60,7 +61,7 @@ public class CroquetBuilder
         //   "ok" - we appear to be up to date with the package
         //   "needsRefresh" - we have tools, but they are out of step with the package
         //   "needsInstall" - no sign that tools have been installed, but we can go ahead and try
-        //   "unavailable" - no way to install: Croquet package is missing, or (on Mac) no Node executable found
+        //   "unavailable" - no way to install: (on Mac) no Node executable found
 
 #if UNITY_EDITOR_OSX
         string nodeExecutable = GetSceneBuildDetails().nodeExecutable;
@@ -538,8 +539,11 @@ public class CroquetBuilder
         }
     }
 
-    public static bool EnsureJSBuildAvailableToPlay()
+    public static async Task<bool> EnsureJSBuildAvailableToPlay()
     {
+        bool toolsSuccess = await EnsureJSToolsAvailable();
+        if (!toolsSuccess) return false;
+
         string jsPath = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS"));
 
         // getting build details also sets sceneBridgeComponent and sceneRunnerComponent, and runs
@@ -909,8 +913,17 @@ public class CroquetBuilder
         {
             if (!string.IsNullOrWhiteSpace(line))
             {
-                errorCount++;
-                Debug.LogError($"{prefix} error: {line}");
+                // npm tends to throw certain non-error warnings out to stderr.  we handle
+                // some telltale signs that a line isn't actually a show-stopping error.
+                if (line.Contains("npm notice") || line.Contains("npm WARN"))
+                {
+                    Debug.LogWarning($"{prefix}: {line}");
+                }
+                else
+                {
+                    errorCount++;
+                    Debug.LogError($"{prefix} error: {line}");
+                }
             }
         }
 

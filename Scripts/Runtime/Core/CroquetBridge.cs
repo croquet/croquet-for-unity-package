@@ -173,8 +173,7 @@ public class CroquetBridge : MonoBehaviour
 #if UNITY_EDITOR
     private async void WaitForJSBuild()
     {
-        bool success = (await CroquetBuilder.EnsureJSToolsAvailable())
-                       && CroquetBuilder.EnsureJSBuildAvailableToPlay();
+        bool success = await CroquetBuilder.EnsureJSBuildAvailableToPlay();
         if (!success)
         {
             EditorApplication.ExitPlaymode();
