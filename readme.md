@@ -31,7 +31,10 @@ Create a new Unity Project via the Unity Hub Application.
 
 Select a path to save your Unity project.
 
-## Suggested .gitignore and .gitattributes files
+## git setup
+Be sure to have a system level installation of git that is in your path variable. Unity will use this to resolve git repo based packages. Installation Instructions for git can be found at: https://git-scm.com/book/en/v2/Getting-Started-Installing-Git
+
+Here are suggested .gitignore and .gitattributes files that we use in our Guardians demonstration project:
 - [Guardians root gitignore](https://github.com/croquet/croquet-for-unity-guardians/blob/release/.gitignore)
 - [Guardians Unity gitignore](https://github.com/croquet/croquet-for-unity-guardians/blob/release/unity/.gitignore)
 - [Guardians Root gitattributes](https://github.com/croquet/croquet-for-unity-guardians/blob/release/.gitattributes)
