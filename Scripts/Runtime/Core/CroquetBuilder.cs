@@ -787,19 +787,22 @@ public class CroquetBuilder
                 Debug.Log("Running npm install...");
                 await Task.Delay(100);
 
-                string nodePath = "";
-                bool onOSX = Application.platform == RuntimePlatform.OSXEditor;
-                if (onOSX)
+                // npm has a habit of issuing warnings through stderr.  we filter out some
+                // such warnings to avoid handling them as show-stoppers, but there may be
+                // others that get through.  if errors are reported, try a second time in
+                // case they were in fact just transient warnings.
+                int triesRemaining = 2;
+                while (triesRemaining > 0)
                 {
-                    string nodeExecutable = GetSceneBuildDetails().nodeExecutable;
-                    nodePath = Path.GetDirectoryName(nodeExecutable);
-                }
+                    errorCount = RunNPMInstall(jsBuildFolder, toolsRoot);
+                    if (errorCount == 0) break;
 
-                Task task = onOSX
-                    ? new Task(() => errorCount = InstallOSX(jsBuildFolder, toolsRoot, nodePath))
-                    : new Task(() => errorCount = InstallWin(jsBuildFolder, toolsRoot));
-                task.Start();
-                task.Wait();
+                    if (--triesRemaining > 0)
+                    {
+                        Debug.LogWarning($"npm install logged {errorCount} errors; trying again");
+                        await Task.Delay(100);
+                    }
+                }
             }
             else Debug.Log("package.json has not changed; skipping npm install");
 
@@ -833,6 +836,25 @@ public class CroquetBuilder
         return false;
     }
 
+    private static int RunNPMInstall(string jsBuildFolder, string toolsRoot)
+    {
+        string nodePath = "";
+        bool onOSX = Application.platform == RuntimePlatform.OSXEditor;
+        if (onOSX)
+        {
+            string nodeExecutable = GetSceneBuildDetails().nodeExecutable;
+            nodePath = Path.GetDirectoryName(nodeExecutable);
+        }
+
+        int errorCount = 0;
+        Task task = onOSX
+            ? new Task(() => errorCount = InstallOSX(jsBuildFolder, toolsRoot, nodePath))
+            : new Task(() => errorCount = InstallWin(jsBuildFolder, toolsRoot));
+        task.Start();
+        task.Wait();
+
+        return errorCount;
+    }
     private static int InstallOSX(string installDir, string toolsRoot, string nodePath) {
         string scriptPath = Path.GetFullPath(Path.Combine(toolsRoot, "runNPM.sh"));
         Process p = new Process();
