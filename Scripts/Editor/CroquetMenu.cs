@@ -61,6 +61,9 @@ public class CroquetMenu
 
     private const string InstallJSToolsItem = "Croquet/Install JS Build Tools";
 
+    private const string OpenDiscordItem = "Croquet/Join Croquet Discord...";
+    private const string OpenPackageItem = "Croquet/Open package on Github...";
+
     [MenuItem(BuildNowItem, false, 100)]
     private static void BuildNow()
     {
@@ -224,6 +227,18 @@ public class CroquetMenu
         if (CroquetBuilder.RunningWatcherApp() != "") return false;
 #endif
         return true;
+    }
+
+    [MenuItem(OpenDiscordItem, false, 300)]
+    private static void OpenDiscord()
+    {
+        Application.OpenURL("https://croquet.io/discord");
+    }
+
+    [MenuItem(OpenPackageItem, false, 300)]
+    private static void OpenPackage()
+    {
+        Application.OpenURL("https://github.com/croquet/croquet-for-unity-package");
     }
 }
 
