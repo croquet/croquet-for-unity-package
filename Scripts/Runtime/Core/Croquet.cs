@@ -380,7 +380,7 @@ public static class Croquet
     }
     
     /// <summary>
-    /// 
+    /// Retrieves a string property from the gameObject's corresponding actor with the given property name.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="propertyName"></param>
@@ -404,7 +404,7 @@ public static class Croquet
     }
 
     /// <summary>
-    /// Read a floating point property by name from the Croquet Actor given the corresponding GameObject
+    /// Retrieves a floating point property by name from the Croquet Actor given the corresponding GameObject.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="propertyName"></param>
@@ -433,7 +433,7 @@ public static class Croquet
     }
 
     /// <summary>
-    /// 
+    /// Read a property of type bool from the GameObject's Actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="propertyName"></param>
@@ -451,10 +451,10 @@ public static class Croquet
     /// This is NOT the session's Teatime (which increases monotonically across
     /// starts and stops over hours and days), but a measure of how long this
     /// particular session has been running on its assigned reflector.
-    /// during game startup (at least until the Croquet session has started) this
+    /// NB: during game startup (at least until the Croquet session has started) this
     /// will return the default value -1f.
     /// </summary>
-    /// <returns></returns>
+    /// <returns>floating point session time or -1f before the session has started.</returns>
     public static float SessionTime()
     {
         return CroquetBridge.Instance.CroquetSessionTime();
@@ -463,7 +463,7 @@ public static class Croquet
     /// <summary>
     /// Request for Croquet to load a scene by index for everyone in the current session.
     /// </summary>
-    /// <param name="sceneBuildIndex"></param>
+    /// <param name="sceneBuildIndex">The scene to load's Unity Build Settings Index</param>
     /// <param name="forceReload"></param>
     /// <returns></returns>
     public static void RequestToLoadScene(int sceneBuildIndex, bool forceReload)
@@ -472,9 +472,9 @@ public static class Croquet
     }
 
     /// <summary>
-    /// 
+    /// Request for Croquet to load a scene by index for everyone in the current session.
     /// </summary>
-    /// <param name="sceneBuildIndex"></param>
+    /// <param name="sceneBuildIndex">The scene to load's Unity Build Settings Index</param>
     /// <param name="forceReload"></param>
     /// <param name="forceRebuild"></param>
     /// <returns></returns>
@@ -498,9 +498,9 @@ public static class Croquet
     }
 
     /// <summary>
-    /// 
+    /// Request for Croquet to load a scene by name for everyone in the current session.
     /// </summary>
-    /// <param name="sceneName"></param>
+    /// <param name="sceneName">The scene to load</param>
     /// <param name="forceReload"></param>
     /// <returns></returns>
     public static void RequestToLoadScene(string sceneName, bool forceReload)
@@ -509,9 +509,9 @@ public static class Croquet
     }
 
     /// <summary>
-    /// 
+    /// Request for Croquet to load a scene by name for everyone in the current session.
     /// </summary>
-    /// <param name="sceneName"></param>
+    /// <param name="sceneName">The scene to load</param>
     /// <param name="forceReload"></param>
     /// <param name="forceRebuild"></param>
     /// <returns></returns>
