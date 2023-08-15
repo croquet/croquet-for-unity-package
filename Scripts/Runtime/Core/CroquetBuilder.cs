@@ -72,7 +72,6 @@ public class CroquetBuilder
         }
 #endif
 
-        string croquetVersion = FindCroquetPackageVersion();
         InstalledToolsRecord toolsRecord = FindJSToolsRecord();
         if (toolsRecord == null)
         {
@@ -81,6 +80,7 @@ public class CroquetBuilder
 
         // we don't try to figure out an ordering between package versions.  if the .latest-installed-tools
         // differs from the package version, we raise a warning.
+        string croquetVersion = FindCroquetPackageVersion();
         if (toolsRecord.packageVersion != croquetVersion)
         {
             Debug.LogWarning("Updated JS build tools are available; run Croquet => Install JS Build Tools to install");
@@ -354,8 +354,8 @@ public class CroquetBuilder
                 break;
             case RuntimePlatform.WindowsEditor:
                 nodeExecPath = "\"" + details.nodeExecutable + "\"";
-                executable = "powershell.exe";
-                arguments = $"-NoProfile -file \"runwebpack.ps1\" ";
+                executable = "cmd.exe";
+                arguments = $"/c runwebpack.bat ";
                 break;
             default:
                 throw new PlatformNotSupportedException("Don't know how to support automatic builds on this platform");
@@ -425,6 +425,7 @@ public class CroquetBuilder
                 {
                     if (line.StartsWith(exitPrefix))
                     {
+Debug.LogWarning($"webpack-exit = {line.Substring(exitPrefix.Length)}");
                         webpackExit = int.Parse(line.Substring(exitPrefix.Length));
                     }
                     else filteredLines.Add(line);
@@ -878,13 +879,12 @@ public class CroquetBuilder
 
     private static int InstallWin(string installDir, string toolsRoot)
     {
-        string scriptPath = Path.GetFullPath(Path.Combine(toolsRoot, "runNPM.ps1"));
         string stdoutFile = Path.GetTempFileName();
         string stderrFile = Path.GetTempFileName();
         Process p = new Process();
         p.StartInfo.UseShellExecute = true;
-        p.StartInfo.FileName = "powershell.exe";
-        p.StartInfo.Arguments = $"-NoProfile -file \"{scriptPath}\" \"{stdoutFile}\" \"{stderrFile}\" ";
+        p.StartInfo.FileName = "cmd.exe";
+        p.StartInfo.Arguments = $"/c npm install 1>\"{stdoutFile}\" 2>\"{stderrFile}\" ";
         p.StartInfo.WorkingDirectory = installDir;
         p.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
 
