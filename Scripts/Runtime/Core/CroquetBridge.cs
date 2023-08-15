@@ -21,11 +21,16 @@ public class CroquetBridge : MonoBehaviour
 
     [Header("Session Configuration")]
     public string appName;
+    [Tooltip("Single-token name (no spaces) for the Croquet session if not otherwise specified at runtime through a menu.  Users entering the same named session of the same named Croquet app will find themselves playing together.")]
     public string defaultSessionName = "ABCDE";
+    [Tooltip("Optionally, the name of a scene in this project.  If blank, pressing Play in the current scene will immediately launch Croquet with the app name and session name specified above.  If a scene name is provided, the current scene is assumed to act as a menu for selecting the session name; once selected, Croquet is then launched to run the named scene.")]
     public string launchViaMenuIntoScene = "";
     private bool waitingForFirstScene = true;
+    [Tooltip("For debug use, to suppress caching of scene definitions during iterative development.  If selected, every time the local user enters a Croquet-synchronized scene, the scene will be re-initialized (with the latest prefabs and object placements) for every user in the session.")]
     public bool debugForceSceneRebuild = false;
+    [Tooltip("For debug use.  Causes Croquet to log the selected types of session information (see the <a href=\"https://croquet.io/docs/croquet/Session.html\">Session definition</a>).  If you are not using an external browser, these logs will only be visible in Unity if you have enabled forwarding of the \"log\" category below.")]
     public CroquetDebugTypes croquetDebugLogging;
+    [Tooltip("For debug use.  Specifies which categories of JavaScript console output are forwarded for echoing in the Unity console.")]
     public CroquetLogForwarding JSLogForwarding;
 
     [Header("Session State")]
