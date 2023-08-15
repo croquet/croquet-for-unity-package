@@ -4,12 +4,16 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEngine.SceneManagement;
 
+
+/// <summary>
+/// Main Public API for Croquet
+/// </summary>
 public static class Croquet
 {
     #region Say and Listen Functions
 
     /// <summary>
-    /// Send an event with no arguments directly to the corresponding actor.
+    /// Send an event with no arguments directly to the gameObject's corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -20,7 +24,7 @@ public static class Croquet
     }
 
     /// <summary>
-    /// Send an event with a string argument directly to the corresponding actor.
+    /// Send an event with a string argument directly to the gameObject's corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -32,7 +36,7 @@ public static class Croquet
     }
 
     /// <summary>
-    /// Send an event with a string-array argument directly to the corresponding actor.
+    /// Send an event with a string-array argument directly to the gameObject's corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -44,7 +48,7 @@ public static class Croquet
     }
 
     /// <summary>
-    /// Send an event with a float argument directly to the corresponding actor.
+    /// Send an event with a float argument directly to the gameObject's corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -56,7 +60,7 @@ public static class Croquet
     }
 
     /// <summary>
-    /// Send an event with a float-array argument directly to the corresponding actor.
+    /// Send an event with a float-array argument directly to the gameObject's corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -68,7 +72,7 @@ public static class Croquet
     }
 
     /// <summary>
-    /// Send an event with a boolean argument directly to the corresponding actor.
+    /// Send an event with a boolean argument directly to the gameObject's corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -80,7 +84,7 @@ public static class Croquet
     }
 
     /// <summary>
-    /// Listen for a say event with no argument from the corresponding actor.
+    /// Listen for a say event with no argument from the gameObject's corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -94,7 +98,7 @@ public static class Croquet
     }
 
     /// <summary>
-    /// Listen for a say event with string argument from the corresponding actor.
+    /// Listen for a say event with string argument from the gameObject's corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -108,7 +112,7 @@ public static class Croquet
     }
 
     /// <summary>
-    /// Listen for a say event with string-array argument from the corresponding actor.
+    /// Listen for a say event with string-array argument from the gameObject's corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -122,7 +126,7 @@ public static class Croquet
     }
 
     /// <summary>
-    /// Listen for a say event with float argument from the corresponding actor.
+    /// Listen for a say event with float argument from the gameObject's corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -136,7 +140,7 @@ public static class Croquet
     }
 
     /// <summary>
-    /// Listen for a say event with float-array argument from the corresponding actor.
+    /// Listen for a say event with float-array argument from the gameObject's corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -158,7 +162,7 @@ public static class Croquet
     }
 
     /// <summary>
-    /// Listen for a say event with boolean argument from the corresponding actor.
+    /// Listen for a say event with boolean argument from the gameObject's corresponding actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -172,7 +176,7 @@ public static class Croquet
     }
 
     /// <summary>
-    /// Cancel listen for say events
+    /// Stop listening for say events of the given name on this gameObject's actor.
     /// </summary>
     /// <param name="gameObject"></param>
     /// <param name="eventName"></param>
@@ -183,6 +187,11 @@ public static class Croquet
         CroquetBridge.UnsubscribeFromCroquetEvent(gameObject, scope, eventName, forwarder);
     }
 
+    /// <summary>
+    /// Provides the ActorID for a given GameObject if it is available.
+    /// </summary>
+    /// <param name="gameObject">the gameobject for which to get the ID.</param>
+    /// <returns>string ID or empty string</returns>
     private static string GetActorIdIfAvailable(GameObject gameObject)
     {
         CroquetEntityComponent entity = gameObject.GetComponent<CroquetEntityComponent>();
@@ -359,29 +368,59 @@ public static class Croquet
 
     #region Actor Property Access
 
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="gameObject"></param>
+    /// <param name="propertyName"></param>
+    /// <returns></returns>
     public static bool HasActorSentProperty(GameObject gameObject, string propertyName)
     {
         return CroquetEntitySystem.Instance.HasActorSentProperty(gameObject, propertyName);
     }
-
+    
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="gameObject"></param>
+    /// <param name="propertyName"></param>
+    /// <returns></returns>
     public static string ReadActorString(GameObject gameObject, string propertyName)
     {
         string stringVal = CroquetEntitySystem.Instance.GetPropertyValueString(gameObject, propertyName);
         return stringVal;
     }
 
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="gameObject"></param>
+    /// <param name="propertyName"></param>
+    /// <returns></returns>
     public static string[] ReadActorStringArray(GameObject gameObject, string propertyName)
     {
         string stringVal = CroquetEntitySystem.Instance.GetPropertyValueString(gameObject, propertyName);
         return stringVal.Split('\x03');
     }
 
+    /// <summary>
+    /// Read a floating point property by name from the Croquet Actor given the corresponding GameObject
+    /// </summary>
+    /// <param name="gameObject"></param>
+    /// <param name="propertyName"></param>
+    /// <returns></returns>
     public static float ReadActorFloat(GameObject gameObject, string propertyName)
     {
         string stringVal = CroquetEntitySystem.Instance.GetPropertyValueString(gameObject, propertyName);
         return float.Parse(stringVal);
     }
 
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="gameObject"></param>
+    /// <param name="propertyName"></param>
+    /// <returns></returns>
     public static float[] ReadActorFloatArray(GameObject gameObject, string propertyName)
     {
         string stringVal = CroquetEntitySystem.Instance.GetPropertyValueString(gameObject, propertyName);
@@ -393,6 +432,12 @@ public static class Croquet
         return floats.ToArray();
     }
 
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="gameObject"></param>
+    /// <param name="propertyName"></param>
+    /// <returns></returns>
     public static bool ReadActorBool(GameObject gameObject, string propertyName)
     {
         string stringVal = CroquetEntitySystem.Instance.GetPropertyValueString(gameObject, propertyName);
@@ -401,22 +446,38 @@ public static class Croquet
 
     #endregion
 
+    /// <summary>
+    /// A time source (in seconds) that should be within a few ms across all clients.
+    /// This is NOT the session's Teatime (which increases monotonically across
+    /// starts and stops over hours and days), but a measure of how long this
+    /// particular session has been running on its assigned reflector.
+    /// during game startup (at least until the Croquet session has started) this
+    /// will return the default value -1f.
+    /// </summary>
+    /// <returns></returns>
     public static float SessionTime()
     {
-        // a time source (in seconds) that should be within a few ms across all clients.
-        // this is NOT the session's Teatime (which increases monotonically across
-        // starts and stops over hours and days), but a measure of how long this
-        // particular session has been running on its assigned reflector.
-        // during game startup (at least until the Croquet session has started) this
-        // will return the default value -1f.
         return CroquetBridge.Instance.CroquetSessionTime();
     }
 
+    /// <summary>
+    /// Request for Croquet to load a scene by index for everyone in the current session.
+    /// </summary>
+    /// <param name="sceneBuildIndex"></param>
+    /// <param name="forceReload"></param>
+    /// <returns></returns>
     public static void RequestToLoadScene(int sceneBuildIndex, bool forceReload)
     {
         RequestToLoadScene(sceneBuildIndex, forceReload, false); // don't normally force a rebuild
     }
 
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="sceneBuildIndex"></param>
+    /// <param name="forceReload"></param>
+    /// <param name="forceRebuild"></param>
+    /// <returns></returns>
     public static void RequestToLoadScene(int sceneBuildIndex, bool forceReload, bool forceRebuild)
     {
         string path = SceneUtility.GetScenePathByBuildIndex(sceneBuildIndex);
@@ -436,11 +497,24 @@ public static class Croquet
         RequestToLoadScene(filename, forceReload, forceRebuild);
     }
 
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="sceneName"></param>
+    /// <param name="forceReload"></param>
+    /// <returns></returns>
     public static void RequestToLoadScene(string sceneName, bool forceReload)
     {
         RequestToLoadScene(sceneName, forceReload, false); // don't normally force a rebuild
     }
 
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="sceneName"></param>
+    /// <param name="forceReload"></param>
+    /// <param name="forceRebuild"></param>
+    /// <returns></returns>
     public static void RequestToLoadScene(string sceneName, bool forceReload, bool forceRebuild)
     {
         CroquetBridge.Instance.RequestToLoadScene(sceneName, forceReload, forceRebuild);

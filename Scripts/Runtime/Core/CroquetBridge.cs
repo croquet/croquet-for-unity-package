@@ -13,7 +13,7 @@ using WebSocketSharp.Server;
 using WebSocketSharp.Net;
 
 /// <summary>
-/// There be dragons.
+/// Croquet Bridge is the primary Component that should be attached to 
 /// </summary>
 public class CroquetBridge : MonoBehaviour
 {
