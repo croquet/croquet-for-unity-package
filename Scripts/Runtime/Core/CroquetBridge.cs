@@ -13,7 +13,7 @@ using WebSocketSharp.Server;
 using WebSocketSharp.Net;
 
 /// <summary>
-/// Croquet Bridge is the primary Component that should be attached to 
+/// Croquet Bridge is the primary Component that should be attached to
 /// </summary>
 public class CroquetBridge : MonoBehaviour
 {
@@ -194,14 +194,21 @@ public class CroquetBridge : MonoBehaviour
         else if (newSessionName == "")
         {
             sessionName = defaultSessionName;
-            Log("session", $"session name defaulted to {defaultSessionName}");
+            if (sessionName == "")
+            {
+                Debug.LogWarning("Attempt to start Croquet with a default sessionName, but no default has been set. Falling back to \"unnamed\".");
+                sessionName = "unnamed";
+            }
+            else
+            {
+                Log("session", $"session name defaulted to {defaultSessionName}");
+            }
         }
         else
         {
             sessionName = newSessionName;
             Log("session", $"session name set to {newSessionName}");
         }
-
     }
 
     private void ChangedActiveScene(Scene previous, Scene current)
