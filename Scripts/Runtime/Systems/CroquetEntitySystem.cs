@@ -151,21 +151,19 @@ public class CroquetEntitySystem : CroquetSystem
 
     IEnumerator LoadAddressableAssetsWithLabel(string sceneName)
     {
-        // @@ LoadAssetsAsync throws an error - asynchronously - if there are
+        // LoadAssetsAsync throws an error - asynchronously - if there are
         // no assets that match the key.  One way to avoid that error is to run
         // the following code to get a list of locations matching the key.
         // If the list is empty, don't run the LoadAssetsAsync.
-        // Presumably there are more efficient ways to do this (in particular, when
-        // there *are* matches).  Maybe by using the list?
 
-        int key = assetLoadKey;
+        int key = assetLoadKey; // if a new load is started while we're processing, we'll abandon this one
 
-        //Returns any IResourceLocations that are mapped to the supplied label
-        AsyncOperationHandle<IList<IResourceLocation>> handle = Addressables.LoadResourceLocationsAsync(new string[]
-        {
-            "default",
-            sceneName,
-        }, Addressables.MergeMode.Union);
+        List<string> labels = new List<string>() { "default", sceneName };
+
+        //Returns IResourceLocations that are mapped to any of the supplied labels
+        AsyncOperationHandle<IList<IResourceLocation>> handle = Addressables.LoadResourceLocationsAsync(
+            labels,
+            Addressables.MergeMode.Union);
         yield return handle;
 
         if (key != assetLoadKey) yield break; // scene has changed while assets were being found
@@ -176,14 +174,13 @@ public class CroquetEntitySystem : CroquetSystem
             if (loc.ToString().EndsWith(".prefab")) prefabs++;
         }
 
-        Debug.Log($"Found {prefabs} addressable prefabs tagged as 'default' or '{sceneName}'");
         Addressables.Release(handle);
 
         if (prefabs != 0)
         {
             // Load any assets labelled with this appName from the Addressable Assets
             Addressables.LoadAssetsAsync<GameObject>(
-            new string[] { "default", sceneName },
+            labels,
             o => { },
             Addressables.MergeMode.Union).Completed += objects =>
             {
