@@ -419,8 +419,8 @@ public static class Croquet
     /// <summary>
     /// Test if gameObject's corresponding actor has supplied a value (either static or watched) for the named property.
     /// </summary>
-    /// <param name="gameObject">name of the corresponding gameObject</param>
-    /// <param name="propertyName">the property to check if the actor has sent</param>
+    /// <param name="gameObject">the gameObject of interest</param>
+    /// <param name="propertyName">the property to check</param>
     /// <returns>True if a value is available</returns>
     public static bool HasActorSentProperty(GameObject gameObject, string propertyName)
     {
@@ -430,8 +430,8 @@ public static class Croquet
     /// <summary>
     /// Read a string-valued property that has been supplied by the gameObject's corresponding actor.
     /// </summary>
-    /// <param name="gameObject">name of the corresponding gameObject</param>
-    /// <param name="propertyName">the property to check if the actor has sent</param>
+    /// <param name="gameObject">the gameObject of interest</param>
+    /// <param name="propertyName">the property to read</param>
     /// <returns>The string value</returns>
     public static string ReadActorString(GameObject gameObject, string propertyName)
     {
@@ -443,8 +443,8 @@ public static class Croquet
     /// Read a string-array-valued property that has been supplied by the gameObject's corresponding actor.
     /// </summary>
 
-    /// <param name="gameObject">name of the corresponding gameObject</param>
-    /// <param name="propertyName">the property to check if the actor has sent</param>
+    /// <param name="gameObject">the gameObject of interest</param>
+    /// <param name="propertyName">the property to read</param>
     /// <returns>The string-array value</returns>
     public static string[] ReadActorStringArray(GameObject gameObject, string propertyName)
     {
@@ -455,8 +455,8 @@ public static class Croquet
     /// <summary>
     /// Read a float-valued property that has been supplied by the gameObject's corresponding actor.
     /// </summary>
-    /// <param name="gameObject">name of the corresponding gameObject</param>
-    /// <param name="propertyName">the property to check if the actor has sent</param>
+    /// <param name="gameObject">the gameObject of interest</param>
+    /// <param name="propertyName">the property to read</param>
     /// <returns>The float value</returns>
     public static float ReadActorFloat(GameObject gameObject, string propertyName)
     {
@@ -467,8 +467,8 @@ public static class Croquet
     /// <summary>
     /// Read a float-array-valued property that has been supplied by the gameObject's corresponding actor.
     /// </summary>
-    /// <param name="gameObject">name of the corresponding gameObject</param>
-    /// <param name="propertyName">the property to check if the actor has sent</param>
+    /// <param name="gameObject">the gameObject of interest</param>
+    /// <param name="propertyName">the property to read</param>
     /// <returns>The float-array value</returns>
     public static float[] ReadActorFloatArray(GameObject gameObject, string propertyName)
     {
@@ -484,8 +484,8 @@ public static class Croquet
     /// <summary>
     /// Read a boolean-valued property that has been supplied by the gameObject's corresponding actor.
     /// </summary>
-    /// <param name="gameObject">name of the corresponding gameObject</param>
-    /// <param name="propertyName">the property to check if the actor has sent</param>
+    /// <param name="gameObject">the gameObject of interest</param>
+    /// <param name="propertyName">the property to read</param>
     /// <returns>The boolean value</returns>
     public static bool ReadActorBool(GameObject gameObject, string propertyName)
     {
