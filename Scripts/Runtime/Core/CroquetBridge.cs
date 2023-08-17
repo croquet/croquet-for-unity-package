@@ -13,7 +13,7 @@ using WebSocketSharp.Server;
 using WebSocketSharp.Net;
 
 /// <summary>
-/// Croquet Bridge is the primary Component that should be attached to
+/// Croquet Bridge is the primary Component that should be attached to a Prefab in any scene that you want to support multiplayer.
 /// </summary>
 public class CroquetBridge : MonoBehaviour
 {
