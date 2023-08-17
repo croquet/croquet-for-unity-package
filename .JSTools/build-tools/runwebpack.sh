@@ -3,7 +3,7 @@
 # the CroquetBuilder.StartBuild script supplies us with 3 or 4 arguments:
 # 1. full path to the platform-relevant node engine
 # 2. app name - used in webpack.config to find the app source
-# 3. build target: 'node' or 'web'
+# 3. build target ('node' or 'web') - also used in webpack.config
 # 4. full path to a temporary file to be used for watcher output (if not provided,
 #    that means we should perform a one-time build)
 
@@ -16,14 +16,6 @@ TARGET=$3
 
 # node_modules in the CroquetJS/.js-build folder, one above here
 NODE_MODULES=../node_modules
-
-if [ ! -d $NODE_MODULES/webpack ]; then
-	echo "Cannot find webpack.  Did you do 'npm install'?"
-	exit
-fi
-
-sed -e "s/__APP_SOURCE__/..\/..\/..\/$APPNAME/g" sources/index.generic.js > sources/index.tmp.js
-sed -e "s/__APP_SOURCE__/..\/..\/..\/$APPNAME/g" sources/index-node.generic.js > sources/index-node.tmp.js
 
 if [ $# -eq 4 ]; then
 	LOGFILE=$4

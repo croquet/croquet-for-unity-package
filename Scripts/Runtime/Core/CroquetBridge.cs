@@ -173,9 +173,11 @@ public class CroquetBridge : MonoBehaviour
 #if UNITY_EDITOR
     private async void WaitForJSBuild()
     {
-        bool success = await CroquetBuilder.EnsureJSBuildAvailableToPlay();
+        bool success = await CroquetBuilder.EnsureJSToolsAvailable()
+                       && CroquetBuilder.EnsureJSBuildAvailableToPlay();
         if (!success)
         {
+            // error(s) will have already been reported
             EditorApplication.ExitPlaymode();
             return;
         }
@@ -729,31 +731,40 @@ public class CroquetBridge : MonoBehaviour
     void HarvestSceneDefinition(string sceneName, string appName)
     {
         // the scene is ready.  get its definition.
-        Debug.Log($"ready to harvest scene \"{sceneName}\"");
+        Log("session", $"ready to harvest scene \"{sceneName}\"");
 
         List<string> sceneStrings = new List<string>() {
             EarlySubscriptionTopicsAsString(),
             CroquetEntitySystem.Instance.assetManifestString
         };
-        sceneStrings.AddRange(GetSceneDefinitionStrings());
+        sceneStrings.AddRange(GetSceneObjectStrings());
         string sceneFullString = string.Join('\x01', sceneStrings.ToArray());
 
         // in the list we interleave scene name and scene definition, for convenience of parsing the assembled file
         if (!sceneDefinitionsByApp.ContainsKey(appName)) sceneDefinitionsByApp[appName] = new List<string>();
-        sceneDefinitionsByApp[appName].AddRange(new []{ sceneName, sceneFullString });
-        Debug.Log($"definition of {sceneFullString.Length} chars for scene {sceneName} in app {appName}");
-
+        if (sceneFullString.Length > 0)
+        {
+            sceneDefinitionsByApp[appName].AddRange(new[] { sceneName, sceneFullString });
+            Log("session",$"definition of {sceneFullString.Length} chars for app {appName}");
+        }
     }
 
     void WriteAllSceneDefinitions()
     {
-        // $$$$ make sure that if a scene doesn't provide a definition, we remove its def file
         foreach(KeyValuePair<string, List<string>> appScenes in sceneDefinitionsByApp)
         {
             string app = appScenes.Key;
-            string appDefinitions = string.Join('\x02', appScenes.Value.ToArray());
             string filePath = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS", app, "scene-definitions.txt"));
-            File.WriteAllText(filePath, appDefinitions);
+            List<string> sceneDefs = appScenes.Value;
+            if (sceneDefs.Count > 0)
+            {
+                string appDefinitions = string.Join('\x02', sceneDefs.ToArray());
+                File.WriteAllText(filePath, appDefinitions);
+            }
+            else
+            {
+                if (File.Exists(filePath)) File.Delete(filePath);
+            }
         }
 
         sceneDefinitionsByApp.Clear();
@@ -785,22 +796,27 @@ public class CroquetBridge : MonoBehaviour
             CroquetEntitySystem.Instance.assetManifestString
         };
 
-        commandStrings.AddRange(GetSceneDefinitionStrings());
+        commandStrings.AddRange(GetSceneObjectStrings());
 
         // send the message directly (bypassing the deferred-message queue)
         string msg = String.Join('\x01', commandStrings.ToArray());
         clientSock.Send(msg);
     }
 
-    List<string> GetSceneDefinitionStrings()
+    List<string> GetSceneObjectStrings()
     {
+        // return a definition string for each pre-included object that has a CroquetActorManifest and
+        // is active in the editor
         List<string> definitionStrings = new List<string>();
 
         Dictionary<string, string> abbreviations = new Dictionary<string, string>();
-        int tokens = 0;
-        // gather specs for all objects in the scene that have a CroquetActorManifest and are active
+        int objectCount = 0;
+        int uncondensedLength = 0;
+        int condensedLength = 0;
         foreach (CroquetActorManifest manifest in sceneDefinitionManifests)
         {
+            objectCount++;
+
             // the properties for actor.create() are sent as a string prop1:val1|prop2:val2...
             List<string> initStrings = new List<string>();
             initStrings.Add($"ACTOR:{manifest.defaultActorClass}");
@@ -814,7 +830,7 @@ public class CroquetBridge : MonoBehaviour
             List<string> convertedStrings = new List<string>();
             foreach (string pair in initStrings)
             {
-                tokens++;
+                uncondensedLength += pair.Length + 1; // assume a separator
                 if (!abbreviations.ContainsKey(pair))
                 {
                     abbreviations.Add(pair, $"${abbreviations.Count}");
@@ -826,12 +842,21 @@ public class CroquetBridge : MonoBehaviour
                 }
             }
             string oneObject = String.Join('|', convertedStrings.ToArray());
+            condensedLength += oneObject.Length;
             definitionStrings.Add(oneObject);
 
             Destroy(go); // now that we have what we need
         }
 
-        Log("session", $"scene definition with {tokens} tokens ({abbreviations.Count} unique)");
+        if (objectCount == 0)
+        {
+            Log("session", $"no pre-placed objects found");
+        }
+        else
+        {
+            Log("session", $"{objectCount} scene objects provided {uncondensedLength} bytes, encoded as {condensedLength}");
+        }
+
         return definitionStrings;
     }
 

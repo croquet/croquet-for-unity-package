@@ -30,6 +30,8 @@ public class UserInput : MonoBehaviour
 
     private IEnumerable<InputControl> GetControlsDown(InputEventPtr eventPtr)
     {
+        if (this == null) yield break;
+
         if (eventPtr.type != StateEvent.Type && eventPtr.type != DeltaStateEvent.Type)
             yield break;
 
@@ -44,6 +46,8 @@ public class UserInput : MonoBehaviour
 
     private IEnumerable<InputControl> GetControlsUp(InputEventPtr eventPtr)
     {
+        if (this == null) yield break;
+
         if (eventPtr.type != StateEvent.Type && eventPtr.type != DeltaStateEvent.Type)
             yield break;
 
@@ -70,12 +74,19 @@ public class UserInput : MonoBehaviour
         if (SendPointerEvents)
         {
             pointer.started += SendPointerDown;
-
             pointer.canceled += SendPointerUp;
             pointer.Enable();
         }
     }
 
+    private void OnDisable()
+    {
+        if (SendPointerEvents)
+        {
+            pointer.started -= SendPointerDown;
+            pointer.canceled -= SendPointerUp;
+        }
+    }
 
     void SendKeyDown(InputControl control)
     {

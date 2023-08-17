@@ -72,7 +72,6 @@ public class CroquetBuilder
         }
 #endif
 
-        string croquetVersion = FindCroquetPackageVersion();
         InstalledToolsRecord toolsRecord = FindJSToolsRecord();
         if (toolsRecord == null)
         {
@@ -81,6 +80,7 @@ public class CroquetBuilder
 
         // we don't try to figure out an ordering between package versions.  if the .latest-installed-tools
         // differs from the package version, we raise a warning.
+        string croquetVersion = FindCroquetPackageVersion();
         if (toolsRecord.packageVersion != croquetVersion)
         {
             Debug.LogWarning("Updated JS build tools are available; run Croquet => Install JS Build Tools to install");
@@ -220,6 +220,7 @@ public class CroquetBuilder
     // whenever the Play button is pressed.
     public static Process oneTimeBuildProcess; // queried by CroquetMenu
     private static string hashedProjectPath = ""; // a hash string representing this project, for use in EditorPrefs keys
+    private static bool installingJSTools = false;
 
     private const string ID_PROP = "JS Builder Id";
     private const string APP_PROP = "JS Builder App";
@@ -336,7 +337,19 @@ public class CroquetBuilder
 
     public static void StartBuild(bool startWatcher)
     {
-        if (oneTimeBuildProcess != null) return; // already building
+        // invoked from
+        // * Croquet menu "Build JS Now" option, with startWatcher=false
+        // * Croquet menu "Start JS Watcher" option, with startWatcher=true
+        // * this object's EnsureJSBuildAvailableToPlay method, if BuildOnPlayEnabled is true (see getter above)
+
+        // before invoking this, the caller must have run EnsureJSToolsAvailable (with a successful
+        // return code) so that this code can assume that the tools are installed.
+
+        if (oneTimeBuildProcess != null)
+        {
+            Debug.LogWarning($"JS build already in progress.");
+            return;
+        }
 
         JSBuildDetails details = GetSceneBuildDetails(); // includes forcing useNodeJS, if necessary (on Windows)
         string appName = details.appName;
@@ -354,8 +367,8 @@ public class CroquetBuilder
                 break;
             case RuntimePlatform.WindowsEditor:
                 nodeExecPath = "\"" + details.nodeExecutable + "\"";
-                executable = "powershell.exe";
-                arguments = $"-NoProfile -file \"runwebpack.ps1\" ";
+                executable = "cmd.exe";
+                arguments = $"/c runwebpack.bat ";
                 break;
             default:
                 throw new PlatformNotSupportedException("Don't know how to support automatic builds on this platform");
@@ -539,10 +552,12 @@ public class CroquetBuilder
         }
     }
 
-    public static async Task<bool> EnsureJSBuildAvailableToPlay()
+    public static bool EnsureJSBuildAvailableToPlay()
     {
-        bool toolsSuccess = await EnsureJSToolsAvailable();
-        if (!toolsSuccess) return false;
+        // invoked by CroquetBridge.WaitForJSBuild, after first running EnsureJSToolsAvailable.
+        // we can therefore be sure that there are tools, but the bridge will not have confirmed
+        // that the current scene has the necessary settings, and corresponding source code, to
+        // make a build.
 
         string jsPath = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS"));
 
@@ -569,6 +584,9 @@ public class CroquetBuilder
             Debug.LogError($"Could not find source directory for app \"{appName}\" under CroquetJS");
             return false;
         }
+
+        // at this point we have confirmed that there appears to be source code for making a build.
+        // in fact, perhaps it has already been made.
 
         string target = sceneBridgeComponent.useNodeJS ? "node" : "web";
 #if !UNITY_EDITOR_WIN
@@ -715,12 +733,30 @@ public class CroquetBuilder
 
     public static async Task<bool> EnsureJSToolsAvailable()
     {
+        // invoked from
+        // * CroquetBridge.WaitForJSBuild
+        // * Croquet menu "Build JS Now" option
+        // * Croquet menu "Start JS Watcher" option
+
+        // ensure that JS build tools are available.  return true if tools were already available,
+        // or have been successfully installed by this method.
+
+        if (installingJSTools)
+        {
+            // someone has already invoked this method, and it's in the middle of installing the tools.
+            // no additional caller can proceed until that finishes.
+            Debug.LogWarning("JS Build Tools installation already in progress");
+            return false;
+        }
+
         string state = StateOfJSBuildTools();
         if (state == "unavailable") return false; // explanatory error will already have been logged
         if (state == "needsInstall")
         {
             Debug.LogWarning("No JS build tools found.  Attempting to install...");
-            bool success = await InstallJSTools();
+            installingJSTools = true;
+            bool success = await InstallJSTools(); // uses try..catch to protect against errors
+            installingJSTools = false;
             if (!success)
             {
                 Debug.LogError("Install of JS build tools failed.");
@@ -730,8 +766,8 @@ public class CroquetBuilder
             Debug.Log("Install of JS build tools completed");
         }
 
-        // if we didn't just install, state is either "needsRefresh" (in which case a warning will
-        // have been logged) or "ok".  caller can go ahead.
+        // state is either "needsRefresh" (in which case a warning will already have been logged by
+        // StateOfJSBuildTools) or "ok" (perhaps because we just installed here).  caller can go ahead.
         return true;
     }
 
@@ -878,13 +914,12 @@ public class CroquetBuilder
 
     private static int InstallWin(string installDir, string toolsRoot)
     {
-        string scriptPath = Path.GetFullPath(Path.Combine(toolsRoot, "runNPM.ps1"));
         string stdoutFile = Path.GetTempFileName();
         string stderrFile = Path.GetTempFileName();
         Process p = new Process();
         p.StartInfo.UseShellExecute = true;
-        p.StartInfo.FileName = "powershell.exe";
-        p.StartInfo.Arguments = $"-NoProfile -file \"{scriptPath}\" \"{stdoutFile}\" \"{stderrFile}\" ";
+        p.StartInfo.FileName = "cmd.exe";
+        p.StartInfo.Arguments = $"/c npm install 1>\"{stdoutFile}\" 2>\"{stderrFile}\" ";
         p.StartInfo.WorkingDirectory = installDir;
         p.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
 
