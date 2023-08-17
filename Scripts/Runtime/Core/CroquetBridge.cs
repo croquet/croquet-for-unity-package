@@ -233,7 +233,7 @@ public class CroquetBridge : MonoBehaviour
         // immediately deactivate all Croquet objects, but keep a record of those that were active
         // in case we're asked to provide a scene definition
         sceneDefinitionManifests.Clear();
-        CroquetActorManifest[] croquetObjects = FindObjectsByType<CroquetActorManifest>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        CroquetActorManifest[] croquetObjects = FindObjectsByType<CroquetActorManifest>(FindObjectsInactive.Include, FindObjectsSortMode.InstanceID);
         foreach (CroquetActorManifest manifest in croquetObjects)
         {
             GameObject go = manifest.gameObject;

@@ -39,9 +39,7 @@ public class CroquetSpatialSystem : CroquetSystem
     public override List<string> InitializationStringsForObject(GameObject go)
     {
         // placement doesn't depend on having a SpatialComponent
-        CroquetSpatialComponent sc = null;
-        int instanceID = go.GetInstanceID();
-        if (components.ContainsKey(instanceID)) sc = components[instanceID] as CroquetSpatialComponent;
+        CroquetSpatialComponent sc = go.GetComponent<CroquetSpatialComponent>(); // if any
 
         Transform t = go.transform;
         List<string> strings = new List<string>();
