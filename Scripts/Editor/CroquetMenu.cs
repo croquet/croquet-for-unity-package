@@ -65,8 +65,11 @@ public class CroquetMenu
     private const string OpenPackageItem = "Croquet/Open package on Github...";
 
     [MenuItem(BuildNowItem, false, 100)]
-    private static void BuildNow()
+    private static async void BuildNow()
     {
+        bool success = await CroquetBuilder.EnsureJSToolsAvailable();
+        if (!success) return;
+
         CroquetBuilder.StartBuild(false); // false => no watcher
     }
 
@@ -106,8 +109,11 @@ public class CroquetMenu
 
 #if !UNITY_EDITOR_WIN
     [MenuItem(StarterItem, false, 100)]
-    private static void StartWatcher()
+    private static async void StartWatcher()
     {
+        bool success = await CroquetBuilder.EnsureJSToolsAvailable();
+        if (!success) return;
+
         CroquetBuilder.StartBuild(true); // true => start watcher
     }
 
