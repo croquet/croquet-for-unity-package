@@ -553,7 +553,7 @@ Debug.LogWarning($"webpack-exit = {line.Substring(exitPrefix.Length)}");
         }
     }
 
-    public static async Task<bool> EnsureJSBuildAvailableToPlay()
+    public static bool EnsureJSBuildAvailableToPlay()
     {
         // invoked by CroquetBridge.WaitForJSBuild, after first running EnsureJSToolsAvailable.
         // we can therefore be sure that there are tools, but the bridge will not have confirmed

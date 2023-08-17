@@ -174,7 +174,7 @@ public class CroquetBridge : MonoBehaviour
     private async void WaitForJSBuild()
     {
         bool success = await CroquetBuilder.EnsureJSToolsAvailable()
-                       && await CroquetBuilder.EnsureJSBuildAvailableToPlay();
+                       && CroquetBuilder.EnsureJSBuildAvailableToPlay();
         if (!success)
         {
             // error(s) will have already been reported
