@@ -438,7 +438,6 @@ public class CroquetBuilder
                 {
                     if (line.StartsWith(exitPrefix))
                     {
-Debug.LogWarning($"webpack-exit = {line.Substring(exitPrefix.Length)}");
                         webpackExit = int.Parse(line.Substring(exitPrefix.Length));
                     }
                     else filteredLines.Add(line);
