@@ -156,7 +156,7 @@ public class CroquetMenu
     }
 #endif
 
-        [MenuItem(HarvestDefinitionsItem, false, 100)]
+    [MenuItem(HarvestDefinitionsItem, false, 100)]
     private static void HarvestNow()
     {
         if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
@@ -191,7 +191,7 @@ public class CroquetMenu
 
         if (scenesAndApps.Count == 0)
         {
-            Debug.LogError("Found no scenes to harvest from.  Do all your scenes have a Croquet object that specifies its associated App Name?");
+            Debug.LogError("Found no scenes to harvest from.  Are all desired scenes included in Build Settings, and does each have a Croquet object that specifies its App Name?");
             CroquetBuilder.HarvestSceneList = "";        }
         else
         {
