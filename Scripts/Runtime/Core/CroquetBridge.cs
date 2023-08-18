@@ -21,6 +21,7 @@ public class CroquetBridge : MonoBehaviour
     public CroquetSettings appProperties;
 
     [Header("Session Configuration")]
+    [Tooltip("Single-token name (no spaces) for the Croquet app that synchronizes users in this scene.  The app's source code must appear in a directory with this name under 'Assets/CroquetJS/'.")]
     public string appName;
 
     [Tooltip("Single-token name (no spaces) for the Croquet session if not otherwise specified at runtime through a menu.  Users entering the same named session of the same named Croquet app will find themselves playing together.")]
