@@ -104,16 +104,11 @@ The most important field to set up in the settings asset is the **Api Key**, whi
 
 The **App Prefix** is the way of identifying with your organization the Croquet apps that you develop and run.  The combination of this prefix and the App Name provided on the Croquet Bridge component in each scene (see below) is a full App ID - for example, `io.croquet.worldcore.guardians`.  When you are running our demonstration projects (`tutorials`, `guardians` etc), it is fine to leave this prefix as is, but when you develop your own apps you must change the prefix so that the App ID is a globally unique identifier. The ID must follow the Android reverse domain naming convention - i.e., each dot-separated segment must start with a letter, and only letters, digits, and underscores are allowed.
 
-**For MacOS:** Find the Path to your Node executable, by going to a terminal and running
+**For MacOS only:** Find the Path to your Node executable, by going to a terminal and running
 ```
 which node
 ```
 On the Settings asset, fill in the **Path to Node** field with the path.
-
-**For Windows:** Your system may complain about "Script Execution Policy" which will prevent our setup scripts from running. The following command allows script execution on Windows for the current user (respond **Yes to [A]ll** when prompted):
-```
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
 
 ## Create a Unity Scene
 
@@ -125,15 +120,26 @@ Associate the **App Properties** field with the `CroquetSettings` object that yo
 
 Set the **App Name** to the `your_app_name` part of the path, illustrated above, to the directory holding the JavaScript source that belongs with this scene. For example, a name `myGame` would connect this scene to the code inside `Assets/CroquetJS/myGame`.
 
-## Create your JS Model File(s)
-Create a file `Models.js` that implements the behavior you want for your app.  To get started, you can copy any Models file from under the `CroquetJS` folder of one of our demonstration repositories.
+## Create Your App's JavaScript Code and Unity-side Entities
 
-## Hello World
+### Create a Top-Level JavaScript File
 
-*Note [Aug 2023]: the code here elides the current need for an additional import of **GameModelRoot** from a helper file (see the **Models.js** for any of the apps in the Tutorials repository for the details).  A more elegant mechanism will be provided shortly.*
-### Create a Basic Actor in Models.js
+In the app's directory create a file called `index.js`, that will be responsible for importing both the model- and view-side code that your app requires.  Here is an example:
+
 ```javascript
-import { ModelRoot, Actor, mix, AM_Spatial } from "@croquet/worldcore-kernel";
+import { StartSession, GameViewRoot } from "@croquet/unity-bridge";
+import { MyModelRoot } from "./Models";
+
+StartSession(MyModelRoot, GameViewRoot);
+```
+### Provide the JavaScript Model Code
+Create the file that implements the JavaScript model behavior for your app. The `index.js` above expects a file called `Models.js`, that exports a `MyModelRoot` class.
+
+To get started, you can copy any Models file from under the `CroquetJS` folder of one of our demonstration repositories.  Here is a sample, copied from Tutorial 1 of our Tutorials repository:
+
+```javascript
+import { Actor, mix, AM_Spatial } from "@croquet/worldcore-kernel";
+import { GameModelRoot } from "@croquet/game-models";
 
 class TestActor extends mix(Actor).with(AM_Spatial) {
     get gamePawnType() { return "basicCube" }
@@ -159,7 +165,7 @@ class TestActor extends mix(Actor).with(AM_Spatial) {
 }
 TestActor.register('TestActor');
 
-export class MyModelRoot extends ModelRoot {
+export class MyModelRoot extends GameModelRoot {
 
     init(options) {
         super.init(options);
@@ -174,17 +180,17 @@ MyModelRoot.register("MyModelRoot");
 ### Enable the Input Handler
 We provide a basic keypress and pointer forwarding template that uses Unity's new input system.
 See `Croquet/Runtime/UserInputActions` (lightning bolt icon).
-Select it and click "Make this the active input map"
+Select it and click "Make this the active input map".
 
 This allows most keypresses and pointer events to be forwarded. Skip this step if you want to use your own completely custom set of input events.
 
-### Create the Corresponding Prefab
-In order for the Croquet Bridge to correctly identify the basicCube and create it, you'll need to make a prefab in the default addressable group and tag it with the scene's name you are running (or default for every scene).
+### Create the Necessary Prefabs
+The model code above expects that its `TestActor` will be represented in Unity by a game pawn of type "basicCube".  To make that association across the Croquet Bridge, you will need to make a corresponding prefab. This Prefab must have a Croquet "Actor Manifest" Component, with its Pawn Type field set to "basicCube" to match the `gamePawnType` used in the model.
 
-This Prefab is required to have a Croquet "Actor Manifest" Component with the Pawn Type field directly corresponding to the "gamePawnType" in its model.
+Each of the various pawn prefabs used by your app must be copied into the Addressable Assets Group that you created earlier, and labeled there either with the names of specific scenes for which that prefab is needed, or with the label "default" to mean that it is available in every scene.
 
 ### Run and Test
-You should now run the game, a basicCube will spawn in the scene. You can control the cube's movement with the Z and X keys.
+You should now run the app. A basicCube will spawn in the scene, and you will be able to control the cube's movement with the Z and X keys.
 
 
 # Contribution
