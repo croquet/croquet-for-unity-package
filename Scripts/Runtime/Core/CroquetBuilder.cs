@@ -163,10 +163,9 @@ public class CroquetBuilder
             goodToGo = false;
         }
 
-        if (sceneBridgeComponent.useNodeJS != buildForWindows)
+        if (sceneBridgeComponent.forceToUseNodeJS && !buildForWindows)
         {
-            if (buildForWindows) Debug.LogWarning("Croquet Bridge component's \"Use Node JS\" is off, but must be checked for a Windows build");
-            else Debug.LogWarning($"Croquet Bridge component's \"Use Node JS\" is checked, but must be off for a non-Windows build");
+            Debug.LogWarning($"Croquet Bridge component's \"Force to Use Node JS\" is checked, but must be off for a non-Windows build");
             goodToGo = false;
         };
         if (sceneBridgeComponent.debugForceSceneRebuild)
@@ -282,18 +281,17 @@ public class CroquetBuilder
             // for Windows, we include a version of node.exe in the package.
             // it can be used for JS building, for running scenes in the editor,
             // and for inclusion in a Windows standalone build.
+            bool useNodeJS;
 #if !UNITY_EDITOR_WIN
             string pathToNode = sceneBridgeComponent.appProperties.pathToNode;
+            useNodeJS = sceneBridgeComponent.forceToUseNodeJS; // up to the user
 #else
-            // assume we're in a Windows editor
+            // we're in a Windows editor
             string pathToNode = NodeExeInPackage;
-            if (!sceneRunnerComponent.waitForUserLaunch && !sceneBridgeComponent.useNodeJS)
-            {
-                Debug.LogWarning("Switching to Node JS for non-user-launched Croquet on Windows");
-                sceneBridgeComponent.useNodeJS = true;
-            }
+            // build using Node unless user has set waitForUserLaunch and has *not* set forceToUseNodeJS
+            useNodeJS = !(sceneRunnerComponent.waitForUserLaunch && !sceneBridgeComponent.forceToUseNodeJS);
 #endif
-            return new JSBuildDetails(sceneBridgeComponent.appName, sceneBridgeComponent.useNodeJS, pathToNode);
+            return new JSBuildDetails(sceneBridgeComponent.appName, useNodeJS, pathToNode);
         }
         else return new JSBuildDetails("", false, "");
     }
@@ -590,8 +588,8 @@ public class CroquetBuilder
 
         // at this point we have confirmed that there appears to be source code for making a build.
         // in fact, perhaps it has already been made.
+        string target = details.useNodeJS ? "node" : "web";
 
-        string target = sceneBridgeComponent.useNodeJS ? "node" : "web";
 #if !UNITY_EDITOR_WIN
         if (RunningWatcherApp() == appName)
         {
