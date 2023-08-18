@@ -15,15 +15,18 @@ using Debug = UnityEngine.Debug;
 public class CroquetRunner : MonoBehaviour
 {
     #region Public
-    [Tooltip("Specify whether or not to await the user to initiate a webview or node connection.")]
+    [Tooltip("For debug use.  If selected, Croquet session startup will wait for user initiation using an external web browser or Node JS command.")]
     public bool waitForUserLaunch;
+
+    [Tooltip("Whether to force Croquet to run with Node JS, rather than in a WebView.  Windows does not support WebView, so on Windows Node JS is used by default. All other platforms default to WebView.")]
     public bool forceToUseNodeJS = false;
 
-    [Tooltip("Run messaging locally without the Croquet Reflector Infrastructure.")]
+    [Tooltip("For debug use, when access to the Croquet Reflector Infrastructure is not available.  Run messaging locally, supporting only a single user.")]
     public bool runOffline;
 
-    [Tooltip("Provide an IP Address for a local reflector instance.")]
-    public string localReflector;
+    // Not available to most users, so hide for now.
+    // [Tooltip("Provide an IP Address for a local Croquet reflector instance.")]
+    [HideInInspector] public string localReflector;
 
 #if UNITY_EDITOR_WIN
     [Tooltip("Display a window that is the active webView.")]

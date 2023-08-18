@@ -30,24 +30,23 @@ public class CroquetBridge : MonoBehaviour
     [Tooltip("Optionally, the name of a scene in this project.  If blank, pressing Play in the current scene will immediately launch Croquet with the app name and session name specified above.  If a scene name is provided, the current scene is assumed to act as a menu for selecting the session name; once selected, Croquet is then launched to run the named scene.")]
     public string launchViaMenuIntoScene = "";
 
-
     [Tooltip("For debug use, to suppress caching of scene definitions during iterative development.  If selected, every time the local user enters a Croquet-synchronized scene, the scene will be re-initialized (with the latest prefabs and object placements) for every user in the session.")]
     public bool debugForceSceneRebuild = false;
 
-    [Tooltip("For debug use.  Causes Croquet to log the selected types of session information (see the <a href=\"https://croquet.io/docs/croquet/Session.html\">Session definition</a>).  If you are not using an external browser, these logs will only be visible in Unity if you have enabled forwarding of the \"log\" category below.")]
+    [Tooltip("For debug use.  Causes Croquet to log the selected types of session information.  These logs will only be visible in the Unity console if you have enabled forwarding of the \"log\" category below.")]
     public CroquetDebugTypes croquetDebugLogging;
 
     [Tooltip("For debug use.  Specifies which categories of JavaScript console output are forwarded for echoing in the Unity console.")]
     public CroquetLogForwarding JSLogForwarding;
 
     [Header("Session State")]
-    [Tooltip("The Croquet Session State - one of: (stopped, requested, running)")]
+    [Tooltip("The current state of the Croquet session for this view - one of: (stopped, requested, running)")]
     public string croquetSessionState = "stopped";
 
-    [Tooltip("The current Croquet session name.")]
+    [Tooltip("The Croquet session name requested by this view.")]
     public string sessionName = "";
 
-    [Tooltip("This View's unique identifier. Used to differentiate this client.")]
+    [Tooltip("This view's identifier, assigned by the session once running. Unique to each client in the session.")]
     public string croquetViewId;
 
     [Tooltip("How many views are currently connected to the session.")]
@@ -56,14 +55,14 @@ public class CroquetBridge : MonoBehaviour
     [Tooltip("The scene currently being handled in the model.")]
     public string croquetActiveScene;
 
-    [Tooltip("The current model scene's state - one of: (preload, loading, running)")]
+    [Tooltip("The state of scene readiness in the model - one of: (preload, loading, running)")]
     public string croquetActiveSceneState;
 
-    [Tooltip("The current View's scene's state - one of: (preparing, ready, running)")]
+    [Tooltip("The state of scene readiness in this view - one of: (preparing, ready, running)")]
     public string unitySceneState = "preparing";
 
     [Header("Network Glitch Simulator")]
-    [Tooltip("For Debugging: Check this to trigger a network glitch and see how the app performs.")]
+    [Tooltip("For debug use. Check this to trigger a network glitch and see how the app performs.")]
     public bool triggerGlitchNow = false;
 
     [Tooltip("The duration of network glitch to trigger.")]
