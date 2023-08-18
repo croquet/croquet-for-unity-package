@@ -163,11 +163,6 @@ public class CroquetBuilder
             goodToGo = false;
         }
 
-        if (sceneBridgeComponent.forceToUseNodeJS && !buildForWindows)
-        {
-            Debug.LogWarning($"Croquet Bridge component's \"Force to Use Node JS\" is checked, but must be off for a non-Windows build");
-            goodToGo = false;
-        };
         if (sceneBridgeComponent.debugForceSceneRebuild)
         {
             Debug.LogWarning("Croquet Bridge component's \"Debug Force Scene Rebuild\" must be off");
@@ -176,6 +171,11 @@ public class CroquetBuilder
         if (sceneRunnerComponent.waitForUserLaunch)
         {
             Debug.LogWarning("Croquet Runner component's \"Wait For User Launch\" must be off");
+            goodToGo = false;
+        };
+        if (sceneRunnerComponent.forceToUseNodeJS && !buildForWindows)
+        {
+            Debug.LogWarning($"Croquet Runner component's \"Force to Use Node JS\" is checked, but must be off for a non-Windows build");
             goodToGo = false;
         };
         if (sceneRunnerComponent.runOffline)
@@ -281,15 +281,15 @@ public class CroquetBuilder
             // for Windows, we include a version of node.exe in the package.
             // it can be used for JS building, for running scenes in the editor,
             // and for inclusion in a Windows standalone build.
-            bool useNodeJS;
+            bool forceToUseNodeJS = sceneRunnerComponent.forceToUseNodeJS;
+            bool useNodeJS = forceToUseNodeJS; // default
 #if !UNITY_EDITOR_WIN
             string pathToNode = sceneBridgeComponent.appProperties.pathToNode;
-            useNodeJS = sceneBridgeComponent.forceToUseNodeJS; // up to the user
 #else
             // we're in a Windows editor
             string pathToNode = NodeExeInPackage;
             // build using Node unless user has set waitForUserLaunch and has *not* set forceToUseNodeJS
-            useNodeJS = !(sceneRunnerComponent.waitForUserLaunch && !sceneBridgeComponent.forceToUseNodeJS);
+            useNodeJS = !(sceneRunnerComponent.waitForUserLaunch && !forceToUseNodeJS);
 #endif
             return new JSBuildDetails(sceneBridgeComponent.appName, useNodeJS, pathToNode);
         }

@@ -15,6 +15,7 @@ using Debug = UnityEngine.Debug;
 public class CroquetRunner : MonoBehaviour
 {
     public bool waitForUserLaunch;
+    public bool forceToUseNodeJS = false;
     public bool runOffline;
     public string localReflector;
 #if UNITY_EDITOR_WIN
