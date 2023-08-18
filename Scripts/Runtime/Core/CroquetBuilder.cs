@@ -36,6 +36,9 @@ public class JSBuildStateRecord
     public int localToolsLevel;
 }
 
+/// <summary>
+/// Croquet Builder is the primary class for building the JS tools.
+/// </summary>
 public class CroquetBuilder
 {
     private static string INSTALLED_TOOLS_RECORD = "last-installed-tools"; // in .js-build folder (also preceded by .)
