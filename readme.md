@@ -12,17 +12,17 @@ For more examples please see our tutorials or other demo repos:
 - [Guardians](https://github.com/croquet/croquet-for-unity-guardians)
 
 
-# Questions
+## Questions
 Ask questions on our [discord](https://croquet.io/discord)!
 
 
-# Setup
+## Setup
 *Let's Get Started!*
 Overall, you will need to create a unity project and repo, set up all the dependencies, and create a basic javascript model to drive your game. The concepts are covered in more detail in Tutorial 1 of our tutorials repo.
 
 For a visual representation of this information please see our [getting started guide](https://docs.google.com/presentation/d/1nBt84oJudSvyxtjO0kchKUkLuTCf4O7emlzj-d58_xk/edit).
 
-## Unity Project
+### Unity Project
 Croquet for Unity has been built with and tested on projects using Unity editor version `2021.3.19f1`. The easiest way to get started is to use the same version - but feel free to try a new version and tell us how it goes!
 
 All Unity versions are available for download [here](https://unity.com/releases/editor/archive).
@@ -31,7 +31,7 @@ Create a new Unity Project via the Unity Hub Application.
 
 Select a path to save your Unity project.
 
-## git setup
+### git setup
 Be sure to have a system level installation of git that is in your path variable. Unity will use this to resolve git repo based packages. Installation Instructions for git can be found at: https://git-scm.com/book/en/v2/Getting-Started-Installing-Git
 
 Here are suggested .gitignore and .gitattributes files that we use in our Guardians demonstration project:
@@ -40,11 +40,11 @@ Here are suggested .gitignore and .gitattributes files that we use in our Guardi
 - [Guardians Root gitattributes](https://github.com/croquet/croquet-for-unity-guardians/blob/release/.gitattributes)
 
 
-## Get the Dependencies and the Package
+### Get the Dependencies and the Package
 Croquet for Unity has some networking dependencies that need to be set up to enable it to connect.
 
 
-### WebSocket
+#### WebSocket
 If you do not already have NuGet installed, add this to the package manager:
 ```
 https://github.com/GlitchEnzo/NuGetForUnity.git?path=/src/NuGetForUnity
@@ -52,20 +52,20 @@ https://github.com/GlitchEnzo/NuGetForUnity.git?path=/src/NuGetForUnity
 
 Then use the Menu's `NuGet>Manage NuGet Packages` to search for and install `WebSocketSharp-netstandard`
 
-### WebView
+#### WebView
 
 In Unity Package Manager add GREE, Inc.'s `unity-webview` package (using "Add package from git URL..."):
 ```
 https://github.com/gree/unity-webview.git?path=/dist/package-nofragment
 ```
 
-### Croquet for Unity
+#### Croquet for Unity
 Now that all dependencies are in place, add the croquet-multiplayer package using this git URL:
 ```
 https://github.com/croquet/croquet-for-unity-package.git
 ```
 
-### Install the Tools
+#### Install the Tools
 As part of the installation of the C4U package, the Unity editor will have been given a `Croquet` menu.
 On this menu, now invoke the option `Install JS Build Tools`.
 That option will create a "CroquetJS" folder that expects the following application structure.
@@ -88,7 +88,7 @@ NB: The `/.js-build` directory is where Croquet will automatically prepare npm m
 The `your_app_name` subdirectories can be used for independent apps - for example, in our `croquet-for-unity-tutorials` repository, there are independent directories for nine introductory apps.
 
 
-## Create a Default Addressable Assets Group
+### Create a Default Addressable Assets Group
 C4U expects to find a default addressable-assets group, which is how we associate particular assets across the bridge for spawning. Unity's Addressables are great system to use for asset naming and management.
 
 Clicking `Window => Asset Management => Group => "Create Asset Group"`
@@ -97,7 +97,7 @@ will create the group; an `AddressableAssetsData` folder will appear in your pro
 Add tags that correspond with the scene names you will use each prefab in (Croquet will only load what is needed for each scene), _or_ add the "default" tag if the asset should be loaded for every scene.
 
 
-## Create and fill in a CroquetSettings asset
+### Create and fill in a CroquetSettings asset
 Find the `CroquetDefaultSettings` asset within the C4U package, by going to `Packages/Croquet Multiplayer/Scripts/Runtime/Settings`. Copy the settings into your project - for example, into an `Assets/Settings` directory.
 
 The most important field to set up in the settings asset is the **Api Key**, which is a token of around 40 characters that you can create for yourself at https://croquet.io/account. It provides access to the Croquet infrastructure.
@@ -110,7 +110,7 @@ which node
 ```
 On the Settings asset, fill in the **Path to Node** field with the path.
 
-## Create a Unity Scene
+### Create a Unity Scene
 
 Create a new scene _(note: a scene's name is used in our package to tie the scene to its assets and other build aspects; these features have not yet been tested with names containing white space, punctuation etc)_
 
@@ -120,9 +120,9 @@ Associate the **App Properties** field with the `CroquetSettings` object that yo
 
 Set the **App Name** to the `your_app_name` part of the path, illustrated above, to the directory holding the JavaScript source that belongs with this scene. For example, a name `myGame` would connect this scene to the code inside `Assets/CroquetJS/myGame`.
 
-## Create Your App's JavaScript Code and Unity-side Entities
+### Create Your App's JavaScript Code and Unity-side Entities
 
-### Create a Top-Level JavaScript File
+#### Create a Top-Level JavaScript File
 
 In the app's directory create a file called `index.js`, that will be responsible for importing both the model- and view-side code that your app requires.  Here is an example:
 
@@ -132,7 +132,7 @@ import { MyModelRoot } from "./Models";
 
 StartSession(MyModelRoot, GameViewRoot);
 ```
-### Provide the JavaScript Model Code
+#### Provide the JavaScript Model Code
 Create the file that implements the JavaScript model behavior for your app. The `index.js` above expects a file called `Models.js`, that exports a `MyModelRoot` class.
 
 To get started, you can copy any Models file from under the `CroquetJS` folder of one of our demonstration repositories.  Here is a sample, copied from Tutorial 1 of our Tutorials repository:
@@ -177,14 +177,14 @@ export class MyModelRoot extends GameModelRoot {
 MyModelRoot.register("MyModelRoot");
 ```
 
-### Enable the Input Handler
+#### Enable the Input Handler
 We provide a basic keypress and pointer forwarding template that uses Unity's new input system.
 See `Croquet/Runtime/UserInputActions` (lightning bolt icon).
 Select it and click "Make this the active input map".
 
 This allows most keypresses and pointer events to be forwarded. Skip this step if you want to use your own completely custom set of input events.
 
-### Create the Necessary Prefabs
+#### Create the Necessary Prefabs
 The model code above expects that its `TestActor` will be represented in Unity by a game pawn of type "basicCube".  To make that association across the Croquet Bridge, you will need to make a corresponding prefab. This Prefab must have a Croquet "Actor Manifest" Component, with its Pawn Type field set to "basicCube" to match the `gamePawnType` used in the model.
 
 Each of the various pawn prefabs used by your app must be copied into the Addressable Assets Group that you created earlier, and labeled there either with the names of specific scenes for which that prefab is needed, or with the label "default" to mean that it is available in every scene.
@@ -192,8 +192,52 @@ Each of the various pawn prefabs used by your app must be copied into the Addres
 ### Run and Test
 You should now run the app. A basicCube will spawn in the scene, and you will be able to control the cube's movement with the Z and X keys.
 
+## Croquet Menu Items
+_Within the package we have provided a Croquet Menu which gives developers the ability to quickly perform various useful operations._
 
-# Contribution
+### Build JS Now
+_Manually initiate a build of the JavaScript code for the Croquet session that synchronizes this app._
+
+This and the other JS build items are available when the open scene has a Croquet Bridge object with an appropriately set App Name (and there is a corresponding app source directory under CroquetJS).
+
+This item triggers a bundling of that source along with the libraries that are currently installed as part of the "JS build tools". The bundling is required for the Croquet session to run. 
+
+We usually recommend setting "Build JS on Play", which will cause bundling to be done automatically as part of the switch into play mode, thus ensuring that the latest code is being used. Manually triggering the build is a quick way to test whether the JavaScript will in fact bundle successfully, without having to wait through the other aspects of play-mode initialization.
+
+Where a JS Watcher is available (see below), that is an even quicker way to incorporate changes in the JavaScript code.
+
+### Build JS on Play (Toggle)
+_Whether or not to initiate a build of the JavaScript code every time you hit play._
+
+As noted above, we recommend setting this during development of the JavaScript code (if not using a Watcher), so that the latest code is always in use. If you are not making changes to the JavaScript, disabling this option (once the code has been built) will speed up the entry to play mode.
+
+### Start/Stop a JS Watcher on the Scene
+_Currently only offered on MacOS.  Starts a Webpack watcher that instantly re-bundles the JavaScript when any source file is changed._
+
+The webpack watcher is optimized for fast rebuilds (on a small project that takes multiple seconds to start up and complete a one-time build, the watcher may achieve a rebuild in 20-50ms). Running a watcher is therefore a way to speed up the iterative cycle of changing the JavaScript and testing it in Unity play mode.
+
+We only support a single watcher for a project, tied to the app specified by the active scene when you launched the watcher. If your project involves different apps used by different scenes, you would need to stop the watcher that is running for one app before starting it to run on another. 
+
+### Harvest Scene Definitions
+_Sweeps through all scenes included in Build Settings, producing scene-definition files that the Croquet code can read when switching to a scene, instead of having to query a live Unity participant on the fly._
+
+To play a Unity scene, Croquet needs information about how that scene functions - including the prefabs that are available for use as pawns, and the published events that Unity scripts want to subscribe to. In addition, a scene can include an arbitrary spatial arrangement of game objects defining the initial state of the Croquet-synchronized objects in that scene.
+
+Harvesting scene definitions is optional. However, if scenes are not harvested, each entry to a new scene during play will require the details for that scene to be transmitted over the Croquet network to all participants. In the case of a scene that includes hundreds or thousands of pre-laid-out objects, this could introduce a multi-second delay that the presence of the scene-definition file would avoid.
+
+A scene's definition is written to a file in the JavaScript source directory of the app named on the scene's Croquet Bridge object. If multiple scenes use the same app, their definitions are included in a single file for that app.
+
+### Install JS Build Tools
+_Extract from the Croquet Multiplayer package the tools and libraries needed to bundle JavaScript code._
+
+In addition to C# scripts, the package defines the JavaScript environment needed to build your Croquet code. This includes dependencies on the Croquet library and its Worldcore game features, and on the webpack tool that is used for bundling.
+
+The first time you attempt to build JavaScript in your project - whether manually, or triggered by pressing play - Croquet for Unity will automatically invoke this installation mechanism.
+
+You will only need to invoke it manually if a new version of the Croquet Multiplayer package itself is released (and is detected by your Unity Package Manager, perhaps as a result of explicitly selecting "Update"), and you would like to take advantage of the new version.
+
+
+## Contribution
 Contributions to the package are welcome as these projects are open source and we encourage community involvement.
 
 1. Base your `feature/my-feature-name` or `bugfix/descriptor` branch off of `develop` branch
