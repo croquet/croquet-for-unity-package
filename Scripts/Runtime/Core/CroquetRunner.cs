@@ -14,18 +14,31 @@ using Debug = UnityEngine.Debug;
 
 public class CroquetRunner : MonoBehaviour
 {
+    #region Public
+    [Tooltip("Specify whether or not to await the user to initiate a webview or node connection.")]
     public bool waitForUserLaunch;
     public bool forceToUseNodeJS = false;
+
+    [Tooltip("Run messaging locally without the Croquet Reflector Infrastructure.")]
     public bool runOffline;
+
+    [Tooltip("Provide an IP Address for a local reflector instance.")]
     public string localReflector;
+
 #if UNITY_EDITOR_WIN
+    [Tooltip("Display a window that is the active webView.")]
     [HideInInspector] public bool showWebview;
 #else
     public bool showWebview;
 #endif
+    #endregion
+
+    #region Private
 
     private static string appSourcePath; // app's own folder under StreamingAssets
     private static string nodeExecPath = ""; // provided by CroquetBridge
+
+    #endregion
 
     struct CroquetNodeProcess : IJob
     {
