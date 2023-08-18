@@ -20,7 +20,6 @@ public class CroquetBridge : MonoBehaviour
     public CroquetSettings appProperties;
 
     [Header("Session Configuration")]
-    public bool useNodeJS;
     public string appName;
     public string defaultSessionName = "ABCDE";
     public string launchViaMenuIntoScene = "";
@@ -366,14 +365,22 @@ public class CroquetBridge : MonoBehaviour
 
         Log("session", $"started HTTP/WS Server on port {port}");
 
-#if UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
-        string pathToNode = appProperties.pathToNode; // doesn't exist on Windows
+        string pathToNode = "";
+        bool forceToUseJS = croquetRunner.forceToUseNodeJS;
+        bool useNodeJS = forceToUseJS; // default
+
+#if UNITY_EDITOR_OSX
+        pathToNode = appProperties.pathToNode; // if needed
 #elif UNITY_EDITOR_WIN
-        string pathToNode = CroquetBuilder.NodeExeInPackage;
+        // in Windows editor, use Node unless user has set waitForUserLaunch and has *not* set forceToUseNodeJS
+        pathToNode = CroquetBuilder.NodeExeInPackage; // if needed
+        useNodeJS = !(croquetRunner.waitForUserLaunch && !forceToUseNodeJS);
 #elif UNITY_STANDALONE_WIN || UNITY_WSA
-        string pathToNode = CroquetBuilder.NodeExeInBuild;
+        pathToNode = CroquetBuilder.NodeExeInBuild;
+        useNodeJS = true;
 #else
-        string pathToNode = ""; // not available
+        // some form of non-Windows standalone.  Node is not available.
+        useNodeJS = false;
 #endif
 
         StartCoroutine(croquetRunner.StartCroquetConnection(port, appName, useNodeJS, pathToNode));
