@@ -402,8 +402,8 @@ public class CroquetBridge : MonoBehaviour
         Log("session", $"started HTTP/WS Server on port {port}");
 
         string pathToNode = "";
-        bool forceToUseJS = croquetRunner.forceToUseNodeJS;
-        bool useNodeJS = forceToUseJS; // default
+        bool forceToUseNodeJS = croquetRunner.forceToUseNodeJS;
+        bool useNodeJS = forceToUseNodeJS; // default
 
 #if UNITY_EDITOR_OSX
         pathToNode = appProperties.pathToNode; // if needed
