@@ -17,35 +17,71 @@ using WebSocketSharp.Net;
 /// </summary>
 public class CroquetBridge : MonoBehaviour
 {
+    # region Public
     public CroquetSettings appProperties;
 
     [Header("Session Configuration")]
+    [Tooltip("Single-token name (no spaces) for the Croquet app that synchronizes users in this scene.  The app's source code must appear in a directory with this name under 'Assets/CroquetJS/'.")]
     public string appName;
+
+    [Tooltip("Single-token name (no spaces) for the Croquet session if not otherwise specified at runtime through a menu.  Users entering the same named session of the same named Croquet app will find themselves playing together.")]
     public string defaultSessionName = "ABCDE";
+
+    [Tooltip("Optionally, the name of a scene in this project.  If blank, pressing Play in the current scene will immediately launch Croquet with the app name and session name specified above.  If a scene name is provided, the current scene is assumed to act as a menu for selecting the session name; once selected, Croquet is then launched to run the named scene.")]
     public string launchViaMenuIntoScene = "";
-    private bool waitingForFirstScene = true;
+
+    [Tooltip("For debug use, to suppress caching of scene definitions during iterative development.  If selected, every time the local user enters a Croquet-synchronized scene, the scene will be re-initialized (with the latest prefabs and object placements) for every user in the session.")]
     public bool debugForceSceneRebuild = false;
+
+    [Tooltip("For debug use.  Causes Croquet to log the selected types of session information.  These logs will only be visible in the Unity console if you have enabled forwarding of the \"log\" category below.")]
     public CroquetDebugTypes croquetDebugLogging;
+
+    [Tooltip("For debug use.  Specifies which categories of JavaScript console output are forwarded for echoing in the Unity console.")]
     public CroquetLogForwarding JSLogForwarding;
 
     [Header("Session State")]
-    public string croquetSessionState = "stopped"; // requested, running, stopped
+    [Tooltip("The current state of the Croquet session for this view - one of: (stopped, requested, running)")]
+    public string croquetSessionState = "stopped";
+
+    [Tooltip("The Croquet session name requested by this view.")]
     public string sessionName = "";
+
+    [Tooltip("This view's identifier, assigned by the session once running. Unique to each client in the session.")]
     public string croquetViewId;
+
+    [Tooltip("How many views are currently connected to the session.")]
     public int croquetViewCount;
-    public string croquetActiveScene; // the scene currently being handled in the model
-    public string croquetActiveSceneState; // the model's scene state (preload, loading, running)
-    public string unitySceneState = "preparing"; // our scene state (preparing, ready, running)
+
+    [Tooltip("The scene currently being handled in the model.")]
+    public string croquetActiveScene;
+
+    [Tooltip("The state of scene readiness in the model - one of: (preload, loading, running)")]
+    public string croquetActiveSceneState;
+
+    [Tooltip("The state of scene readiness in this view - one of: (preparing, ready, running)")]
+    public string unitySceneState = "preparing";
+
+    [Header("Network Glitch Simulator")]
+    [Tooltip("For debug use. Check this to trigger a network glitch and see how the app performs.")]
+    public bool triggerGlitchNow = false;
+
+    [Tooltip("The duration of network glitch to trigger.")]
+    public float glitchDuration = 3.0f;
+
+    [Tooltip("The current active Croquet Systems that have registered with the Bridge.")]
+    public CroquetSystem[] croquetSystems = new CroquetSystem[0];
+
+    #endregion
+
+    #region PRIVATE
     private List<CroquetActorManifest> sceneDefinitionManifests = new List<CroquetActorManifest>();
     private List<string> sceneHarvestList; // joined pairs  sceneName:appName
     private Dictionary<string, List<string>> sceneDefinitionsByApp =
         new Dictionary<string, List<string>>(); // appName to list of scene definitions
 
-    [Header("Network Glitch Simulator")]
-    public bool triggerGlitchNow = false;
-    public float glitchDuration = 3.0f;
-
     private static string bridgeState = "stopped"; // needJSBuild, waitingForJSBuild, foundJSBuild, waitingForSocket, waitingForSessionName, waitingForSession, started
+
+    private bool waitingForFirstScene = true;
 
     HttpServer ws = null;
     WebSocketBehavior wsb = null; // not currently used
@@ -74,8 +110,6 @@ public class CroquetBridge : MonoBehaviour
     public static CroquetBridge Instance { get; private set; }
     private CroquetRunner croquetRunner;
 
-    public CroquetSystem[] croquetSystems = new CroquetSystem[0];
-
     private static Dictionary<string, List<(GameObject, Action<string>)>> croquetSubscriptions = new Dictionary<string, List<(GameObject, Action<string>)>>();
     private static Dictionary<GameObject, HashSet<string>> croquetSubscriptionsByGameObject =
         new Dictionary<GameObject, HashSet<string>>();
@@ -96,6 +130,8 @@ public class CroquetBridge : MonoBehaviour
     long inBundleDelayMS = 0;
     float inProcessingTime = 0;
     float lastMessageDiagnostics; // realtimeSinceStartup
+
+    #endregion
 
     private void SetBridgeState(string state)
     {
