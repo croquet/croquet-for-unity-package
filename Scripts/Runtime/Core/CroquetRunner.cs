@@ -14,14 +14,35 @@ using Debug = UnityEngine.Debug;
 
 public class CroquetRunner : MonoBehaviour
 {
+    #region Public
+    [Tooltip("For debug use.  If selected, Croquet session startup will wait for user initiation using an external web browser or Node JS command.")]
     public bool waitForUserLaunch;
-    public string localReflector;
-    public bool showWebview;
 
-    private static string bridgeSourcePath; // croquet-bridge folder under StreamingAssets
+    [Tooltip("Whether to force Croquet to run with Node JS, rather than in a WebView.  Windows does not support WebView, so on Windows Node JS is used by default. All other platforms default to WebView.")]
+    public bool forceToUseNodeJS = false;
+
+    [Tooltip("For debug use, when access to the Croquet Reflector Infrastructure is not available.  Run messaging locally, supporting only a single user.")]
+    public bool runOffline;
+
+    // Not available to most users, so hide for now.
+    // [Tooltip("Provide an IP Address for a local Croquet reflector instance.")]
+    [HideInInspector] public string localReflector;
+
+#if UNITY_EDITOR_WIN
+    [Tooltip("Display a window that is the active webView.")]
+    [HideInInspector] public bool showWebview;
+#else
+    public bool showWebview;
+#endif
+    #endregion
+
+    #region Private
+
     private static string appSourcePath; // app's own folder under StreamingAssets
     private static string nodeExecPath = ""; // provided by CroquetBridge
-    
+
+    #endregion
+
     struct CroquetNodeProcess : IJob
     {
         public int port;
@@ -46,7 +67,7 @@ public class CroquetRunner : MonoBehaviour
             croquetProcess.StartInfo.CreateNoWindow = true;
 
             string nodeEntry = "node-main.js";
-            
+
             croquetProcess.StartInfo.FileName = nodeExecPath;
             croquetProcess.StartInfo.Arguments = $"{nodeEntry} {port}";
 
@@ -88,15 +109,10 @@ public class CroquetRunner : MonoBehaviour
             }
         }
     }
-    
+
     public IEnumerator StartCroquetConnection(int port, string appName, bool useNodeJS, string pathToNode)
     {
-        bridgeSourcePath = Path.Combine(Application.streamingAssetsPath, "croquet-bridge");
         appSourcePath = Path.Combine(Application.streamingAssetsPath, appName);
-
-#if UNITY_EDITOR
-        CroquetBuilder.WaitUntilBuildComplete();
-#endif
 
         // options for running Croquet code (given lack of webview support on Windows):
         //
@@ -116,7 +132,7 @@ public class CroquetRunner : MonoBehaviour
         //
         //   deployed standalone on Windows:
         //     i. nodeJS (using node.exe copied into StreamingAssets)
-        
+
         // figure out the web url, whatever is going to happen
         // Use the port number determined by the bridge
         string webURL = $"http://localhost:{port}/{appName}/index.html";
@@ -132,6 +148,7 @@ public class CroquetRunner : MonoBehaviour
         {
             // cases (a), (h)
             WebViewObject webViewObject = (new GameObject("WebViewObject")).AddComponent<WebViewObject>();
+            DontDestroyOnLoad(webViewObject.gameObject);
             webViewObject.Init(
                 separated: showWebview,
                 enableWKWebView: true,
@@ -183,16 +200,16 @@ public class CroquetRunner : MonoBehaviour
         if (!useNodeJS && waitForUserLaunch)
         {
             // cases (b), (g)
-            TimedLog($"ready for browser to load from {webURL}");
+            TimedLog("ready for browser to load from <a href=\""+$"{webURL}\">{webURL}</a>");
         }
-        
+
         if (useNodeJS)
         {
             if (!waitForUserLaunch)
             {
                 // cases (c), (e), (i)
                 nodeExecPath = pathToNode;
-                
+
                 var job = new CroquetNodeProcess()
                 {
                     port = port

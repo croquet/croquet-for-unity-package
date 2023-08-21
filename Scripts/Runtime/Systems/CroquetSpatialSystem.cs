@@ -36,10 +36,90 @@ public class CroquetSpatialSystem : CroquetSystem
         }
     }
 
+    public override List<string> InitializationStringsForObject(GameObject go)
+    {
+        // placement doesn't depend on having a SpatialComponent
+        CroquetSpatialComponent sc = go.GetComponent<CroquetSpatialComponent>(); // if any
+
+        Transform t = go.transform;
+        List<string> strings = new List<string>();
+        Vector3 position = t.position;
+        if (position.magnitude > (sc ? sc.positionEpsilon : 0.01f))
+        {
+            int precision = sc ? sc.positionMaxDecimals : 4;
+            strings.Add($"pos:{FormatFloats(new []{position.x,position.y,position.z}, precision)}");
+        }
+        Quaternion rotation = t.rotation;
+        if (Quaternion.Angle(rotation,Quaternion.identity) > (sc ? sc.rotationEpsilon : 0.01f))
+        {
+            int precision = sc ? sc.rotationMaxDecimals : 6;
+            strings.Add($"rot:{FormatFloats(new []{rotation.x,rotation.y,rotation.z,rotation.w}, precision)}");
+        }
+        Vector3 scale = t.lossyScale;
+        if (Vector3.Distance(scale,new Vector3(1f, 1f, 1f)) > (sc ? sc.scaleEpsilon : 0.01f))
+        {
+            int precision = sc ? sc.scaleMaxDecimals : 4;
+            strings.Add($"scale:{FormatFloats(new []{scale.x,scale.y,scale.z}, precision)}");
+        }
+
+        if (sc && sc.includeOnSceneInit)
+        {
+            strings.Add($"spatialOptions:{PackedOptionValues(sc)}");
+        }
+
+        return strings;
+    }
+
+    string FormatFloats(float[] floats, int precision)
+    {
+        string formatter = $"0.{new string('0', precision)}";
+        string[] strings = Array.ConvertAll(floats, f =>
+        {
+            // suggestion adapted from https://stackoverflow.com/questions/4525854/remove-trailing-zeros
+            string strdec = f.ToString(formatter);
+            return strdec.Contains(".") ? strdec.TrimEnd('0').TrimEnd('.') : strdec;
+        });
+        return string.Join(',', strings);
+    }
+
+    private string PackedOptionValues(CroquetSpatialComponent spatial)
+    {
+        float[] props = new float[]
+        {
+            spatial.positionSmoothTime,
+            spatial.positionEpsilon,
+            spatial.rotationLerpPerFrame,
+            spatial.rotationEpsilon,
+            spatial.scaleLerpPerFrame,
+            spatial.scaleEpsilon,
+            spatial.desiredLag,
+            spatial.ballisticNudgeLerp
+        };
+
+        return string.Join<float>(',', props);
+    }
+
+    private void UnpackOptionValues(string packedValues, CroquetSpatialComponent spatial)
+    {
+        float[] props = Array.ConvertAll(packedValues.Split(','), float.Parse);
+        spatial.positionSmoothTime = props[0];
+        spatial.positionEpsilon = props[1];
+        spatial.rotationLerpPerFrame = props[2];
+        spatial.rotationEpsilon = props[3];
+        spatial.scaleLerpPerFrame = props[4];
+        spatial.scaleEpsilon = props[5];
+        spatial.desiredLag = props[6];
+        spatial.ballisticNudgeLerp = props[7];
+    }
+
     private void Update()
     {
         // Update the transform (position, rotation, scale) in the scene
-        UpdateTransforms();
+        // - but only if the scene is running
+        if (CroquetBridge.Instance.unitySceneState == "running")
+        {
+            UpdateTransforms();
+        }
     }
 
     void Unparent(string[] args)
@@ -63,6 +143,13 @@ public class CroquetSpatialSystem : CroquetSystem
 
     public override void PawnInitializationComplete(GameObject go)
     {
+        if (Croquet.HasActorSentProperty(go, "spatialOptions"))
+        {
+            string options = Croquet.ReadActorString(go, "spatialOptions");
+            CroquetSpatialComponent spatial = go.GetComponent<CroquetSpatialComponent>();
+            UnpackOptionValues(options, spatial);
+        }
+
         CroquetActorManifest manifest = go.GetComponent<CroquetActorManifest>();
         if (manifest != null && Array.IndexOf(manifest.mixins, "Ballistic2D") >= 0)
         {
@@ -70,6 +157,7 @@ public class CroquetSpatialSystem : CroquetSystem
             Vector3 initialPos = new Vector3(p[0], p[1], p[2]);
             float[] r = Croquet.ReadActorFloatArray(go, "rotation");
             Quaternion initialRot = new Quaternion(r[0], r[1], r[2], r[3]);
+            initialRot.Normalize(); // probably ok, but doesn't hurt to confirm
             float[] s = Croquet.ReadActorFloatArray(go, "scale");
             Vector3 initialScale = new Vector3(s[0], s[1], s[2]);
 
@@ -106,13 +194,13 @@ public class CroquetSpatialSystem : CroquetSystem
             CroquetSpatialComponent spatial = kvp.Value as CroquetSpatialComponent;
             Transform t = spatial.transform; // where the object is right now
 
-            if (Vector3.Distance(spatial.scale,t.localScale) > spatial.scaleDeltaEpsilon)
+            if (Vector3.Distance(spatial.scale,t.localScale) > spatial.scaleEpsilon)
             {
-                t.localScale = Vector3.Lerp(t.localScale, spatial.scale, spatial.scaleLerpFactor);
+                t.localScale = Vector3.Lerp(t.localScale, spatial.scale, spatial.scaleLerpPerFrame);
             }
-            if (Quaternion.Angle(spatial.rotation,t.localRotation) > spatial.rotationDeltaEpsilon)
+            if (Quaternion.Angle(spatial.rotation,t.localRotation) > spatial.rotationEpsilon)
             {
-                t.localRotation = Quaternion.Slerp(t.localRotation, spatial.rotation, spatial.rotationLerpFactor);
+                t.localRotation = Quaternion.Slerp(t.localRotation, spatial.rotation, spatial.rotationLerpPerFrame);
             }
             if (spatial.ballisticVelocity != null)
             {
@@ -178,12 +266,11 @@ public class CroquetSpatialSystem : CroquetSystem
                 // }
 
                 spatial.hasBeenMoved = true;
-            } else if (Vector3.Distance(spatial.position,t.localPosition) > spatial.positionDeltaEpsilon)
+            } else if (Vector3.Distance(spatial.position,t.localPosition) > spatial.positionEpsilon)
             {
                 // SmoothDamp seems better suited to our needs than a constant lerp
                 t.localPosition = Vector3.SmoothDamp(t.localPosition, spatial.position,
                         ref spatial.dampedVelocity, spatial.positionSmoothTime);
-                // Vector3.Lerp(t.localPosition, spatial.position, spatial.positionLerpFactor);
             }
         }
     }
@@ -353,7 +440,7 @@ public class CroquetSpatialSystem : CroquetSystem
 
         if (scale != null)
         {
-            argList.Add("p");
+            argList.Add("s");
             argList.Add(string.Join<float>(",", new[] { scale.Value.x, scale.Value.y, scale.Value.z }));
         }
 
@@ -384,12 +471,14 @@ public class CroquetSpatialSystem : CroquetSystem
 
     Quaternion QuaternionFromBuffer(byte[] rawData, int startPos)
     {
-        return new Quaternion(
+        Quaternion q = new Quaternion(
             BitConverter.ToSingle(rawData, startPos),
             BitConverter.ToSingle(rawData, startPos + 4),
             BitConverter.ToSingle(rawData, startPos + 8),
             BitConverter.ToSingle(rawData, startPos + 12)
         );
+        q.Normalize(); // probably ok, but doesn't hurt to confirm
+        return q;
     }
 
     Vector3 Vector3FromBuffer(byte[] rawData, int startPos)

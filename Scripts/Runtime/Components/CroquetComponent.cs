@@ -9,7 +9,7 @@ public abstract class CroquetComponent : MonoBehaviour
     void Awake()
     {
         // if (croquetSystem == null) Debug.Log($"futile attempt to awaken {this}");
-        croquetSystem.RegisterComponent(this);
+        if (croquetSystem != null) croquetSystem.RegisterComponent(this);
     }
 
 }

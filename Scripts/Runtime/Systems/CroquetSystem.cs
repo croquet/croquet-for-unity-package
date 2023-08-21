@@ -17,6 +17,7 @@ public abstract class CroquetSystem : MonoBehaviour
 
     public virtual void RegisterComponent(CroquetComponent component)
     {
+        // Debug.Log($"register {component.gameObject} in {this}");
         components.Add(component.gameObject.GetInstanceID(), component);
     }
 
@@ -40,11 +41,6 @@ public abstract class CroquetSystem : MonoBehaviour
         // by default, nothing
     }
 
-    public virtual void TearDownSession()
-    {
-        // by default, nothing
-    }
-
     public virtual void ProcessCommand(string command, string[] args)
     {
         throw new NotImplementedException();
@@ -55,9 +51,36 @@ public abstract class CroquetSystem : MonoBehaviour
         throw new NotImplementedException();
     }
 
-    //TODO: implement
-    //public abstract void OnSessionDisconnect();
+    public virtual void LoadedScene(string sceneName)
+    {
+        // by default, nothing
+    }
 
+    public virtual bool ReadyToRunScene(string sceneName)
+    {
+        return true;
+    }
 
+    public virtual void ClearSceneBeforeRunning()
+    {
+        components.Clear(); // wipe out anything that registered as the scene came up
+    }
+
+    public virtual void TearDownScene()
+    {
+        // by default, just clear the components
+        components.Clear();
+    }
+
+    public virtual void TearDownSession()
+    {
+        // by default, just invoke TearDownScene
+        TearDownScene();
+    }
+
+    public virtual List<string> InitializationStringsForObject(GameObject go)
+    {
+        return new List<string>();
+    }
 
 }
