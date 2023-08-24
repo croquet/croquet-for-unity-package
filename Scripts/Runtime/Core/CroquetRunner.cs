@@ -49,9 +49,10 @@ public class CroquetRunner : MonoBehaviour
 
         private void OutputHandler(object sendingProcess, DataReceivedEventArgs outLine)
         {
+            // this is now used purely for stderr from the node process
             if (!String.IsNullOrEmpty(outLine.Data))
             {
-                Debug.Log("Croquet: " + outLine.Data);
+                Debug.LogWarning("Node.js stderr: " + outLine.Data);
             }
         }
 
@@ -62,7 +63,7 @@ public class CroquetRunner : MonoBehaviour
 
             // redirect the output stream of the child process.
             croquetProcess.StartInfo.UseShellExecute = false;
-            croquetProcess.StartInfo.RedirectStandardOutput = true;
+            croquetProcess.StartInfo.RedirectStandardOutput = false;
             croquetProcess.StartInfo.RedirectStandardError = true;
             croquetProcess.StartInfo.CreateNoWindow = true;
 
@@ -71,7 +72,7 @@ public class CroquetRunner : MonoBehaviour
             croquetProcess.StartInfo.FileName = nodeExecPath;
             croquetProcess.StartInfo.Arguments = $"{nodeEntry} {port}";
 
-            croquetProcess.OutputDataReceived += OutputHandler;
+            // croquetProcess.OutputDataReceived += OutputHandler;
             croquetProcess.ErrorDataReceived += OutputHandler;
             croquetProcess.EnableRaisingEvents = true;
 
@@ -82,17 +83,11 @@ public class CroquetRunner : MonoBehaviour
             try
             {
                 croquetProcess.Start();
-                croquetProcess.BeginOutputReadLine();
+                // croquetProcess.BeginOutputReadLine();
                 croquetProcess.BeginErrorReadLine();
 
                 //UnityEngine.Debug.Log("Process id: " + croquetProcess.Id.ToString());
 
-                // do not wait for the child process to exit before
-                // reading to the end of its redirected stream.
-                // croquetProcess.WaitForExit();
-
-                // read the output stream first and then wait.
-                //output = croquetProcess.StandardOutput.ReadToEnd();
                 croquetProcess.WaitForExit();
             }
             catch (Exception e)

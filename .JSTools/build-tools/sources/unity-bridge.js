@@ -65,7 +65,7 @@ console.log(`PORT ${portStr}`);
                 console.q_error = console.error;
             }
             this.resetMessageStats();
-            this.setJSLogForwarding(['log', 'warn', 'error'], true);
+            this.setJSLogForwarding(['log', 'warn', 'error']);
 
             globalThis.timedLog('opened socket');
             this.bridgeIsConnected = true;
@@ -76,7 +76,7 @@ console.log(`PORT ${portStr}`);
             };
         };
         sock.onclose = _evt => {
-            this.setJSLogForwarding([], true); // restore to local logging
+            this.setJSLogForwarding([]); // restore to local logging
             globalThis.timedLog('bridge websocket closed');
             this.bridgeIsConnected = false;
             if (session) session.leave();
@@ -152,11 +152,11 @@ console.log(`PORT ${portStr}`);
             case 'setJSLogForwarding': {
                 // args[0] is comma-separated list of log types (log,warn,error)
                 // that are to be sent over to Unity
-                // args[1] is a flag waitForUserLaunch
+                // args[1] is a flag waitForUserLaunch [currently not used]
                 const toForward = args[0].split(',');
-                const waitForUserLaunch = args[1] === "True";
+                // const waitForUserLaunch = args[1] === "True";
                 console.log("categories of JS log forwarded to Unity:", toForward);
-                this.setJSLogForwarding(toForward, waitForUserLaunch);
+                this.setJSLogForwarding(toForward);
                 break;
             }
             case 'readyForSession': {
@@ -308,33 +308,17 @@ console.log(`PORT ${portStr}`);
         if (this.bridgeIsConnected) this.sendCommand('tearDownSession', sceneStr);
     }
 
-    setJSLogForwarding(toForward, userLaunched) {
-        const isNode = globalThis.CROQUET_NODE;
+    setJSLogForwarding(toForward) {
         const stringify = obj => { try { return JSON.stringify(obj) } catch (e) { return "[non-JSONable object]" }};
         const timeStamper = logVals => `${(globalThis.CroquetViewDate || Date).now() % 100000}: ` + logVals.map(a => typeof a === 'object' ? stringify(a) : String(a)).join(' ');
         const forwarder = (logType, logVals) => this.sendCommand('logFromJS', logType, timeStamper(logVals));
         ['log', 'warn', 'error'].forEach(logType => {
             const wantsForwarding = toForward.includes(logType);
-            if (isNode) {
-                // in Node, when not user-launched, everything output to the console is (for now) automatically echoed to Unity.  so in that case, anything _not_ in the list needs to be completely suppressed.
-                const logLocally = userLaunched || wantsForwarding;
-                const explicitlyForward = userLaunched && wantsForwarding;
-                if (!logLocally && !explicitlyForward) console[logType] = () => { }; // suppress
-                else {
-                    console[logType] = (...logVals) => {
-                        const stamped = timeStamper(logVals);
-                        if (logLocally) console[`q_${logType}`](stamped); // use native logger to write time-stamped output
-                        if (explicitlyForward) this.sendCommand('logFromJS', logType, stamped);
-                    };
-                }
-            } else {
-                // eslint-disable-next-line no-lonely-if
-                if (wantsForwarding) console[logType] = (...logVals) => {
-                    console[`q_${logType}`](...logVals); // log locally
-                    forwarder(logType, logVals); // and also forward
-                };
-                else console[logType] = console[`q_${logType}`]; // use system default
-            }
+            if (wantsForwarding) console[logType] = (...logVals) => {
+                console[`q_${logType}`](...logVals); // log locally
+                forwarder(logType, logVals); // and also forward
+            };
+            else console[logType] = console[`q_${logType}`]; // use system default
         });
    }
 
