@@ -964,10 +964,6 @@ setupStats[bucket] = (setupStats[bucket] || 0) + 1;
         this.gameViewManager.destroyObject(this.gameHandle);
         super.destroy();
     }
-
-    makeInteractable(layers = "") {
-        this.sendToUnity('makeInteractable', layers);
-    }
 };
 gamePawnMixins.Base = PM_GameRendered;
 
@@ -1133,10 +1129,12 @@ export const PM_GameBallistic2D = superclass => class extends PM_GameSmoothed(su
 gamePawnMixins.Ballistic2D = PM_GameBallistic2D;
 
 export const PM_GameInteractable = superclass => class extends superclass {
+    get layers() { return (this.actor._layers || []).join(',') }
 
     constructor(actor) {
         super(actor);
         this.componentNames.add('CroquetInteractableComponent');
+        this.extraWatched.add('layers');
     }
 
 };
