@@ -12,14 +12,11 @@ public class CroquetInteractableSystem : CroquetSystem
     public float PointerHitDistance = 50.0f;
     public Camera userCamera;
 
-    public override List<string> KnownCommands { get; } = new()
-    {
-        "makeInteractable",
-    };
+    public override List<string> KnownCommands { get; } = new() { };
 
     protected override Dictionary<int, CroquetComponent> components { get; set; } =
         new Dictionary<int, CroquetComponent>();
-    
+
     // Create Singleton Reference
     public static CroquetInteractableSystem Instance { get; private set; }
 
@@ -46,11 +43,6 @@ public class CroquetInteractableSystem : CroquetSystem
                 SendPointerHit();
             }
         }
-    }
-
-    public override void ProcessCommand(string command, string[] args)
-    {
-        if (command == "makeInteractable") MakeInteractable(args);
     }
 
     void SendPointerHit()
@@ -93,7 +85,7 @@ public class CroquetInteractableSystem : CroquetSystem
                 }
 
                 objectHit = objectHit.parent;
-                
+
                 if (!objectHit) break;
             }
         }
@@ -107,24 +99,17 @@ public class CroquetInteractableSystem : CroquetSystem
             CroquetBridge.Instance.SendToCroquet(eventArgs.ToArray());
         }
     }
-    
-    private void MakeInteractable(string[] args)
+
+    public override void ActorPropertySet(GameObject go, string propName)
     {
-        string croquetHandle = args[0];
-        string layers = args[1];
-
-        GameObject go = CroquetEntitySystem.Instance.GetGameObjectByCroquetHandle(croquetHandle);
-        if (go != null)
+        // we're being notified that a watched property on an object that we are
+        // known to have an interest in has changed (or been set for the first time).
+        if (propName == "layers")
         {
-            CroquetInteractableComponent component = components[go.GetInstanceID()] as CroquetInteractableComponent;
-            component.isInteractable = true;
-            
-            if (layers != "")
-            {
-                component.interactableLayers = layers.Split(",");
-            }
+            string[] layers = Croquet.ReadActorStringArray(go, "layers");
+            CroquetInteractableComponent interactable = components[go.GetInstanceID()] as CroquetInteractableComponent;
+            interactable.interactableLayers = layers;
         }
-
     }
 
 }
