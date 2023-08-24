@@ -98,10 +98,10 @@ public class CroquetBuilder
         string installRecordContents = "";
 
 #if UNITY_EDITOR
-        string installRecord = JSToolsRecordInEditor;
-        if (!File.Exists(installRecord)) return null;
+        string installRecordPath = JSToolsRecordInEditor;
+        if (!File.Exists(installRecordPath)) return null;
 
-        installRecordContents = File.ReadAllText(installRecord);
+        installRecordContents = File.ReadAllText(installRecordPath);
 #else
         // find the file in a build.  Android needs extra care.
         string src = JSToolsRecordInBuild;
@@ -139,16 +139,16 @@ public class CroquetBuilder
     {
         // check whether we have a build for the given app and target that is up to date with the JS tools
         InstalledToolsRecord installedTools = FindJSToolsRecord(); // caller must have confirmed that this exists
-        int toolsLevel = installedTools.localToolsLevel;
+        int installedToolsLevel = installedTools.localToolsLevel;
 
-        string buildRecord = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS",
+        string buildRecordPath = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS",
             appName, BUILD_STATE_RECORD));
-        if (!File.Exists(buildRecord)) return false; // failed, or never built
+        if (!File.Exists(buildRecordPath)) return false; // failed, or never built
 
-        string buildRecordContents = File.ReadAllText(buildRecord).Trim();
+        string buildRecordContents = File.ReadAllText(buildRecordPath).Trim();
         JSBuildStateRecord record = JsonUtility.FromJson<JSBuildStateRecord>(buildRecordContents);
 
-        return record.target == target && record.localToolsLevel >= toolsLevel;
+        return record.target == target && record.localToolsLevel == installedToolsLevel;
     }
 
     public static bool PrepareSceneForBuildTarget(Scene scene, bool buildForWindows)
@@ -230,7 +230,6 @@ public class CroquetBuilder
     private const string LOG_PROP = "JS Builder Log";
     private const string BUILD_ON_PLAY = "JS Build on Play";
     private const string HARVEST_SCENES = "Harvest Scene List";
-    private const string TOOLS_LEVEL = "JS Tools Level";
 
     public static bool BuildOnPlayEnabled
     {
@@ -318,22 +317,31 @@ public class CroquetBuilder
         // record one of "web", "node", or "" to indicate whether StreamingAssets contains a successful
         // build for web or node, or for neither.
         // also record the tools level, so we can force a rebuild after a tools update.
-        string buildRecord = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS",
+        string buildRecordPath = Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, "..", "CroquetJS",
             appName, BUILD_STATE_RECORD));
         if (success)
         {
-            int toolsLevel = EditorPrefs.GetInt(ProjectSpecificKey(TOOLS_LEVEL), 0);
+            int toolsLevel = FindJSToolsRecord().localToolsLevel;
             JSBuildStateRecord record = new JSBuildStateRecord()
             {
                 target = target,
                 localToolsLevel = toolsLevel
             };
-            File.WriteAllText(buildRecord, JsonUtility.ToJson(record, true));
+            File.WriteAllText(buildRecordPath, JsonUtility.ToJson(record, true));
+
+            // check that the write itself succeeded
+            string buildRecordContents = File.ReadAllText(buildRecordPath).Trim(); // will throw if no file
+            JSBuildStateRecord newRecord = JsonUtility.FromJson<JSBuildStateRecord>(buildRecordContents);
+            if (newRecord != null && newRecord.target == target && newRecord.localToolsLevel == toolsLevel)
+            {
+                // written correctly
+                return;
+            }
+
+            Debug.LogError($"failed to write JS build record {buildRecordPath}");
         }
-        else
-        {
-            File.Delete(buildRecord);
-        }
+
+        if (File.Exists(buildRecordPath)) File.Delete(buildRecordPath);
     }
 
     public static void StartBuild(bool startWatcher)
@@ -847,18 +855,26 @@ public class CroquetBuilder
             {
                 // update our local count of how many times the tools have been updated.  this will invalidate
                 // any build made with an earlier level.
-                string levelKey = ProjectSpecificKey(TOOLS_LEVEL);
-                int previousLevel = EditorPrefs.GetInt(levelKey, 0);
+                InstalledToolsRecord toolsRecord = FindJSToolsRecord();
+                int previousLevel = toolsRecord == null ? 0 : toolsRecord.localToolsLevel;
                 int toolsLevel = previousLevel + 1;
-                EditorPrefs.SetInt(levelKey, toolsLevel);
 
                 // add a record of which package version, and local copy of the JS tools, the files came from
-                InstalledToolsRecord record = new InstalledToolsRecord()
+                string packageVersion = FindCroquetPackageVersion();
+                InstalledToolsRecord newRecord = new InstalledToolsRecord()
                 {
-                    packageVersion = FindCroquetPackageVersion(),
+                    packageVersion = packageVersion,
                     localToolsLevel = toolsLevel
                 };
-                File.WriteAllText(installRecord, JsonUtility.ToJson(record, true));
+                File.WriteAllText(installRecord, JsonUtility.ToJson(newRecord, true));
+
+                // check that the writing itself succeeded
+                InstalledToolsRecord writtenRecord = FindJSToolsRecord();
+                if (writtenRecord == null || writtenRecord.packageVersion != packageVersion || writtenRecord.localToolsLevel != toolsLevel)
+                {
+                    Debug.LogError("failed to write installed-tools record");
+                    return false;
+                }
 
                 return true; // success!
             }

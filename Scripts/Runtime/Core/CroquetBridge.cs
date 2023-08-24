@@ -795,7 +795,7 @@ public class CroquetBridge : MonoBehaviour
         if (sceneFullString.Length > 0)
         {
             sceneDefinitionsByApp[appName].AddRange(new[] { sceneName, sceneFullString });
-            Log("session",$"definition of {sceneFullString.Length} chars for app {appName}");
+            // Log("session",$"definition of {sceneFullString.Length} chars for app {appName}");
         }
     }
 
@@ -810,10 +810,27 @@ public class CroquetBridge : MonoBehaviour
             {
                 string appDefinitions = string.Join('\x02', sceneDefs.ToArray());
                 File.WriteAllText(filePath, appDefinitions);
+
+                // check that the write itself succeeded
+                string definitionContents = File.ReadAllText(filePath).Trim(); // will throw if no file
+                if (definitionContents == appDefinitions)
+                {
+                    Debug.Log($"wrote definitions for app \"{app}\": {appDefinitions.Length:N0} chars in {filePath}");
+                }
+                else
+                {
+                    Debug.LogError($"failed to write definitions for app \"{app}\"");
+                }
             }
             else
             {
-                if (File.Exists(filePath)) File.Delete(filePath);
+                // the app is mentioned in some scene(s), but no scene offered any definition
+                // (i.e., no subscriptions, no manifests, and no object placements)
+                if (File.Exists(filePath))
+                {
+                    Debug.Log($"removing previous scene-definition file for app \"{app}\"");
+                    File.Delete(filePath);
+                }
             }
         }
 
@@ -904,7 +921,7 @@ public class CroquetBridge : MonoBehaviour
         }
         else
         {
-            Log("session", $"{objectCount} scene objects provided {uncondensedLength} bytes, encoded as {condensedLength}");
+            Log("session", $"{objectCount:N0} scene objects provided {uncondensedLength:N0} chars, encoded as {condensedLength:N0}");
         }
 
         return definitionStrings;
