@@ -16,7 +16,7 @@ public class CroquetRunner : MonoBehaviour
 {
     #region Public
     [Tooltip("For debug use.  If selected, Croquet session startup will wait for user initiation using an external web browser or Node JS command.")]
-    public bool waitForUserLaunch;
+    public bool debugUsingExternalSession;
 
     [Tooltip("Whether to force Croquet to run with Node JS, rather than in a WebView.  Windows does not support WebView, so on Windows Node JS is used by default. All other platforms default to WebView.")]
     public bool forceToUseNodeJS = false;
@@ -139,7 +139,7 @@ public class CroquetRunner : MonoBehaviour
 
         // only compile with WebViewObject on non-Windows platforms
 #if !(UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN || UNITY_WSA)
-        if (!useNodeJS && !waitForUserLaunch)
+        if (!useNodeJS && !debugUsingExternalSession)
         {
             // cases (a), (h)
             WebViewObject webViewObject = (new GameObject("WebViewObject")).AddComponent<WebViewObject>();
@@ -189,10 +189,10 @@ public class CroquetRunner : MonoBehaviour
             webViewObject.LoadURL(webURL);
         }
 #else // running in Windows
-        if (!waitForUserLaunch) useNodeJS = true; // force node unless user explicitly wants an external browser
+        if (!debugUsingExternalSession) useNodeJS = true; // force node unless user explicitly wants an external browser
 #endif
 
-        if (!useNodeJS && waitForUserLaunch)
+        if (!useNodeJS && debugUsingExternalSession)
         {
             // cases (b), (g)
             TimedLog("ready for browser to load from <a href=\""+$"{webURL}\">{webURL}</a>");
@@ -200,7 +200,7 @@ public class CroquetRunner : MonoBehaviour
 
         if (useNodeJS)
         {
-            if (!waitForUserLaunch)
+            if (!debugUsingExternalSession)
             {
                 // cases (c), (e), (i)
                 nodeExecPath = pathToNode;

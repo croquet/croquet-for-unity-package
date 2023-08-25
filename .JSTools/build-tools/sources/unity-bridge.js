@@ -152,9 +152,9 @@ console.log(`PORT ${portStr}`);
             case 'setJSLogForwarding': {
                 // args[0] is comma-separated list of log types (log,warn,error)
                 // that are to be sent over to Unity
-                // args[1] is a flag waitForUserLaunch [currently not used]
+                // args[1] is a flag debugUsingExternalSession [currently not used]
                 const toForward = args[0].split(',');
-                // const waitForUserLaunch = args[1] === "True";
+                // const debugUsingExternalSession = args[1] === "True";
                 console.log("categories of JS log forwarded to Unity:", toForward);
                 this.setJSLogForwarding(toForward);
                 break;
