@@ -41,26 +41,37 @@ Here are suggested .gitignore and .gitattributes files that we use in our Guardi
 
 
 ### Get the Dependencies and the Package
-Croquet for Unity has some networking dependencies that need to be set up to enable it to connect.
+Croquet for Unity has some networking dependencies that need to be set up.
 
 
 #### WebSocket
-If you do not already have NuGet installed, add this to the package manager:
+
+We use the `WebSocketSharp-netstandard` package, which is distributed through NuGet, for the C# end of our bridge to JavaScript.
+
+Open the following page, and hit the `Download package` link on the right.
 ```
-https://github.com/GlitchEnzo/NuGetForUnity.git?path=/src/NuGetForUnity
+https://www.nuget.org/packages/WebSocketSharp-netstandard
 ```
 
-Then use the Menu's `NuGet>Manage NuGet Packages` to search for and install `WebSocketSharp-netstandard`
+Change the extension of the downloaded `websocketsharp-netstandard.1.0.1.nupkg` from `nupkg` to `zip`, then unzip the file. In the resulting folder hierarchy, find the following file:
+```
+websocketsharp-netstandard.1.0.1/lib/netstandard2.0/websocket-sharp.dll
+```
+
+Copy this file into your Unity project - for example, to a new folder `Assets/Plugins`.
 
 #### WebView
 
-In Unity Package Manager add GREE, Inc.'s `unity-webview` package (using "Add package from git URL..."):
+Running Croquet for Unity on any platform other than Windows (including any deployed app) requires having a WebView available to run the Croquet JavaScript code.
+
+In the Unity Package Manager add GREE, Inc.'s `unity-webview` package (using "Add package from git URL..."):
 ```
 https://github.com/gree/unity-webview.git?path=/dist/package-nofragment
 ```
 
 #### Croquet for Unity
-Now that all dependencies are in place, add the croquet-multiplayer package using this git URL:
+
+Now that all dependencies are in place, add the `croquet-multiplayer` package using this git URL:
 ```
 https://github.com/croquet/croquet-for-unity-package.git
 ```
@@ -200,7 +211,7 @@ _Manually initiate a build of the JavaScript code for the Croquet session that s
 
 This and the other JS build items are available when the open scene has a Croquet Bridge object with an appropriately set App Name (and there is a corresponding app source directory under CroquetJS).
 
-This item triggers a bundling of that source along with the libraries that are currently installed as part of the "JS build tools". The bundling is required for the Croquet session to run. 
+This item triggers a bundling of that source along with the libraries that are currently installed as part of the "JS build tools". The bundling is required for the Croquet session to run.
 
 We usually recommend setting "Build JS on Play", which will cause bundling to be done automatically as part of the switch into play mode, thus ensuring that the latest code is being used. Manually triggering the build is a quick way to test whether the JavaScript will in fact bundle successfully, without having to wait through the other aspects of play-mode initialization.
 
@@ -216,7 +227,7 @@ _Currently only offered on MacOS.  Starts a Webpack watcher that instantly re-bu
 
 The webpack watcher is optimized for fast rebuilds (on a small project that takes multiple seconds to start up and complete a one-time build, the watcher may achieve a rebuild in 20-50ms). Running a watcher is therefore a way to speed up the iterative cycle of changing the JavaScript and testing it in Unity play mode.
 
-We only support a single watcher for a project, tied to the app specified by the active scene when you launched the watcher. If your project involves different apps used by different scenes, you would need to stop the watcher that is running for one app before starting it to run on another. 
+We only support a single watcher for a project, tied to the app specified by the active scene when you launched the watcher. If your project involves different apps used by different scenes, you would need to stop the watcher that is running for one app before starting it to run on another.
 
 ### Harvest Scene Definitions
 _Sweeps through all scenes included in Build Settings, producing scene-definition files that the Croquet code can read when switching to a scene, instead of having to query a live Unity participant on the fly._
