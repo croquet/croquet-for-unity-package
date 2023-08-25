@@ -29,9 +29,9 @@ public class CroquetRunner : MonoBehaviour
     [HideInInspector] public string localReflector;
 
 #if UNITY_EDITOR_WIN
-    [Tooltip("Display a window that is the active webView.")]
     [HideInInspector] public bool showWebview;
 #else
+    [Tooltip("For debug use.  If selected, and running with a WebView, the view will appear at bottom-left on the desktop as a small featureless window.  The window's right-click menu provides access to JavaScript debug tools.")]
     public bool showWebview;
 #endif
     #endregion
