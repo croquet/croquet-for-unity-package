@@ -16,7 +16,7 @@ public class CroquetRunner : MonoBehaviour
 {
     #region Public
     [Tooltip("For debug use.  If selected, Croquet session startup will wait for user initiation using an external web browser or Node JS command.")]
-    public bool waitForUserLaunch;
+    public bool debugUsingExternalSession;
 
     [Tooltip("Whether to force Croquet to run with Node JS, rather than in a WebView.  Windows does not support WebView, so on Windows Node JS is used by default. All other platforms default to WebView.")]
     public bool forceToUseNodeJS = false;
@@ -29,9 +29,9 @@ public class CroquetRunner : MonoBehaviour
     [HideInInspector] public string localReflector;
 
 #if UNITY_EDITOR_WIN
-    [Tooltip("Display a window that is the active webView.")]
     [HideInInspector] public bool showWebview;
 #else
+    [Tooltip("For debug use.  If selected, and running with a WebView, the view will appear at bottom-left on the desktop as a small featureless window.  The window's right-click menu provides access to JavaScript debug tools.")]
     public bool showWebview;
 #endif
     #endregion
@@ -49,9 +49,10 @@ public class CroquetRunner : MonoBehaviour
 
         private void OutputHandler(object sendingProcess, DataReceivedEventArgs outLine)
         {
+            // this is now used purely for stderr from the node process
             if (!String.IsNullOrEmpty(outLine.Data))
             {
-                Debug.Log("Croquet: " + outLine.Data);
+                Debug.LogWarning("Node.js stderr: " + outLine.Data);
             }
         }
 
@@ -62,7 +63,7 @@ public class CroquetRunner : MonoBehaviour
 
             // redirect the output stream of the child process.
             croquetProcess.StartInfo.UseShellExecute = false;
-            croquetProcess.StartInfo.RedirectStandardOutput = true;
+            croquetProcess.StartInfo.RedirectStandardOutput = false;
             croquetProcess.StartInfo.RedirectStandardError = true;
             croquetProcess.StartInfo.CreateNoWindow = true;
 
@@ -71,7 +72,7 @@ public class CroquetRunner : MonoBehaviour
             croquetProcess.StartInfo.FileName = nodeExecPath;
             croquetProcess.StartInfo.Arguments = $"{nodeEntry} {port}";
 
-            croquetProcess.OutputDataReceived += OutputHandler;
+            // croquetProcess.OutputDataReceived += OutputHandler;
             croquetProcess.ErrorDataReceived += OutputHandler;
             croquetProcess.EnableRaisingEvents = true;
 
@@ -82,17 +83,11 @@ public class CroquetRunner : MonoBehaviour
             try
             {
                 croquetProcess.Start();
-                croquetProcess.BeginOutputReadLine();
+                // croquetProcess.BeginOutputReadLine();
                 croquetProcess.BeginErrorReadLine();
 
                 //UnityEngine.Debug.Log("Process id: " + croquetProcess.Id.ToString());
 
-                // do not wait for the child process to exit before
-                // reading to the end of its redirected stream.
-                // croquetProcess.WaitForExit();
-
-                // read the output stream first and then wait.
-                //output = croquetProcess.StandardOutput.ReadToEnd();
                 croquetProcess.WaitForExit();
             }
             catch (Exception e)
@@ -144,7 +139,7 @@ public class CroquetRunner : MonoBehaviour
 
         // only compile with WebViewObject on non-Windows platforms
 #if !(UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN || UNITY_WSA)
-        if (!useNodeJS && !waitForUserLaunch)
+        if (!useNodeJS && !debugUsingExternalSession)
         {
             // cases (a), (h)
             WebViewObject webViewObject = (new GameObject("WebViewObject")).AddComponent<WebViewObject>();
@@ -194,10 +189,10 @@ public class CroquetRunner : MonoBehaviour
             webViewObject.LoadURL(webURL);
         }
 #else // running in Windows
-        if (!waitForUserLaunch) useNodeJS = true; // force node unless user explicitly wants an external browser
+        if (!debugUsingExternalSession) useNodeJS = true; // force node unless user explicitly wants an external browser
 #endif
 
-        if (!useNodeJS && waitForUserLaunch)
+        if (!useNodeJS && debugUsingExternalSession)
         {
             // cases (b), (g)
             TimedLog("ready for browser to load from <a href=\""+$"{webURL}\">{webURL}</a>");
@@ -205,7 +200,7 @@ public class CroquetRunner : MonoBehaviour
 
         if (useNodeJS)
         {
-            if (!waitForUserLaunch)
+            if (!debugUsingExternalSession)
             {
                 // cases (c), (e), (i)
                 nodeExecPath = pathToNode;
