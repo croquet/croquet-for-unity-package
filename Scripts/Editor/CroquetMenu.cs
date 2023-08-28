@@ -192,24 +192,14 @@ public class CroquetMenu
         if (scenesAndApps.Count == 0)
         {
             Debug.LogError("Found no scenes to harvest from.  Are all desired scenes included in Build Settings, and does each have a Croquet object that specifies its App Name?");
-            CroquetBuilder.HarvestSceneList = "";        }
+            CroquetBuilder.HarvestSceneList = "";
+        }
         else
         {
             string harvestString = string.Join(',', scenesAndApps.ToArray());
             CroquetBuilder.HarvestSceneList = harvestString;
             EditorApplication.EnterPlaymode();
         }
-    }
-
-    [MenuItem(HarvestDefinitionsItem, true)]
-    private static bool ValidateHarvestNow()
-    {
-        if (!CroquetBuilder.KnowHowToBuildJS() || !CroquetBuilder.BuildOnPlayEnabled) return false;
-#if !UNITY_EDITOR_WIN
-        if (CroquetBuilder.RunningWatcherApp() == CroquetBuilder.GetSceneBuildDetails().appName) return false;
-#endif
-
-        return true;
     }
 
     [MenuItem(InstallJSToolsItem, false, 200)]

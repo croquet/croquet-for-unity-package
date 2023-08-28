@@ -408,9 +408,9 @@ public class CroquetBridge : MonoBehaviour
 #if UNITY_EDITOR_OSX
         pathToNode = appProperties.pathToNode; // if needed
 #elif UNITY_EDITOR_WIN
-        // in Windows editor, use Node unless user has set waitForUserLaunch and has *not* set forceToUseNodeJS
+        // in Windows editor, use Node unless user has set debugUsingExternalSession and has *not* set forceToUseNodeJS
         pathToNode = CroquetBuilder.NodeExeInPackage; // if needed
-        useNodeJS = !(croquetRunner.waitForUserLaunch && !forceToUseNodeJS);
+        useNodeJS = !(croquetRunner.debugUsingExternalSession && !forceToUseNodeJS);
 #elif UNITY_STANDALONE_WIN || UNITY_WSA
         pathToNode = CroquetBuilder.NodeExeInBuild;
         useNodeJS = true;
@@ -530,7 +530,7 @@ public class CroquetBridge : MonoBehaviour
         string debugLogTypes = croquetDebugLogging.ToString();
         // issue a warning if Croquet debug logging is enabled when not using an
         // external browser
-        if (!croquetRunner.waitForUserLaunch && debugLogTypes != "")
+        if (!croquetRunner.debugUsingExternalSession && debugLogTypes != "")
         {
             Debug.LogWarning($"Croquet debug logging is set to \"{debugLogTypes}\"");
         }
@@ -795,7 +795,7 @@ public class CroquetBridge : MonoBehaviour
         if (sceneFullString.Length > 0)
         {
             sceneDefinitionsByApp[appName].AddRange(new[] { sceneName, sceneFullString });
-            Log("session",$"definition of {sceneFullString.Length} chars for app {appName}");
+            // Log("session",$"definition of {sceneFullString.Length} chars for app {appName}");
         }
     }
 
@@ -810,10 +810,27 @@ public class CroquetBridge : MonoBehaviour
             {
                 string appDefinitions = string.Join('\x02', sceneDefs.ToArray());
                 File.WriteAllText(filePath, appDefinitions);
+
+                // check that the write itself succeeded
+                string definitionContents = File.ReadAllText(filePath).Trim(); // will throw if no file
+                if (definitionContents == appDefinitions)
+                {
+                    Debug.Log($"wrote definitions for app \"{app}\": {appDefinitions.Length:N0} chars in {filePath}");
+                }
+                else
+                {
+                    Debug.LogError($"failed to write definitions for app \"{app}\"");
+                }
             }
             else
             {
-                if (File.Exists(filePath)) File.Delete(filePath);
+                // the app is mentioned in some scene(s), but no scene offered any definition
+                // (i.e., no subscriptions, no manifests, and no object placements)
+                if (File.Exists(filePath))
+                {
+                    Debug.Log($"removing previous scene-definition file for app \"{app}\"");
+                    File.Delete(filePath);
+                }
             }
         }
 
@@ -904,7 +921,7 @@ public class CroquetBridge : MonoBehaviour
         }
         else
         {
-            Log("session", $"{objectCount} scene objects provided {uncondensedLength} bytes, encoded as {condensedLength}");
+            Log("session", $"{objectCount:N0} scene objects provided {uncondensedLength:N0} chars, encoded as {condensedLength:N0}");
         }
 
         return definitionStrings;
@@ -1565,8 +1582,8 @@ public class CroquetBridge : MonoBehaviour
     {
         // first arg is a comma-separated list of the log types (log,warn,error) that we want
         // the JS side to send for logging here
-        // second is a stringified boolean of waitForUserLaunch
-        string[] cmdAndArgs = { "setJSLogForwarding", optionString, croquetRunner.waitForUserLaunch.ToString() };
+        // second is a stringified boolean of debugUsingExternalSession
+        string[] cmdAndArgs = { "setJSLogForwarding", optionString, croquetRunner.debugUsingExternalSession.ToString() };
 
         // send the message directly (bypassing the deferred-message queue), because this can
         // be sent regardless of whether a session is running
