@@ -6,6 +6,14 @@ import { ModelRoot, ModelService, Actor, RegisterMixin, q_normalize } from "@cro
 
 // InitializationManager is a model service that knows how to instantiate a set of actors from an init chunk
 export class InitializationManager extends ModelService {
+    logWithSyncTag(logType, ...args) {
+        // if the vm is being (re)loaded, add "[in SYNC]" prefix.
+        // HIGHLY UNOFFICIAL WAY OF DETECTING LOAD.
+        const { controller } = this.__realm.vm;
+        const isLoading = !controller || !!controller.fastForwardHandler;
+        if (isLoading) args = ["[in SYNC]", ...args];
+        console[logType](...args);
+    }
 
     init() {
         super.init('InitializationManager');
@@ -18,7 +26,7 @@ export class InitializationManager extends ModelService {
         // @@ DON'T TRY THIS AT HOME
         // workaround for Constants being frozen
         this.sceneDefinitions = null;
-        if (globalThis.GameConstants?.sceneText) { // undefined, or empty string
+        if (globalThis.GameConstants?.sceneText) { // ignore undefined, or empty string
             this.setSceneDefinitions(globalThis.GameConstants.sceneText);
         }
 
@@ -38,7 +46,7 @@ export class InitializationManager extends ModelService {
         for (let i = 0; i < sceneDefArray.length; i += 2) {
             const sceneName = sceneDefArray[i];
             const definition = sceneDefArray[i + 1];
-            console.log(`definition of scene ${sceneName}: ${definition.length} chars`);
+            this.logWithSyncTag('log', `definition of scene ${sceneName}: ${definition.length} chars`);
             this.sceneDefinitions[sceneName] = definition;
         }
     }
@@ -56,7 +64,7 @@ export class InitializationManager extends ModelService {
         const { activeScene, activeSceneState } = this;
         if (sceneName === activeScene) {
             if (activeSceneState === 'preload' || activeSceneState === 'loading' || !forceReload) {
-                console.log(`denying request to load ${sceneName}; sceneState is "${activeSceneState}"`);
+                this.logWithSyncTag('log', `denying request to load ${sceneName}; sceneState is "${activeSceneState}"`);
                 return;
             }
 
@@ -69,13 +77,13 @@ export class InitializationManager extends ModelService {
                 this.lastInitString = null;
                 this.activeSceneState = 'preload';
             } else {
-                console.log(`found pre-built definition of ${sceneName}`);
+                this.logWithSyncTag('log', `found pre-built definition of ${sceneName}`);
                 this.lastInitString = definition;
                 this.activeSceneState = 'loading';
             }
         }
-        console.log(`approved request to load ${sceneName}; state now "${this.activeSceneState}"`);
-        if (forceRebuild) console.warn(`forced to request fresh definition for ${sceneName} from Unity`);
+        this.logWithSyncTag('log', `approved request to load ${sceneName}; state now "${this.activeSceneState}"`);
+        if (forceRebuild) this.logWithSyncTag('warn', `forced to request fresh definition for ${sceneName} from Unity`);
 
         this.publishSceneState(); // will immediately ditch the main viewRoot
         this.client?.onPrepareForInitialization(); // clear out any non-persistent state from model
@@ -89,10 +97,10 @@ export class InitializationManager extends ModelService {
         const { activeScene, initializingView } = this;
         let verdict;
         if (sceneName !== activeScene || this.activeSceneState !== 'preload' || initializingView) {
-            console.log(`denying ${viewId} permission to init ${sceneName}`);
+            this.logWithSyncTag('log', `denying ${viewId} permission to init ${sceneName}`);
             verdict = false;
         } else {
-            console.log(`granting ${viewId} permission to init ${sceneName}`);
+            this.logWithSyncTag('log', `granting ${viewId} permission to init ${sceneName}`);
             this.activeSceneState = 'loading';
             this.initializingView = viewId;
             this.publishSceneState();
@@ -120,7 +128,7 @@ export class InitializationManager extends ModelService {
             }
 
             const initString = new TextDecoder("utf-8").decode(all);
-            console.log(`received string of length ${initString.length}`);
+            this.logWithSyncTag('log', `received string of length ${initString.length}`);
             this.lastInitString = initString;
             this.initBufferCollector = [];
             this.initializingView = null;
@@ -135,7 +143,7 @@ export class InitializationManager extends ModelService {
         const [_earlySubscriptionTopics, _assetManifestString, ...entities] = initString.split('\x01');
 
         if (entities.length && !this.client) {
-            console.warn("Attempt to initialize scene entities without an appointed AM_InitializationClient object");
+            this.logWithSyncTag('warn', "Attempt to initialize scene entities without an appointed AM_InitializationClient object");
             entities.length = 0; // just ignore them
         }
 
@@ -153,7 +161,7 @@ export class InitializationManager extends ModelService {
                     case 'ACTOR':
                         try { cls = Actor.classFromID(value) }
                         catch (e) {
-                            console.warn(`Actor class not found for init string: ${entityString}`);
+                            this.logWithSyncTag('warn', `Actor class not found for init string: ${entityString}`);
                             cls = false; // mark that we tried and failed
                         }
                         break;
@@ -172,7 +180,7 @@ export class InitializationManager extends ModelService {
             });
 
             if (!cls) {
-                if (cls !== false) console.warn(`No actor specified in init string: ${entityString}`);
+                if (cls !== false) this.logWithSyncTag('warn', `No actor specified in init string: ${entityString}`);
                 return;
             }
 
