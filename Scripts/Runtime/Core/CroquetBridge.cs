@@ -657,7 +657,12 @@ public class CroquetBridge : MonoBehaviour
         if (bridgeState != "started") AdvanceBridgeStateWhenReady();
         else if (croquetSessionState == "running")
         {
-            // look for a move into a new scene
+            // HandleSceneStateUpdated is responsible for ensuring that the scene that is currently active
+            // in the Croquet session is loaded in this view.
+            // here we take care of nudging any newly loaded scene through its initialisation (which for
+            // now mainly involves pre-loading any prefabs that are associated with the scene).  once ready,
+            // we tell the Croquet session: with a full scene definition (including object placements)
+            // if Croquet is in "preload" scene state, but otherwise just with the prefab details.
             if (croquetActiveScene != "" && unitySceneState != "running" && unitySceneState != "ready")
             {
                 if (IsSceneReadyToRun(croquetActiveScene))
@@ -1449,8 +1454,6 @@ public class CroquetBridge : MonoBehaviour
             // for that scene (whatever it was doing before), we can start preparing the scene here.
             // if the user later moves on to other scenes, and perhaps even comes back to this one,
             // we use the normal state-change handling below.
-            if (croquetActiveScene == "") return; // get back to us when you have a scene
-
             if (croquetActiveScene == startupSceneName && croquetActiveSceneState == "preload")
             {
                 EnsureSwitchToScene(croquetActiveScene, false, false);
