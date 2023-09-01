@@ -33,10 +33,6 @@ class BridgeToUnity {
     constructor() {
         this.bridgeIsConnected = false;
         this.startWS();
-        // readyP is resolved on receipt of the readyForSession command from
-        // Unity, which will have included the apiKey, appId etc needed to
-        // join a Croquet session.
-        this.readyP = new Promise(resolve => this.setReady = resolve);
         this.measureIndex = 0;
     }
 
@@ -160,7 +156,7 @@ console.log(`PORT ${portStr}`);
                 break;
             }
             case 'readyForSession': {
-                const { apiKey, appId, appName, packageVersion, sessionName, debugFlags } = JSON.parse(args[0]);
+                const { apiKey, appId, appName, packageVersion, sessionName, debugFlags, isEditor } = JSON.parse(args[0]);
                 globalThis.timedLog(`starting session of ${appId} with key ${apiKey}`);
                 this.apiKey = apiKey;
                 this.appId = appId;
@@ -169,6 +165,7 @@ console.log(`PORT ${portStr}`);
                 this.sessionName = sessionName;
                 this.debugFlags = debugFlags; // comma-separated list
                 this.runOffline = debugFlags.includes('offline');
+                this.isEditor = isEditor;
                 unityDrivenStartSession();
                 break;
             }
@@ -1265,6 +1262,10 @@ class PreloadingViewRoot extends View {
 
         this.subscribe(this.sessionId, { event: 'sceneStateUpdated', handling: 'immediate'}, this.handleSceneState);
         this.subscribe(this.viewId, 'requestToInitVerdict', this.handleRequestToInitVerdict);
+
+        // iff the Unity side is an editor, tell the model.  this view will
+        // be designated the scene supplier for all subsequent scene loads.
+        if (theGameEngineBridge.isEditor) this.publish(this.sessionId, 'registerEditorClient', this.viewId);
 
         // we treat the construction of this view as a signal that the session
         // is ready to talk across the bridge.  but without a real viewRoot,
