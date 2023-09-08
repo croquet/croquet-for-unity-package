@@ -73,7 +73,7 @@ export class InitializationManager extends ModelService {
         //    if the state is 'preload' or 'loading', ignore.  it's already being dealt with.
         //    else the state must be 'running', so reject the request unless forceFlag is true.  if accepting, set state to 'preload' iff forceRebuild is true, else 'loading' (since we already have the definition).
 
-        // new scene name: accept as the new activeScene.  state can be 'loading' if
+        // new scene name: accept as the new activeScene.  state can move to 'loading' (which will synchronously jump through to 'running' here, but sending the intermediate value to Unity might be useful for scene management) if:
         //   1. we have the scene's definition, and
         //   2. forceRebuild is not true, and
         //   3. there is no sceneSupplierView

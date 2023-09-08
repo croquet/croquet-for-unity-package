@@ -55,7 +55,7 @@ public class CroquetBridge : MonoBehaviour
     [Tooltip("The state of scene readiness in the model - one of: (preload, loading, running)")]
     public string croquetActiveSceneState;
 
-    [Tooltip("The state of scene readiness in this view - one of: (dormant, waitingToArrive, preparing, ready, running)")]
+    [Tooltip("The state of scene readiness in this view - one of: (dormant, waitingToPrepare, preparing, ready, running)")]
     public string unitySceneState = "dormant";
 
     [Header("Network Glitch Simulator")]
@@ -78,6 +78,7 @@ public class CroquetBridge : MonoBehaviour
         new Dictionary<string, List<string>>(); // appName to list of scene definitions
 
     private static string bridgeState = "stopped"; // needJSBuild, waitingForJSBuild, foundJSBuild, waitingForSocket, waitingForSessionName, waitingForSession, started
+    private bool waitingForCroquetSceneReset = false; // an editor sets this true until the Croquet session arrives in the scene we want to start with
     private string requestedSceneLoad = "";
     private bool skipNextFrameUpdate = false; // sometimes (e.g., on scene reload) you just need to chill for a frame
 
@@ -137,6 +138,12 @@ public class CroquetBridge : MonoBehaviour
         Log("session", $"bridge state: {bridgeState}");
     }
 
+    private void SetUnitySceneState(string state, string sceneName)
+    {
+        unitySceneState = state;
+        // Log("session", $"scene state: {unitySceneState} (scene \"{sceneName}\")");
+    }
+
     void Awake()
     {
         // Create Singleton Accessor
@@ -168,6 +175,8 @@ public class CroquetBridge : MonoBehaviour
             }
             else
             {
+                waitingForCroquetSceneReset = true; // when the session starts, we will demand a specific scene
+
                 if (!croquetRunner.runOffline &&
                     (appProperties.apiKey == "" || appProperties.apiKey == "PUT_YOUR_API_KEY_HERE"))
                 {
@@ -657,26 +666,7 @@ public class CroquetBridge : MonoBehaviour
         if (bridgeState != "started") AdvanceBridgeStateWhenReady();
         else if (croquetSessionState == "running")
         {
-            // HandleSceneStateUpdated is responsible for ensuring that the scene that is currently active
-            // in the Croquet session is loaded in this view.
-            // here we take care of nudging any newly loaded scene through its initialisation (which for
-            // now mainly involves pre-loading any prefabs that are associated with the scene).  once ready,
-            // we tell the Croquet session: with a full scene definition (including object placements)
-            // if Croquet is in "preload" scene state, but otherwise just with the prefab details.
-            if (croquetActiveScene != "" && unitySceneState != "running" && unitySceneState != "ready")
-            {
-                if (IsSceneReadyToRun(croquetActiveScene))
-                {
-                    // Debug.Log($"ready to run scene \"{croquetActiveScene}\"");
-                    unitySceneState = "ready";
-                    TellCroquetWeAreReadyForScene();
-
-                    foreach (CroquetSystem system in croquetSystems)
-                    {
-                        system.ClearSceneBeforeRunning();
-                    }
-                }
-            }
+            AdvanceSceneStateIfNeeded();
 
             // things to check periodically while the session is supposedly in full flow
             if (triggerGlitchNow)
@@ -695,14 +685,14 @@ public class CroquetBridge : MonoBehaviour
 
     bool IsSceneReadyToRun(string targetSceneName)
     {
-        if (unitySceneState == "waitingToArrive")
+        if (unitySceneState == "waitingToPrepare")
         {
             Scene unityActiveScene = SceneManager.GetActiveScene();
             if (unityActiveScene.name == targetSceneName && (requestedSceneLoad == "" || requestedSceneLoad == targetSceneName))
             {
                 requestedSceneLoad = "";
                 ArrivedInGameScene(unityActiveScene);
-                unitySceneState = "preparing";
+                SetUnitySceneState("preparing", unityActiveScene.name);
             }
 
             // ok to drop through
@@ -756,24 +746,50 @@ public class CroquetBridge : MonoBehaviour
         }
     }
 
+    void AdvanceSceneStateIfNeeded()
+    {
+        if (croquetActiveScene == "") return; // nothing to do yet
+
+        if (unitySceneState == "ready" || unitySceneState == "running") return; // everything's where it should be
+
+        Scene unityActiveScene = SceneManager.GetActiveScene();
+        if (unityActiveScene.name != croquetActiveScene) return; // not in the right scene yet
+
+        // HandleSceneStateUpdated is responsible for ensuring that the scene that is currently active
+        // in the Croquet session is loaded in this view.
+        // here we take care of nudging that scene through any needed initialisation (which for
+        // now mainly involves pre-loading any prefabs that are associated with the scene).  once ready,
+        // we tell the Croquet session - with a full scene definition (including object placements)
+        // if Croquet is in "preload" scene state, but otherwise just with the prefab details.
+        if (IsSceneReadyToRun(croquetActiveScene))
+        {
+            // Debug.Log($"ready to run scene \"{croquetActiveScene}\"");
+            SetUnitySceneState("ready", croquetActiveScene);
+            TellCroquetWeAreReadyForScene();
+
+            foreach (CroquetSystem system in croquetSystems)
+            {
+                system.ClearSceneBeforeRunning();
+            }
+        }
+    }
+
 #if UNITY_EDITOR
     void AdvanceHarvestStateWhenReady()
     {
         string sceneAndApp = sceneHarvestList[0];
         string sceneToHarvest = sceneAndApp.Split(':')[0];
 
-        Scene unityActiveScene = SceneManager.GetActiveScene();
-
         if (unitySceneState == "dormant")
         {
-            EnsureSwitchToScene(sceneToHarvest, false, false);
+            EnsureUnityActiveScene(sceneToHarvest, false, false);
         }
         else if (IsSceneReadyToRun(sceneToHarvest))
         {
             string appName = sceneAndApp.Split(':')[1];
             HarvestSceneDefinition(sceneToHarvest, appName);
 
-            unitySceneState = "dormant"; // ready for next harvest scene, if any
+            SetUnitySceneState("dormant", ""); // ready for next harvest scene, if any
 
             sceneHarvestList.RemoveAt(0);
             if (sceneHarvestList.Count == 0)
@@ -1398,9 +1414,10 @@ public class CroquetBridge : MonoBehaviour
         estimatedDateNowAtReflectorZero = -1; // reset, to accept first value from new view
 
         // when starting in a Unity editor, we ask Croquet to abandon whatever scene it had running
-        // and (re)load whichever scene we want to play first.  the Croquet InitializationManager
-        // will force a rebuild, and will expect this view to provide it.
-        if (unitySceneState == "dormant" && Application.isEditor)
+        // and (re)load whichever scene this view wants to play first.  the Croquet InitializationManager
+        // will force a rebuild, and will expect this view to provide it (because this is the latest
+        // editor to join the session).
+        if (waitingForCroquetSceneReset)
         {
             string startupSceneName = launchViaMenuIntoScene == ""
                 ? SceneManager.GetActiveScene().name
@@ -1414,29 +1431,24 @@ public class CroquetBridge : MonoBehaviour
         // args are [activeScene, activeSceneState]
 
         // this is sent by the PreloadingViewRoot, under the following circs:
-        // - construction of the ViewRoot, forwarding the InitializationManager's current state (which could
+        // - on the view root's initial construction, forwarding the InitializationManager's current state (which could
         //   be anything, including presence of no scene at all when the session first starts)
         // - on every update in scene name, or of scene state (preload, loading, running)
 
-        // if the state change implies a reboot of the view (a new scene, or a switch from 'running' to
-        // 'loading' for a reload), any previous ViewRoot will already have been destroyed, along with
-        // a tearDownScene command that we use to clear out all Croquet-managed gameObjects.
-
         // the range of situations that this method deals with:
         //
-        // a. this view has yet to enter a game scene, and this is running in an editor
+        // a. this view has just started running in an editor, and we're waiting for the session to reset itself
         //    - we will have demanded (above) a reload and rebuild for our preferred startup scene.  we have
         //      nothing to do until Croquet tells us it's ready to preload (i.e., rebuild) that scene.
         // b. the Croquet session has no active scene
-        //    - this view is free to propose to the Croquet session that it load our preferred startup scene
-        // c. this view has yet to enter a game scene, but the Croquet session reports that there is
-        //    a current scene
-        //    - whatever the scene status in Croquet - preload, loading, running - start preparing
-        //      this view to run that scene
-        // d. the Croquet session reports that a scene other than the current one is active
+        //    - this view should propose to the Croquet session that it load our preferred startup scene
+        // c. the Croquet session reports that a scene other than the current one is active
         //    - tell Unity to enter the named scene.  when we arrive there, we'll start preparing to run it
-        // e. the Croquet session reports a return to "preload" for the scene we're already in
+        // d. the Croquet session reports a return to "preload" for the scene we're already in
         //    - force a teardown of the scene, then reload it so we can provide a scene definition
+        // e. none of the above
+        //    - there is evidently an active scene in Croquet, and this view is in that scene.
+        //      if unitySceneState is dormant, nudge it to waitingToPrepare so we can proceed.
 
         croquetActiveScene = args[0];
         croquetActiveSceneState = args[1];
@@ -1447,7 +1459,7 @@ public class CroquetBridge : MonoBehaviour
             ? unityActiveScene.name
             : launchViaMenuIntoScene;
 
-        if (unitySceneState == "dormant" && Application.isEditor) {
+        if (waitingForCroquetSceneReset) {
             // (a)
             // on session startup in a Unity editor, the first scene load is triggered in
             // HandleSessionRunning.  when the Croquet session reveals that it has arrived at preload
@@ -1456,7 +1468,8 @@ public class CroquetBridge : MonoBehaviour
             // we use the normal state-change handling below.
             if (croquetActiveScene == startupSceneName && croquetActiveSceneState == "preload")
             {
-                EnsureSwitchToScene(croquetActiveScene, false, false);
+                waitingForCroquetSceneReset = false;
+                EnsureUnityActiveScene(croquetActiveScene, false, false);
             }
             return; // nothing more to do here
         }
@@ -1464,33 +1477,41 @@ public class CroquetBridge : MonoBehaviour
         if (croquetActiveScene == "")
         {
             // (b)
-            // croquet doesn't have an active scene, so propose loading our preferred startup scene
+            // Croquet doesn't have an active scene, so propose loading our preferred startup scene.
+            // note that once the Croquet session has started any scene, the active scene can change
+            // but is never reset to "".
             Debug.Log($"No initial scene name set; requesting to load scene \"{startupSceneName}\"");
             Croquet.RequestToLoadScene(startupSceneName, false);
+            return; // nothing more to do here
         }
-        else if (unitySceneState == "dormant")
+
+        if (croquetActiveScene != unityActiveScene.name)
         {
             // (c)
-            // we're just getting started, and Croquet [now] has an active scene - perhaps because
-            // we requested it above.
-            EnsureSwitchToScene(croquetActiveScene, false, false);
-        }
-        else if (croquetActiveScene != unityActiveScene.name)
-        {
-            // (d)
-            // Croquet has switched to a scene that we're not currently in.  head over there.
-            EnsureSwitchToScene(croquetActiveScene, false, true);
+            // Croquet is running a scene that we're not currently in.  head over there.
+            EnsureUnityActiveScene(croquetActiveScene, false, true);
         }
         else if (croquetActiveSceneState == "preload")
         {
-            // (e)
-            // Croquet has reset the scene that we were already in - perhaps because an
-            // in-progress load attempt failed.
-            // we need to force the scene to be reloaded (so we can gather a full scene
-            // definition to offer).  before that, we need to make sure the Croquet
-            // systems aren't holding onto state that will cause confusion on reload.
+            // (d)
+            // this view is in the scene that Croquet is running, but Croquet has done a full reset -
+            // perhaps because an in-progress load attempt failed.
+            // "preload" - rather than "loading", which we would see fleetingly on a normal scene reset -
+            // implies that we need to force the scene to be reloaded (so we can gather a full scene
+            // definition to offer to the session).
+            // because in this situation the scene's Croquet view root might never have been built,
+            // we won't necessarily have been sent a tearDownScene that would have cleared out any
+            // Croquet system data already gathered from the scene.  so do that cleanup first.
             CleanUpSceneAndSystems();
-            EnsureSwitchToScene(croquetActiveScene, true, true);
+            EnsureUnityActiveScene(croquetActiveScene, true, true);
+        }
+        else if (unitySceneState == "dormant")
+        {
+            // (e)
+            // the Croquet session has an active scene, and we're currently in it, but for some reason
+            // (e.g., due to a session glitch) our unity scene state was reset to dormant.  since we
+            // know that there is a scene awaiting us, let AdvanceSceneStateIfNeeded get to work.
+            SetUnitySceneState("waitingToPrepare", croquetActiveScene);
         }
     }
 
@@ -1507,7 +1528,7 @@ public class CroquetBridge : MonoBehaviour
         SendToCroquet(cmdAndArgs);
     }
 
-    void EnsureSwitchToScene(string targetSceneName, bool forceReload, bool showLoadProgress)
+    void EnsureUnityActiveScene(string targetSceneName, bool forceReload, bool showLoadProgress)
     {
         Scene unityActiveScene = SceneManager.GetActiveScene();
         if (forceReload || (unityActiveScene.name != targetSceneName && requestedSceneLoad != targetSceneName))
@@ -1527,7 +1548,7 @@ public class CroquetBridge : MonoBehaviour
             }
         }
 
-        unitySceneState = "waitingToArrive";
+        SetUnitySceneState("waitingToPrepare", targetSceneName);
     }
 
     void HandleSceneRunning(string sceneName)
@@ -1535,7 +1556,7 @@ public class CroquetBridge : MonoBehaviour
         // triggered by the startup of a GameRootView
         Log("session", $"Croquet view for scene {sceneName} running");
         if (loadingProgressDisplay != null) loadingProgressDisplay.Hide();
-        unitySceneState = "running"; // we're off!
+        SetUnitySceneState("running", sceneName); // we're off!
     }
 
     void HandleSceneTeardown()
@@ -1550,7 +1571,7 @@ public class CroquetBridge : MonoBehaviour
     {
         // clear out the state of the current scene
         deferredMessages.Clear();
-        unitySceneState = "waitingToArrive"; // ready to load the next scene, whichever it is
+        SetUnitySceneState("dormant", ""); // ready to load the next scene, whichever it is
         requestedSceneLoad = "";
         foreach (CroquetSystem system in croquetSystems)
         {
