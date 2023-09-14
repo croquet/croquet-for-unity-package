@@ -148,11 +148,14 @@ console.log(`PORT ${portStr}`);
             case 'setJSLogForwarding': {
                 // args[0] is comma-separated list of log types (log,warn,error)
                 // that are to be sent over to Unity
-                // args[1] is a flag debugUsingExternalSession [currently not used]
+                // args[1] is a flag debugUsingExternalSession
                 const toForward = args[0].split(',');
-                // const debugUsingExternalSession = args[1] === "True";
+                const debugUsingExternalSession = args[1] === "True";
                 console.log("categories of JS log forwarded to Unity:", toForward);
                 this.setJSLogForwarding(toForward);
+                // disable performance.mark and performance.measure if running in a webview,
+                // or on Node, so we don't accumulate measure objects.
+                if (!debugUsingExternalSession || globalThis.CROQUET_NODE) this.disablePerformanceMeasures();
                 break;
             }
             case 'readyForSession': {
@@ -316,6 +319,22 @@ console.log(`PORT ${portStr}`);
                 forwarder(logType, logVals); // and also forward
             };
             else console[logType] = console[`q_${logType}`]; // use system default
+        });
+    }
+
+    disablePerformanceMeasures() {
+        // note: attempting basic reassignment
+        //    performance.mark = performance.measure = () => { };
+        // raises an error on Node.js v18
+        Object.defineProperty(performance, "mark", {
+            value: () => { },
+            configurable: true,
+            writable: true
+        });
+        Object.defineProperty(performance, "measure", {
+            value: () => { },
+            configurable: true,
+            writable: true
         });
     }
 
@@ -1670,22 +1689,6 @@ class TimerClient {
 let timerClient, ticker, sessionStepper;
 if (globalThis.CROQUET_NODE) {
     timerClient = globalThis;
-
-    // until we figure out how to use them on Node.js, disable measure and mark so we
-    // don't build up unprocessed measurement records.
-    // note: attempting basic reassignment
-    //    performance.mark = performance.measure = () => { };
-    // raises an error on Node.js v18
-    Object.defineProperty(performance, "mark", {
-        value: () => { },
-        configurable: true,
-        writable: true
-    });
-    Object.defineProperty(performance, "measure", {
-        value: () => { },
-        configurable: true,
-        writable: true
-    });
 } else {
     // install our home-grown timer, and an interim ticker (will be replaced once
     // the session starts) just to handle timeouts
