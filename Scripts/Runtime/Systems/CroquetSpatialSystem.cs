@@ -124,7 +124,7 @@ public class CroquetSpatialSystem : CroquetSystem
 
     void Unparent(string[] args)
     {
-        GameObject child = CroquetEntitySystem.Instance.GetGameObjectByCroquetHandle(args[0]);
+        GameObject child = CroquetEntitySystem.Instance.GetGameObjectByCroquetHandle(int.Parse(args[0]));
         if (child)
         {
             child.transform.SetParent(null);
@@ -133,8 +133,8 @@ public class CroquetSpatialSystem : CroquetSystem
 
     void SetParent(string[] args)
     {
-        GameObject child = CroquetEntitySystem.Instance.GetGameObjectByCroquetHandle(args[0]);
-        GameObject parent = CroquetEntitySystem.Instance.GetGameObjectByCroquetHandle(args[1]);
+        GameObject child = CroquetEntitySystem.Instance.GetGameObjectByCroquetHandle(int.Parse(args[0]));
+        GameObject parent = CroquetEntitySystem.Instance.GetGameObjectByCroquetHandle(int.Parse(args[1]));
         if (parent && child)
         {
             child.transform.SetParent(parent.transform, false); // false => ignore child's existing world position
@@ -161,7 +161,7 @@ public class CroquetSpatialSystem : CroquetSystem
             float[] s = Croquet.ReadActorFloatArray(go, "scale");
             Vector3 initialScale = new Vector3(s[0], s[1], s[2]);
 
-            string croquetHandle = go.GetComponent<CroquetEntityComponent>().croquetHandle;
+            int croquetHandle = go.GetComponent<CroquetEntityComponent>().croquetHandle;
             SnapObjectTo(croquetHandle, initialPos, initialRot, initialScale);
             // CroquetBridge.Instance.Log("info", $"spatial setup for {go}");
         }
@@ -306,7 +306,7 @@ public class CroquetSpatialSystem : CroquetSystem
             // at once isn't enough, we can increase it.
             UInt32 encodedId = BitConverter.ToUInt32(rawData, bufferPos);
             bufferPos += 4;
-            string croquetHandle = (encodedId >> 6).ToString();
+            int croquetHandle = (int)(encodedId >> 6);
 
             int instanceID = CroquetEntitySystem.GetInstanceIDByCroquetHandle(croquetHandle);
 
@@ -381,18 +381,18 @@ public class CroquetSpatialSystem : CroquetSystem
         }
     }
 
-    public bool hasObjectMoved(int instanceID)
-    {
-        return (components[instanceID] as CroquetSpatialComponent).hasBeenMoved;
-    }
+    // public bool hasObjectMoved(int instanceID)
+    // {
+    //     return (components[instanceID] as CroquetSpatialComponent).hasBeenMoved;
+    // }
+    //
+    // public bool hasObjectMoved(int croquetHandle)
+    // {
+    //     int instanceID = CroquetEntitySystem.GetInstanceIDByCroquetHandle(croquetHandle);
+    //     return (components[instanceID] as CroquetSpatialComponent).hasBeenMoved;
+    // }
 
-    public bool hasObjectMoved(string croquetHandle)
-    {
-        int instanceID = CroquetEntitySystem.GetInstanceIDByCroquetHandle(croquetHandle);
-        return (components[instanceID] as CroquetSpatialComponent).hasBeenMoved;
-    }
-
-    public void SnapObjectTo(string croquetHandle, Vector3? position = null, Quaternion? rotation = null, Vector3? scale = null)
+    public void SnapObjectTo(int croquetHandle, Vector3? position = null, Quaternion? rotation = null, Vector3? scale = null)
     {
         int instanceID = CroquetEntitySystem.GetInstanceIDByCroquetHandle(croquetHandle);
         if (instanceID == 0) return;
@@ -419,12 +419,12 @@ public class CroquetSpatialSystem : CroquetSystem
         }
     }
 
-    public void SnapObjectInCroquet(string croquetHandle, Vector3? position = null, Quaternion? rotation = null,
+    public void SnapObjectInCroquet(int croquetHandle, Vector3? position = null, Quaternion? rotation = null,
         Vector3? scale = null)
     {
         List<string> argList = new List<string>();
         argList.Add("objectMoved");
-        argList.Add(croquetHandle);
+        argList.Add(croquetHandle.ToString());
 
         if (position != null)
         {
@@ -444,7 +444,7 @@ public class CroquetSpatialSystem : CroquetSystem
             argList.Add(string.Join<float>(",", new[] { scale.Value.x, scale.Value.y, scale.Value.z }));
         }
 
-        CroquetBridge.Instance.SendThrottledToCroquet("objectMoved_" + croquetHandle, argList.ToArray());
+        CroquetBridge.Instance.SendThrottledToCroquet($"objectMoved_{croquetHandle}", argList.ToArray());
     }
 
     public override void ProcessCommand(string command, string[] args)

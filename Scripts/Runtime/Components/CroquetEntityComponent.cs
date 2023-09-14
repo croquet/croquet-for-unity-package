@@ -10,7 +10,7 @@ public class CroquetEntityComponent : CroquetComponent
     public override CroquetSystem croquetSystem { get; set; } = CroquetEntitySystem.Instance;
 
     public string croquetActorId = ""; // the actor identifier (M###)
-    public string croquetHandle = ""; // unique integer ID as a string (agreed Unique across bridge)
+    public int croquetHandle = -1; // unique integer ID assigned by this client's bridge
     // specify the accompanying actor class here
     // specify addressable name / pawn name
 
@@ -22,8 +22,8 @@ public class CroquetEntityComponent : CroquetComponent
     //   ReadActorFloat(prop)
     //   ReadActorFloatArray(prop)
     public StringStringSerializableDict actorProperties = new StringStringSerializableDict();
-    
-   
+
+
 }
 
 [Serializable]
