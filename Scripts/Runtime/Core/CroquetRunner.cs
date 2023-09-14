@@ -49,7 +49,7 @@ public class CroquetRunner : MonoBehaviour
 
         private void OutputHandler(object sendingProcess, DataReceivedEventArgs outLine)
         {
-            // this is now used purely for stderr from the node process
+            // this is currently not used
             if (!String.IsNullOrEmpty(outLine.Data))
             {
                 Debug.LogWarning("Node.js stderr: " + outLine.Data);
@@ -64,7 +64,7 @@ public class CroquetRunner : MonoBehaviour
             // redirect the output stream of the child process.
             croquetProcess.StartInfo.UseShellExecute = false;
             croquetProcess.StartInfo.RedirectStandardOutput = false;
-            croquetProcess.StartInfo.RedirectStandardError = true;
+            croquetProcess.StartInfo.RedirectStandardError = false;
             croquetProcess.StartInfo.CreateNoWindow = true;
 
             string nodeEntry = "node-main.js";
@@ -73,7 +73,7 @@ public class CroquetRunner : MonoBehaviour
             croquetProcess.StartInfo.Arguments = $"{nodeEntry} {port}";
 
             // croquetProcess.OutputDataReceived += OutputHandler;
-            croquetProcess.ErrorDataReceived += OutputHandler;
+            // croquetProcess.ErrorDataReceived += OutputHandler;
             croquetProcess.EnableRaisingEvents = true;
 
             croquetProcess.StartInfo.WorkingDirectory = appSourcePath;
@@ -84,7 +84,7 @@ public class CroquetRunner : MonoBehaviour
             {
                 croquetProcess.Start();
                 // croquetProcess.BeginOutputReadLine();
-                croquetProcess.BeginErrorReadLine();
+                // croquetProcess.BeginErrorReadLine();
 
                 //UnityEngine.Debug.Log("Process id: " + croquetProcess.Id.ToString());
 

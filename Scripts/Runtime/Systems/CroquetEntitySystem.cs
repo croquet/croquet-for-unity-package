@@ -34,14 +34,14 @@ public class CroquetEntitySystem : CroquetSystem
     protected override Dictionary<int, CroquetComponent> components { get; set; } =
         new Dictionary<int, CroquetComponent>();
 
-    private Dictionary<string, int> CroquetHandleToInstanceID = new Dictionary<string, int>();
+    private Dictionary<int, int> CroquetHandleToInstanceID = new Dictionary<int, int>();
 
-    private void AssociateCroquetHandleToInstanceID(string croquetHandle, int id)
+    private void AssociateCroquetHandleToInstanceID(int croquetHandle, int id)
     {
         CroquetHandleToInstanceID.Add(croquetHandle, id);
     }
 
-    private void DisassociateCroquetHandleToInstanceID(string croquetHandle)
+    private void DisassociateCroquetHandleToInstanceID(int croquetHandle)
     {
         CroquetHandleToInstanceID.Remove(croquetHandle);
     }
@@ -51,7 +51,7 @@ public class CroquetEntitySystem : CroquetSystem
     /// </summary>
     /// <param name="id"></param>
     /// <returns></returns>
-    public GameObject GetGameObjectByCroquetHandle(string croquetHandle)
+    public GameObject GetGameObjectByCroquetHandle(int croquetHandle)
     {
         CroquetComponent croquetComponent;
 
@@ -68,7 +68,7 @@ public class CroquetEntitySystem : CroquetSystem
         return null;
     }
 
-    public static int GetInstanceIDByCroquetHandle(string croquetHandle)
+    public static int GetInstanceIDByCroquetHandle(int croquetHandle)
     {
         GameObject go = Instance.GetGameObjectByCroquetHandle(croquetHandle);
         if (go != null)
@@ -140,7 +140,7 @@ public class CroquetEntitySystem : CroquetSystem
         foreach (CroquetComponent c in components.Values)
         {
             CroquetEntityComponent ec = c as CroquetEntityComponent;
-            if (ec.croquetHandle.Equals(""))
+            if (ec.croquetHandle.Equals(-1))
             {
                 needingInit.Add(ec.gameObject);
             }
@@ -253,7 +253,7 @@ public class CroquetEntitySystem : CroquetSystem
         }
         else if (command.Equals("destroyObject"))
         {
-            DestroyObject(args[0]);
+            DestroyObject(int.Parse(args[0]));
         }
     }
 
@@ -387,7 +387,7 @@ public class CroquetEntitySystem : CroquetSystem
         // confirmCreation
         if (spec.cC)
         {
-            CroquetBridge.Instance.SendToCroquet("objectCreated", spec.cH, DateTimeOffset.Now.ToUnixTimeMilliseconds().ToString());
+            CroquetBridge.Instance.SendToCroquet("objectCreated", spec.cH.ToString(), DateTimeOffset.Now.ToUnixTimeMilliseconds().ToString());
         }
 
     }
@@ -441,7 +441,7 @@ public class CroquetEntitySystem : CroquetSystem
         return properties[propertyName];
     }
 
-    void DestroyObject(string croquetHandle)
+    void DestroyObject(int croquetHandle)
     {
         // Debug.Log( "Destroying Object " + croquetHandle.ToString());
 
@@ -489,7 +489,7 @@ public class CroquetEntitySystem : CroquetSystem
 [System.Serializable]
 public class ObjectSpec
 {
-    public string cH; // croquet handle: currently an integer, but no point converting all the time
+    public int cH; // handle used by this client's Croquet bridge to address this object
     public string cN; // Croquet name (generally, the model id)
     public bool cC; // confirmCreation: whether Croquet is waiting for a confirmCreation message for this
     public bool wTP; // waitToPresent:  whether to make visible immediately

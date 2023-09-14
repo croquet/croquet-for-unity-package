@@ -46,11 +46,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   appProperties: {fileID: 11400000, guid: d8a4c352ae9b743efa34611f46d63ff2, type: 2}
-  useNodeJS: 0
   appName: 
   defaultSessionName: 
-  launchThroughMenu: 0
-  firstLevelScene: 
+  launchViaMenuIntoScene: 
+  debugForceSceneRebuild: 0
   croquetDebugLogging:
     session: 0
     messages: 0
@@ -71,7 +70,7 @@ MonoBehaviour:
   croquetViewCount: 0
   croquetActiveScene: 
   croquetActiveSceneState: 
-  unitySceneState: preparing
+  unitySceneState: dormant
   triggerGlitchNow: 0
   glitchDuration: 3
   croquetSystems: []
@@ -87,7 +86,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9c98cc1d7bc374101816379b2a2ac02e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  waitForUserLaunch: 0
+  debugUsingExternalSession: 0
+  forceToUseNodeJS: 0
   runOffline: 0
   localReflector: 
   showWebview: 0

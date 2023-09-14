@@ -162,12 +162,6 @@ public class CroquetBuilder
             Debug.LogWarning("Cannot build without a Croquet API Key in the Settings object");
             goodToGo = false;
         }
-
-        if (sceneBridgeComponent.debugForceSceneRebuild)
-        {
-            Debug.LogWarning("Croquet Bridge component's \"Debug Force Scene Rebuild\" must be off");
-            goodToGo = false;
-        };
         if (sceneRunnerComponent.debugUsingExternalSession)
         {
             Debug.LogWarning("Croquet Runner component's \"Debug Using External Session\" must be off");
