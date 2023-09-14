@@ -375,22 +375,25 @@ public class CroquetSpatialSystem : CroquetSystem
                 {
                     trans.localPosition = updatedPosition;
                 }
+
+                // available diagnostics for object movement.  at any time a single object can be identified
+                // for tracking (see SetDiagnosticTrackedObject).  if trackedObject is assigned - and until
+                // reassigned, or the object is destroyed - each position update is logged to the console.
+                if (trackedObject != null && spatialComponent.gameObject == trackedObject)
+                {
+                    long now = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+                    long deltaTMS = now - trackingTime;
+                    float dist = Vector3.Distance(spatialComponent.position, updatedPosition);
+                    float v = dist / ((float)(deltaTMS) / 1000f);
+                    CroquetBridge.Instance.Log("session",$"after {deltaTMS}ms: d={dist:F3} implying v={v:F3}");
+                    trackingTime = now;
+                }
+
                 spatialComponent.position = updatedPosition;
                 // Log("verbose", "pos: " + updatedPosition.ToString());
             }
         }
     }
-
-    // public bool hasObjectMoved(int instanceID)
-    // {
-    //     return (components[instanceID] as CroquetSpatialComponent).hasBeenMoved;
-    // }
-    //
-    // public bool hasObjectMoved(int croquetHandle)
-    // {
-    //     int instanceID = CroquetEntitySystem.GetInstanceIDByCroquetHandle(croquetHandle);
-    //     return (components[instanceID] as CroquetSpatialComponent).hasBeenMoved;
-    // }
 
     public void SnapObjectTo(int croquetHandle, Vector3? position = null, Quaternion? rotation = null, Vector3? scale = null)
     {
@@ -488,6 +491,15 @@ public class CroquetSpatialSystem : CroquetSystem
             BitConverter.ToSingle(rawData, startPos + 4),
             BitConverter.ToSingle(rawData, startPos + 8)
         );
+    }
+
+    private GameObject trackedObject = null;
+    private long trackingTime = 0;
+    public void SetDiagnosticTrackedObject(GameObject go)
+    {
+        Debug.Log($"tracking new object: {go}");
+        trackedObject = go;
+        trackingTime = DateTimeOffset.Now.ToUnixTimeMilliseconds();
     }
 }
 
