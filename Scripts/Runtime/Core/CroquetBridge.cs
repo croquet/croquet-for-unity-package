@@ -127,7 +127,7 @@ public class CroquetBridge : MonoBehaviour
     int inBundleCount = 0;
     int inMessageCount = 0;
     long inBundleDelayMS = 0;
-    float inProcessingTime = 0;
+    long inProcessingMS = 0;
     float lastMessageDiagnostics; // realtimeSinceStartup
 
     #endregion
@@ -663,6 +663,9 @@ public class CroquetBridge : MonoBehaviour
             return;
         }
 #endif
+
+        ProcessCroquetMessages();
+
         if (bridgeState != "started") AdvanceBridgeStateWhenReady();
         else if (croquetSessionState == "running")
         {
@@ -971,8 +974,6 @@ public class CroquetBridge : MonoBehaviour
     {
         long start = DateTimeOffset.Now.ToUnixTimeMilliseconds(); // in case we'll be reporting to Croquet
 
-        ProcessCroquetMessages();
-
         SendDeferredMessages();
 
         long duration = DateTimeOffset.Now.ToUnixTimeMilliseconds() - start;
@@ -986,7 +987,7 @@ public class CroquetBridge : MonoBehaviour
             {
                 if (inBundleCount > 0 || inMessageCount > 0)
                 {
-                    Log("diagnostics", $"from Croquet: {inMessageCount} messages with {inBundleCount} bundles ({Mathf.Round((float)inBundleDelayMS / inBundleCount)}ms avg delay) handled in {Mathf.Round(inProcessingTime * 1000)}ms");
+                    Log("diagnostics", $"from Croquet: {inMessageCount} messages with {inBundleCount} bundles ({Mathf.Round((float)inBundleDelayMS / inBundleCount)}ms avg delay) handled in {inProcessingMS}ms");
                 }
 
                 //Log("diagnostics", $"to Croquet: {outMessageCount} messages with {outBundleCount} bundles");
@@ -994,7 +995,7 @@ public class CroquetBridge : MonoBehaviour
                 inBundleCount = 0;
                 inMessageCount = 0;
                 inBundleDelayMS = 0; // long
-                inProcessingTime = 0;
+                inProcessingMS = 0; // long
                 outBundleCount = outMessageCount = 0;
             }
         }
@@ -1002,7 +1003,8 @@ public class CroquetBridge : MonoBehaviour
 
     void ProcessCroquetMessages()
     {
-        float start = Time.realtimeSinceStartup;
+        long startMS = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+
         QueuedMessage qm;
         while (messageQueue.TryDequeue(out qm))
         {
@@ -1064,7 +1066,7 @@ public class CroquetBridge : MonoBehaviour
                 ProcessCroquetMessage(messages[0]);
             }
         }
-        inProcessingTime += Time.realtimeSinceStartup - start;
+        inProcessingMS += DateTimeOffset.Now.ToUnixTimeMilliseconds() - startMS;
     }
 
     /// <summary>
@@ -1073,7 +1075,8 @@ public class CroquetBridge : MonoBehaviour
     /// <param name="msg"></param>
     void ProcessCroquetMessage(string msg)
     {
-        // a command message is an array of strings separated by \x01, of which the first is the command
+        // a command message is an array of strings separated by \x01, of which the first is the command.
+        // @@ splitting with ReadOnlySpan<char> would be a lot more heap-efficient.
         string[] strings = msg.Split('\x01');
         string command = strings[0]; // or a single piece of text, for logging
         string[] args = strings[1..];
