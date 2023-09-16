@@ -237,8 +237,15 @@ public class CroquetBuilder
         set { EditorPrefs.SetString(ProjectSpecificKey(HARVEST_SCENES), value); }
     }
 
-    public static string CroquetBuildToolsInPackage = Path.GetFullPath("Packages/io.croquet.multiplayer/.JSTools");
-    public static string NodeExeInPackage = Path.GetFullPath("Packages/io.croquet.multiplayer/.JSTools/NodeJS/node.exe");
+    public static string CroquetBuildToolsInPackage
+    {
+        get { return Path.GetFullPath("Packages/io.croquet.multiplayer/.JSTools"); }
+    }
+
+    public static string NodeExeInPackage
+    {
+        get { return Path.GetFullPath("Packages/io.croquet.multiplayer/.JSTools/NodeJS/node.exe"); }
+    }
 
     public struct JSBuildDetails
     {
@@ -789,17 +796,18 @@ public class CroquetBuilder
             if (FindJSToolsRecord() == null) needsNPMInstall = true; // nothing installed; run the whole process
             else
             {
-                // compare package.json before overwriting, to decide if it will be changing
-                string sourcePackageJson = Path.GetFullPath(Path.Combine(toolsRoot, "package.json"));
-                string installedPackageJson = Path.GetFullPath(Path.Combine(jsBuildFolder, "package.json"));
-                needsNPMInstall = !File.Exists(installedPackageJson) ||
-                                  !FileEquals(sourcePackageJson, installedPackageJson);
+                // compare package-lock.json before overwriting, to decide if it will be changing
+                string sourcePackageLock = Path.GetFullPath(Path.Combine(toolsRoot, "package-lock.json"));
+                string installedPackageLock = Path.GetFullPath(Path.Combine(jsBuildFolder, "package-lock.json"));
+                needsNPMInstall = !File.Exists(installedPackageLock) ||
+                                  !FileEquals(sourcePackageLock, installedPackageLock);
             }
 
             // copy various files to CroquetJS
             // dictionary maps sourceFile => destinationPath
             Dictionary<string, string> copyDetails = new Dictionary<string, string>();
             copyDetails["package.json"] = ".js-build/package.json";
+            copyDetails["package-lock.json"] = ".js-build/package-lock.json";
             copyDetails[".eslintrc.json"] = ".eslintrc.json";
             copyDetails["tools-gitignore"] = ".gitignore";
             foreach (KeyValuePair<string,string> keyValuePair in copyDetails)
@@ -930,7 +938,7 @@ public class CroquetBuilder
         Process p = new Process();
         p.StartInfo.UseShellExecute = true;
         p.StartInfo.FileName = "cmd.exe";
-        p.StartInfo.Arguments = $"/c npm install 1>\"{stdoutFile}\" 2>\"{stderrFile}\" ";
+        p.StartInfo.Arguments = $"/c npm ci 1>\"{stdoutFile}\" 2>\"{stderrFile}\" ";
         p.StartInfo.WorkingDirectory = installDir;
         p.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
 
