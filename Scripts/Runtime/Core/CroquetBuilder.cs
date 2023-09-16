@@ -851,7 +851,7 @@ public class CroquetBuilder
                     }
                 }
             }
-            else Debug.Log("package.json has not changed; skipping npm install");
+            else Debug.Log("package-lock.json has not changed; skipping npm install");
 
             if (errorCount == 0)
             {
