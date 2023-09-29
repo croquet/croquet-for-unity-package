@@ -71,7 +71,7 @@ https://github.com/gree/unity-webview.git?path=/dist/package-nofragment
 
 #### Croquet for Unity
 
-Now that all dependencies are in place, add the `croquet-multiplayer` package using this git URL:
+Now that all dependencies are in place, add the `Croquet Multiplayer` package using this git URL:
 ```
 https://github.com/croquet/croquet-for-unity-package.git
 ```
@@ -217,7 +217,7 @@ We usually recommend setting "Build JS on Play", which will cause bundling to be
 
 Where a JS Watcher is available (see below), that is an even quicker way to incorporate changes in the JavaScript code.
 
-### Build JS on Play (Toggle)
+### Build JS on Play (toggle)
 _Whether or not to initiate a build of the JavaScript code every time you hit play._
 
 As noted above, we recommend setting this during development of the JavaScript code (if not using a Watcher), so that the latest code is always in use. If you are not making changes to the JavaScript, disabling this option (once the code has been built) will speed up the entry to play mode.
