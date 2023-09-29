@@ -33,10 +33,6 @@ class BridgeToUnity {
     constructor() {
         this.bridgeIsConnected = false;
         this.startWS();
-        // readyP is resolved on receipt of the readyForSession command from
-        // Unity, which will have included the apiKey, appId etc needed to
-        // join a Croquet session.
-        this.readyP = new Promise(resolve => this.setReady = resolve);
         this.measureIndex = 0;
     }
 
@@ -152,15 +148,18 @@ console.log(`PORT ${portStr}`);
             case 'setJSLogForwarding': {
                 // args[0] is comma-separated list of log types (log,warn,error)
                 // that are to be sent over to Unity
-                // args[1] is a flag debugUsingExternalSession [currently not used]
+                // args[1] is a flag debugUsingExternalSession
                 const toForward = args[0].split(',');
-                // const debugUsingExternalSession = args[1] === "True";
+                const debugUsingExternalSession = args[1] === "True";
                 console.log("categories of JS log forwarded to Unity:", toForward);
                 this.setJSLogForwarding(toForward);
+                // disable performance.mark and performance.measure if running in a webview,
+                // or on Node, so we don't accumulate measure objects.
+                if (!debugUsingExternalSession || globalThis.CROQUET_NODE) this.disablePerformanceMeasures();
                 break;
             }
             case 'readyForSession': {
-                const { apiKey, appId, appName, packageVersion, sessionName, debugFlags } = JSON.parse(args[0]);
+                const { apiKey, appId, appName, packageVersion, sessionName, debugFlags, isEditor } = JSON.parse(args[0]);
                 globalThis.timedLog(`starting session of ${appId} with key ${apiKey}`);
                 this.apiKey = apiKey;
                 this.appId = appId;
@@ -169,6 +168,7 @@ console.log(`PORT ${portStr}`);
                 this.sessionName = sessionName;
                 this.debugFlags = debugFlags; // comma-separated list
                 this.runOffline = debugFlags.includes('offline');
+                this.isEditor = isEditor;
                 unityDrivenStartSession();
                 break;
             }
@@ -320,7 +320,23 @@ console.log(`PORT ${portStr}`);
             };
             else console[logType] = console[`q_${logType}`]; // use system default
         });
-   }
+    }
+
+    disablePerformanceMeasures() {
+        // note: attempting basic reassignment
+        //    performance.mark = performance.measure = () => { };
+        // raises an error on Node.js v18
+        Object.defineProperty(performance, "mark", {
+            value: () => { },
+            configurable: true,
+            writable: true
+        });
+        Object.defineProperty(performance, "measure", {
+            value: () => { },
+            configurable: true,
+            writable: true
+        });
+    }
 
     update(_time) {
         // sent by the gameViewManager on each update()
@@ -396,7 +412,7 @@ export const GameViewManager = class extends ViewService {
 
         this.forwardedEventTopics = {}; // topic (scope:eventName) => handler
 
-        this.unityMessageThrottle = 40; // ms between updates sent to Unity (every two updates at 26ms, even if they get a little bunched up)
+        this.unityMessageThrottle = 50; // ms between updates sent to Unity (though if Rapier is running, a Rapier step will always trigger an update)
         this.lastMessageFlush = 0;
         this.assetManifests = {};
 
@@ -418,6 +434,12 @@ export const GameViewManager = class extends ViewService {
             }
         }
         this.subscribe('__wc', 'say', this.forwardSayToUnity);
+
+        // if Rapier is operating, we use the RapierManager's announcement of
+        // a completed step to set a flag that will trigger a geometry flush as
+        // soon as possible.
+        this.rapierStepped = false;
+        this.subscribe('rapier', { event: 'worldStep', handling: 'immediate' }, () => this.rapierStepped = true);
     }
 
     destroy() {
@@ -652,7 +674,8 @@ export const GameViewManager = class extends ViewService {
         theGameEngineBridge.update(time);
 
         const now = Date.now();
-        if (now - (this.lastMessageFlush || 0) >= this.unityMessageThrottle) {
+        if (this.rapierStepped || now - (this.lastMessageFlush || 0) >= this.unityMessageThrottle) {
+            this.rapierStepped = false; // reset, if it was set
             this.lastMessageFlush = now;
             this.flushDeferredMessages();
             this.flushGeometries();
@@ -969,6 +992,7 @@ export const PM_GameSpatial = superclass => class extends superclass {
         if (this.spatialOptions) this.extraStatics.add('spatialOptions'); // not an actor property, but will be fed from here
     }
 
+    // these getters all return copies of the property values
     get scale() { return this.actor.scale }
     get translation() { return this.actor.translation }
     get rotation() { return this.actor.rotation }
@@ -977,6 +1001,7 @@ export const PM_GameSpatial = superclass => class extends superclass {
     get lookGlobal() { return this.global } // Allows objects to have an offset camera position -- obsolete?
     get spatialOptions() { return this.actor._spatialOptions }
 
+    // these getters return the actual values
     get forward() { return this.actor.forward }
     get up() { return this.actor.up }
 
@@ -987,32 +1012,33 @@ export const PM_GameSpatial = superclass => class extends superclass {
         if (avatarFiltering || this.actor.rigidBodyType === 'static' || !this._isViewReady || this.doomed) return null;
 
         const updates = {};
-        const { scale, rotation, translation } = this; // NB: the actor's direct property values
+        const { scale, rotation, translation } = this; // NB: already copies of the actor's values.
         // use smallest scale value as a guide to the scale magnitude, triggering on
         // changes > 1%
+        let updated = false;
         const scaleMag = Math.min(...scale.map(Math.abs));
         if (!this.lastSentScale || !v3_equals(this.lastSentScale, scale, scaleMag * 0.01)) {
-            const scaleCopy = scale.slice();
             const doSnap = this._scaleSnapped || !this.lastSentScale;
-            this.lastSentScale = scaleCopy;
-            updates[doSnap ? 'scaleSnap' : 'scale'] = scaleCopy;
+            this.lastSentScale = scale;
+            updates[doSnap ? 'scaleSnap' : 'scale'] = scale;
+            updated = true;
         }
         if (!this.lastSentRotation || !q_equals(this.lastSentRotation, rotation, 0.0001)) {
-            const rotationCopy = rotation.slice();
             const doSnap = this._rotationSnapped || !this.lastSentRotation;
-            this.lastSentRotation = rotationCopy;
-            updates[doSnap ? 'rotationSnap' : 'rotation'] = rotationCopy;
+            this.lastSentRotation = rotation;
+            updates[doSnap ? 'rotationSnap' : 'rotation'] = rotation;
+            updated = true;
         }
         if (!this.lastSentTranslation || !v3_equals(this.lastSentTranslation, translation, 0.01)) {
-            const translationCopy = translation.slice();
             const doSnap = this._translationSnapped || !this.lastSentTranslation;
-            this.lastSentTranslation = translationCopy;
-            updates[doSnap ? 'translationSnap' : 'translation'] = translationCopy;
+            this.lastSentTranslation = translation;
+            updates[doSnap ? 'translationSnap' : 'translation'] = translation;
+            updated = true;
         }
 
         this.resetGeometrySnapState();
 
-        return Object.keys(updates).length ? updates : null;
+        return updated ? updates : null;
     }
 
     resetGeometrySnapState() {
@@ -1265,6 +1291,10 @@ class PreloadingViewRoot extends View {
 
         this.subscribe(this.sessionId, { event: 'sceneStateUpdated', handling: 'immediate'}, this.handleSceneState);
         this.subscribe(this.viewId, 'requestToInitVerdict', this.handleRequestToInitVerdict);
+
+        // iff the Unity side is an editor, tell the model.  this view will
+        // be designated the scene supplier for all subsequent scene loads.
+        if (theGameEngineBridge.isEditor) this.publish(this.sessionId, 'registerEditorClient', this.viewId);
 
         // we treat the construction of this view as a signal that the session
         // is ready to talk across the bridge.  but without a real viewRoot,
@@ -1659,22 +1689,6 @@ class TimerClient {
 let timerClient, ticker, sessionStepper;
 if (globalThis.CROQUET_NODE) {
     timerClient = globalThis;
-
-    // until we figure out how to use them on Node.js, disable measure and mark so we
-    // don't build up unprocessed measurement records.
-    // note: attempting basic reassignment
-    //    performance.mark = performance.measure = () => { };
-    // raises an error on Node.js v18
-    Object.defineProperty(performance, "mark", {
-        value: () => { },
-        configurable: true,
-        writable: true
-    });
-    Object.defineProperty(performance, "measure", {
-        value: () => { },
-        configurable: true,
-        writable: true
-    });
 } else {
     // install our home-grown timer, and an interim ticker (will be replaced once
     // the session starts) just to handle timeouts
@@ -1879,10 +1893,11 @@ async function unityDrivenStartSession() {
         const now = performance.now() | 0;
 
         // don't try to service ticks that have bunched up
-        if (now - lastStep < STEP_DELAY / 4) return;
+        if (now - lastStep < STEP_DELAY / 2) return;
 
         lastStep = now;
-        performance.mark(`STEP${++stepCount}`);
+        const { reflectorTime } = session.view.realm.vm.controller;
+        performance.mark(`STEP${++stepCount}@reflector=${reflectorTime}`);
 
         Promise.resolve().then(() => session.step(now));
     };
