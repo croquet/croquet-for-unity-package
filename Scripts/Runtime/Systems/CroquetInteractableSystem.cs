@@ -71,7 +71,7 @@ public class CroquetInteractableSystem : CroquetSystem
                     {
                         // collect id, hit.x, hit.y, hit.z[, layer1, layer2 etc]
                         List<string> oneHit = new List<string>();
-                        oneHit.Add(entity.croquetHandle);
+                        oneHit.Add(entity.croquetHandle.ToString());
                         Vector3 xyz = hit.point;
                         oneHit.Add(xyz.x.ToString());
                         oneHit.Add(xyz.y.ToString());

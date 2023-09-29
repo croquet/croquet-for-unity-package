@@ -18,8 +18,6 @@ public class PresentOncePositionUpdated : MonoBehaviour
 
     private void Update()
     {
-        // or
-        // if(CroquetSpatialSystem.Instance.hasObjectMoved(gameObject.GetInstanceID()))
         if (sc.hasBeenMoved || (!waitUntilMove && sc.hasBeenPlaced) || Time.realtimeSinceStartup - startTime >= timeout)
         {
             foreach (var renderer in GetComponentsInChildren<Renderer>())
