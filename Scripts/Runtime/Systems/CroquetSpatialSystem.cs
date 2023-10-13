@@ -162,7 +162,7 @@ public class CroquetSpatialSystem : CroquetSystem
             Vector3 initialScale = new Vector3(s[0], s[1], s[2]);
 
             int croquetHandle = go.GetComponent<CroquetEntityComponent>().croquetHandle;
-            SnapObjectTo(croquetHandle, initialPos, initialRot, initialScale);
+            DrivePawn(croquetHandle, initialPos, initialRot, initialScale);
             // CroquetBridge.Instance.Log("info", $"spatial setup for {go}");
         }
     }
@@ -395,8 +395,17 @@ public class CroquetSpatialSystem : CroquetSystem
         }
     }
 
-    public void SnapObjectTo(int croquetHandle, Vector3? position = null, Quaternion? rotation = null, Vector3? scale = null)
+    public void DrivePawn(int croquetHandle, Vector3? position = null, Quaternion? rotation = null, Vector3? scale = null)
     {
+        // to impose a view-side update on a pawn gameObject's placement, invoke this to force
+        // the updated values into the gameObject's SpatialComponent, as used by the SpatialSystem
+        // for the object's reference location.
+        // this does *not* communicate the update to Croquet.  if the corresponding actor moves,
+        // the sending of that movement over the bridge will override what has been set here.
+        // in the case of a "drivable" (i.e., view-controlled) gameObject, the standard practice
+        // is to invoke DriveActor in addition to this.  that will update the position in the
+        // Croquet model, but only views other than the driving one will be told about the change.
+
         int instanceID = CroquetEntitySystem.GetInstanceIDByCroquetHandle(croquetHandle);
         if (instanceID == 0) return;
 
@@ -422,12 +431,17 @@ public class CroquetSpatialSystem : CroquetSystem
         }
     }
 
-    public void SnapObjectInCroquet(int croquetHandle, Vector3? position = null, Quaternion? rotation = null,
+    public void DriveActor(int croquetHandle, bool useSnap, Vector3? position = null, Quaternion? rotation = null,
         Vector3? scale = null)
     {
+        // as explained above, this is for imposing a view-driven update on a Croquet actor.  the information
+        // supplied here instantly overwrites the actor's state, and is communicated to the pawn either with
+        // or without a "snap", depending on the useSnap argument.
+
         List<string> argList = new List<string>();
         argList.Add("objectMoved");
         argList.Add(croquetHandle.ToString());
+        argList.Add(useSnap.ToString());
 
         if (position != null)
         {
