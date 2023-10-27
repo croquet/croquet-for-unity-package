@@ -764,7 +764,7 @@ performance.measure(`to U (batch ${this.msgBatch}): ${numMessages} msgs in ${bat
         let pos = 0;
         const writeVector = vec => vec.forEach(val => array[pos++] = val);
         toBeMerged.forEach(([gameHandle, spec]) => {
-            const { scale, scaleSnap, translation, translationSnap, rotation, rotationSnap } = spec;
+            const { scale, scaleSnap, translation, translationSnap, translationSnapWhileMoving, rotation, rotationSnap } = spec;
             // first number encodes object gameHandle and (in bits 0 to 5) whether there is an
             // update to each of scale, rotation, translation, and for each one whether
             // it should be snapped.
@@ -782,8 +782,10 @@ performance.measure(`to U (batch ${this.msgBatch}): ${numMessages} msgs in ${bat
             }
             if (translation || translationSnap) {
                 writeVector(translation || translationSnap);
-                encodedId += 2;
-                if (translationSnap) encodedId += 1;
+                if (translationSnap) {
+                    encodedId += 1;
+                    if (translationSnapWhileMoving) encodedId += 2;
+                } else encodedId += 2;
             }
             intArray[idPos] = encodedId;
         });
@@ -992,6 +994,7 @@ export const PM_GameSpatial = superclass => class extends superclass {
         this.resetGeometrySnapState();
 
         this.listenImmediate('driverOverride', this.resetSentValues);
+        this.listenImmediate('snapWhileMoving', this.snapWhileMoving);
 
         if (this.spatialOptions) this.extraStatics.add('spatialOptions'); // not an actor property, but will be fed from here
     }
@@ -1011,6 +1014,8 @@ export const PM_GameSpatial = superclass => class extends superclass {
 
     resetSentValues() { this.lastSentScale = this.lastSentRotation = this.lastSentTranslation = null }
 
+    snapWhileMoving() { this._snapWhileMoving = true }
+
     geometryUpdateIfNeeded() {
         // for a driver, filter out all updates other than the very first time,
         // or if the _driverOverride flag is set.
@@ -1023,24 +1028,26 @@ export const PM_GameSpatial = superclass => class extends superclass {
         // changes > 1%
         let updated = false;
         const scaleMag = Math.min(...scale.map(Math.abs));
-        if (!this.lastSentScale || !v3_equals(this.lastSentScale, scale, scaleMag * 0.01)) {
-            const doSnap = this._scaleSnapped || !this.lastSentScale;
+        let needSnap = this._scaleSnapped || !this.lastSentScale;
+        if (needSnap || !v3_equals(this.lastSentScale, scale, scaleMag * 0.01)) {
             this.lastSentScale = scale;
-            updates[doSnap ? 'scaleSnap' : 'scale'] = scale;
+            updates[needSnap ? 'scaleSnap' : 'scale'] = scale;
             updated = true;
         }
-        if (!this.lastSentRotation || !q_equals(this.lastSentRotation, rotation, 0.0001)) {
-            const doSnap = this._rotationSnapped || !this.lastSentRotation;
+        needSnap = this._rotationSnapped || !this.lastSentRotation;
+        if (needSnap || !q_equals(this.lastSentRotation, rotation, 0.0001)) {
             this.lastSentRotation = rotation;
-            updates[doSnap ? 'rotationSnap' : 'rotation'] = rotation;
+            updates[needSnap ? 'rotationSnap' : 'rotation'] = rotation;
             updated = true;
         }
-        if (!this.lastSentTranslation || !v3_equals(this.lastSentTranslation, translation, 0.01)) {
-            const doSnap = this._translationSnapped || !this.lastSentTranslation;
+        needSnap = this._translationSnapped || !this.lastSentTranslation;
+        if (needSnap || !v3_equals(this.lastSentTranslation, translation, 0.01)) {
             this.lastSentTranslation = translation;
-            updates[doSnap ? 'translationSnap' : 'translation'] = translation;
+            updates[needSnap ? 'translationSnap' : 'translation'] = translation;
+            if (needSnap && this._snapWhileMoving) updates.translationSnapWhileMoving = true;
             updated = true;
         }
+        this._snapWhileMoving = false; // clear flag, whether used or not
 
         this.resetGeometrySnapState();
 
@@ -1939,3 +1946,22 @@ function shutDownSession() {
     sessionOffsetEstimator.shutDown();
     sessionOffsetEstimator = null;
 }
+
+let debugctx;
+function ensureDebugCanvasContext() {
+    if (!debugctx) {
+        const canv = document.createElement("canvas");
+        canv.style.width = "600px";
+        canv.style.height = "600px";
+        canv.style.backgroundColor = "blue";
+        canv.width = 200;
+        canv.height = 200;
+        document.body.appendChild(canv);
+        const ctx = canv.getContext("2d");
+        ctx.fillStyle = "red";
+        ctx.fillRect(25, 50, 3, 100);
+        debugctx = ctx;
+    }
+    return debugctx;
+}
+globalThis.ensureDebugCanvasContext = ensureDebugCanvasContext;
