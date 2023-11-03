@@ -249,7 +249,7 @@ class CroquetBuildPreprocess : IPreprocessBuildWithReport
         string jsTarget = isNodeBuild ? "node" : "web";
 
         Scene activeScene = EditorSceneManager.GetActiveScene();
-        if (!CroquetBuilder.PrepareSceneForBuildTarget(activeScene, isWindowsBuild))
+        if (!CroquetBuilder.PrepareSceneForBuildTarget(activeScene, isNodeBuild))
         {
             // reason for refusal will already have been logged
             throw new BuildFailedException("You must fix some settings (see warnings above) before building");
@@ -307,7 +307,7 @@ class CroquetBuildPreprocess : IPreprocessBuildWithReport
         // everything seems fine.  copy the tools record into the StreamableAssets folder
         CopyJSToolsRecord();
         // and on Windows, copy our pre-supplied node.exe too.
-        if (isWindowsBuild) CopyNodeExe();
+        if (isNodeBuild) CopyNodeExe();
     }
 
     private void CopyJSToolsRecord()
