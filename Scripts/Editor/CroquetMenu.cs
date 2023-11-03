@@ -245,8 +245,8 @@ class CroquetBuildPreprocess : IPreprocessBuildWithReport
     public void OnPreprocessBuild(BuildReport report)
     {
         BuildTarget target = report.summary.platform;
-        bool isWindowsBuild = target == BuildTarget.StandaloneWindows || target == BuildTarget.StandaloneWindows64;
-        string jsTarget = isWindowsBuild ? "node" : "web";
+        bool isNodeBuild = target == BuildTarget.StandaloneWindows || target == BuildTarget.StandaloneWindows64 || target == BuildTarget.StandaloneLinux64;
+        string jsTarget = isNodeBuild ? "node" : "web";
 
         Scene activeScene = EditorSceneManager.GetActiveScene();
         if (!CroquetBuilder.PrepareSceneForBuildTarget(activeScene, isWindowsBuild))

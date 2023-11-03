@@ -394,6 +394,12 @@ public class CroquetBridge : MonoBehaviour
 
 #if UNITY_EDITOR_OSX
         pathToNode = appProperties.pathToNode; // if needed
+#elif UNITY_EDITOR_LINUX
+        pathToNode = appProperties.pathToNode;
+        useNodeJS = ! croquetRunner.debugUsingExternalSession;
+#elif UNITY_STANDALONE_LINUX
+        pathToNode = appProperties.pathToNode;
+        useNodeJS = true;
 #elif UNITY_EDITOR_WIN
         // in Windows editor, use Node unless user has set debugUsingExternalSession and has *not* set forceToUseNodeJS
         pathToNode = CroquetBuilder.NodeExeInPackage; // if needed

@@ -28,7 +28,7 @@ public class CroquetRunner : MonoBehaviour
     // [Tooltip("Provide an IP Address for a local Croquet reflector instance.")]
     [HideInInspector] public string localReflector;
 
-#if UNITY_EDITOR_WIN
+#if UNITY_EDITOR_WIN || UNITY_EDITOR_LINUX
     [HideInInspector] public bool showWebview;
 #else
     [Tooltip("For debug use.  If selected, and running with a WebView, the view will appear at bottom-left on the desktop as a small featureless window.  The window's right-click menu provides access to JavaScript debug tools.")]
@@ -138,7 +138,7 @@ public class CroquetRunner : MonoBehaviour
         }
 
         // only compile with WebViewObject on non-Windows platforms
-#if !(UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN || UNITY_WSA)
+#if !(UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX ||UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN || UNITY_WSA)
         if (!useNodeJS && !debugUsingExternalSession)
         {
             // cases (a), (h)

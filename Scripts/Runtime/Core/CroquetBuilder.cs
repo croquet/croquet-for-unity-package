@@ -66,7 +66,7 @@ public class CroquetBuilder
         //   "needsInstall" - no sign that tools have been installed, but we can go ahead and try
         //   "unavailable" - no way to install: (on Mac) no Node executable found
 
-#if UNITY_EDITOR_OSX
+#if UNITY_EDITOR_OSX || UNITY_EDITOR_LINUX
         string nodeExecutable = GetSceneBuildDetails().nodeExecutable;
         if (nodeExecutable == "" || !File.Exists(nodeExecutable))
         {
@@ -105,7 +105,7 @@ public class CroquetBuilder
 #else
         // find the file in a build.  Android needs extra care.
         string src = JSToolsRecordInBuild;
-  #if UNITY_ANDROID
+#if UNITY_ANDROID
         var unityWebRequest = UnityWebRequest.Get(src);
         unityWebRequest.SendWebRequest();
         while (!unityWebRequest.isDone) { } // meh
@@ -119,9 +119,9 @@ public class CroquetBuilder
             installRecordContents = Encoding.UTF8.GetString(contents);
         }
         unityWebRequest.Dispose();
-  #else
+#else
         installRecordContents = File.ReadAllText(src);
-  #endif
+#endif
 #endif
 
         return JsonUtility.FromJson<InstalledToolsRecord>(installRecordContents);
@@ -282,7 +282,14 @@ public class CroquetBuilder
             // it can be used for JS building, for running scenes in the editor,
             // and for inclusion in a Windows standalone build.
             bool forceToUseNodeJS = sceneRunnerComponent.forceToUseNodeJS;
+#if UNITY_STANDALONE_LINUX
+            bool useNodeJS = true;
+#elif UNITY_EDITOR_LINUX
+            bool useNodeJS = !(sceneRunnerComponent.debugUsingExternalSession);
+#else
             bool useNodeJS = forceToUseNodeJS; // default
+#endif
+
 #if !UNITY_EDITOR_WIN
             string pathToNode = sceneBridgeComponent.appProperties.pathToNode;
 #else
@@ -371,6 +378,7 @@ public class CroquetBuilder
         string logFile = "";
         switch (Application.platform)
         {
+            case RuntimePlatform.LinuxEditor:
             case RuntimePlatform.OSXEditor:
                 nodeExecPath = details.nodeExecutable;
                 executable = Path.Combine(builderPath, "runwebpack.sh");
@@ -894,23 +902,23 @@ public class CroquetBuilder
     private static int RunNPMInstall(string jsBuildFolder, string toolsRoot)
     {
         string nodePath = "";
-        bool onOSX = Application.platform == RuntimePlatform.OSXEditor;
-        if (onOSX)
+        bool onUnix = Application.platform == RuntimePlatform.OSXEditor || RuntimePlatform.LinuxEditor;
+        if (onUnix)
         {
             string nodeExecutable = GetSceneBuildDetails().nodeExecutable;
             nodePath = Path.GetDirectoryName(nodeExecutable);
         }
 
         int errorCount = 0;
-        Task task = onOSX
-            ? new Task(() => errorCount = InstallOSX(jsBuildFolder, toolsRoot, nodePath))
+        Task task = onUnix
+            ? new Task(() => errorCount = InstallUnix(jsBuildFolder, toolsRoot, nodePath))
             : new Task(() => errorCount = InstallWin(jsBuildFolder, toolsRoot));
         task.Start();
         task.Wait();
 
         return errorCount;
     }
-    private static int InstallOSX(string installDir, string toolsRoot, string nodePath) {
+    private static int InstallUnix(string installDir, string toolsRoot, string nodePath) {
         string scriptPath = Path.GetFullPath(Path.Combine(toolsRoot, "runNPM.sh"));
         Process p = new Process();
         p.StartInfo.UseShellExecute = false;
