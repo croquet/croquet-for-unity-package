@@ -1947,6 +1947,8 @@ function shutDownSession() {
     sessionOffsetEstimator = null;
 }
 
+// convenience function for creating a canvas for plotting arbitrary debug info
+// when running with an external browser.  decidedly arbitrary, but useful at times.
 let debugctx;
 function ensureDebugCanvasContext() {
     if (!debugctx) {
@@ -1957,10 +1959,7 @@ function ensureDebugCanvasContext() {
         canv.width = 200;
         canv.height = 200;
         document.body.appendChild(canv);
-        const ctx = canv.getContext("2d");
-        ctx.fillStyle = "red";
-        ctx.fillRect(25, 50, 3, 100);
-        debugctx = ctx;
+        debugctx = canv.getContext("2d");
     }
     return debugctx;
 }
