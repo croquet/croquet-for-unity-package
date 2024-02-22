@@ -2,7 +2,7 @@
 //
 // Croquet Corporation, 2023
 
-import { ModelRoot, ModelService, Actor, RegisterMixin, q_normalize } from "@croquet/worldcore-kernel";
+import { ModelRoot, ModelService, Actor, RegisterMixin, AM_Spatial, AM_Avatar, q_normalize, v3_add } from "@croquet/worldcore-kernel";
 
 // InitializationManager is a model service that knows how to instantiate a set of actors from an init chunk
 export class InitializationManager extends ModelService {
@@ -264,6 +264,42 @@ export const AM_InitializationClient = superclass => class extends superclass {
 
 };
 RegisterMixin(AM_InitializationClient);
+
+export const AM_Drivable = superclass => class extends AM_Avatar(superclass) {
+    snapIncludingDriver(options = {}) {
+        if (Object.keys(options).length === 0) return;
+
+        this._say('driverOverride'); // listened by PM_GameSpatial
+        this.snap(options);
+    }
+};
+RegisterMixin(AM_Drivable);
+
+export const AM_WrappingSpatial = superclass => class extends AM_Spatial(superclass) {
+    moveWithWrap(positionDelta) {
+        const newTrans = v3_add(this.translation, positionDelta);
+        const wrapExtents = this.wrappedWorldExtent;
+        let doSnap = false;
+        for (let dim = 0; dim < 3; dim++) {
+            const dimExtent = wrapExtents[dim];
+            // extent of zero means don't wrap on this dimension
+            if (dimExtent) {
+                if (newTrans[dim] < -dimExtent / 2) {
+                    newTrans[dim] += dimExtent;
+                    doSnap = true;
+                } else if (newTrans[dim] > dimExtent / 2) {
+                    newTrans[dim] -= dimExtent;
+                    doSnap = true;
+                }
+            }
+        }
+        if (doSnap) {
+            this._say('snapWhileMoving'); // signal to view mixin
+            this.snap({ translation: newTrans });
+        } else this.set({ translation: newTrans });
+    }
+};
+RegisterMixin(AM_WrappingSpatial);
 
 export class GameModelRoot extends ModelRoot {
     static modelServices() {

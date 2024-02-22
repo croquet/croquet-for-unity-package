@@ -498,15 +498,17 @@ export const GameViewManager = class extends ViewService {
             }
             case 'objectMoved': {
                 // args[0] is gameHandle
+                // args[1] is boolean setting whether to snap
                 // remaining args are taken in pairs <property, value>
                 // where property is one of "s", "r", "p" for scale, rot, pos
                 // followed by a comma-separated list of values for the property
                 // i.e., 3 or 4 floats
                 pawn = this.pawnsByGameHandle[args[0]];
+                const doSnap = args[1] === 'True';
                 if (pawn && pawn.geometryUpdateFromUnity) {
                     try {
                         const update = {};
-                        let pos = 1;
+                        let pos = 2;
                         while (pos < args.length) {
                             const prop = args[pos++];
                             let geomProp;
@@ -520,7 +522,7 @@ export const GameViewManager = class extends ViewService {
                                 update[geomProp] = args[pos++].split(',').map(Number);
                             }
                         }
-                        if (Object.keys(update).length) pawn.geometryUpdateFromUnity(update);
+                        if (Object.keys(update).length) pawn.geometryUpdateFromUnity(update, doSnap);
 
                     } catch (e) {
                         console.error(e);
@@ -762,7 +764,7 @@ performance.measure(`to U (batch ${this.msgBatch}): ${numMessages} msgs in ${bat
         let pos = 0;
         const writeVector = vec => vec.forEach(val => array[pos++] = val);
         toBeMerged.forEach(([gameHandle, spec]) => {
-            const { scale, scaleSnap, translation, translationSnap, rotation, rotationSnap } = spec;
+            const { scale, scaleSnap, translation, translationSnap, translationSnapWhileMoving, rotation, rotationSnap } = spec;
             // first number encodes object gameHandle and (in bits 0 to 5) whether there is an
             // update to each of scale, rotation, translation, and for each one whether
             // it should be snapped.
@@ -780,8 +782,10 @@ performance.measure(`to U (batch ${this.msgBatch}): ${numMessages} msgs in ${bat
             }
             if (translation || translationSnap) {
                 writeVector(translation || translationSnap);
-                encodedId += 2;
-                if (translationSnap) encodedId += 1;
+                if (translationSnap) {
+                    encodedId += 1;
+                    if (translationSnapWhileMoving) encodedId += 2;
+                } else encodedId += 2;
             }
             intArray[idPos] = encodedId;
         });
@@ -813,7 +817,7 @@ export const PM_GameRendered = superclass => class extends superclass {
     constructor(actor) {
         super(actor);
 
-        this._throttleFromUnity = 75; // ms between forwarding to the session position updates sent from Unity (e.g., for an avatar).  we expect Unity updates at 25Hz (40ms); for now we aim to forward half of those.
+        this._throttleFromUnity = 80; // ms between forwarding to the session position updates sent from Unity (e.g., for an avatar).  we expect Unity updates at 50Hz (20ms); for now we aim to forward a quarter of those.
         this._messagesAwaitingCreation = []; // removed once creation is requested
         this._geometryAwaitingCreation = null; // can be written by PM_Spatial and its subclasses
         this._isViewReady = false;
@@ -989,6 +993,9 @@ export const PM_GameSpatial = superclass => class extends superclass {
         this.componentNames.add('CroquetSpatialComponent');
         this.resetGeometrySnapState();
 
+        this.listenImmediate('driverOverride', this.resetSentValues);
+        this.listenImmediate('snapWhileMoving', this.snapWhileMoving);
+
         if (this.spatialOptions) this.extraStatics.add('spatialOptions'); // not an actor property, but will be fed from here
     }
 
@@ -1005,11 +1012,15 @@ export const PM_GameSpatial = superclass => class extends superclass {
     get forward() { return this.actor.forward }
     get up() { return this.actor.up }
 
+    resetSentValues() { this.lastSentScale = this.lastSentRotation = this.lastSentTranslation = null }
+
+    snapWhileMoving() { this._snapWhileMoving = true }
+
     geometryUpdateIfNeeded() {
-        // for an avatar, filter out all updates other than the very first time,
-        // or if some property has been snapped
-        const avatarFiltering = this.driving && this.lastSentTranslation && !this._scaleSnapped && !this._rotationSnapped && !this._translationSnapped;
-        if (avatarFiltering || this.actor.rigidBodyType === 'static' || !this._isViewReady || this.doomed) return null;
+        // for a driver, filter out all updates other than the very first time,
+        // or if the _driverOverride flag is set.
+        const driverFiltering = this.driving && !!this.lastSentTranslation;
+        if (driverFiltering || this.actor.rigidBodyType === 'static' || !this._isViewReady || this.doomed) return null;
 
         const updates = {};
         const { scale, rotation, translation } = this; // NB: already copies of the actor's values.
@@ -1017,24 +1028,26 @@ export const PM_GameSpatial = superclass => class extends superclass {
         // changes > 1%
         let updated = false;
         const scaleMag = Math.min(...scale.map(Math.abs));
-        if (!this.lastSentScale || !v3_equals(this.lastSentScale, scale, scaleMag * 0.01)) {
-            const doSnap = this._scaleSnapped || !this.lastSentScale;
+        let needSnap = this._scaleSnapped || !this.lastSentScale;
+        if (needSnap || !v3_equals(this.lastSentScale, scale, scaleMag * 0.01)) {
             this.lastSentScale = scale;
-            updates[doSnap ? 'scaleSnap' : 'scale'] = scale;
+            updates[needSnap ? 'scaleSnap' : 'scale'] = scale;
             updated = true;
         }
-        if (!this.lastSentRotation || !q_equals(this.lastSentRotation, rotation, 0.0001)) {
-            const doSnap = this._rotationSnapped || !this.lastSentRotation;
+        needSnap = this._rotationSnapped || !this.lastSentRotation;
+        if (needSnap || !q_equals(this.lastSentRotation, rotation, 0.0001)) {
             this.lastSentRotation = rotation;
-            updates[doSnap ? 'rotationSnap' : 'rotation'] = rotation;
+            updates[needSnap ? 'rotationSnap' : 'rotation'] = rotation;
             updated = true;
         }
-        if (!this.lastSentTranslation || !v3_equals(this.lastSentTranslation, translation, 0.01)) {
-            const doSnap = this._translationSnapped || !this.lastSentTranslation;
+        needSnap = this._translationSnapped || !this.lastSentTranslation;
+        if (needSnap || !v3_equals(this.lastSentTranslation, translation, 0.01)) {
             this.lastSentTranslation = translation;
-            updates[doSnap ? 'translationSnap' : 'translation'] = translation;
+            updates[needSnap ? 'translationSnap' : 'translation'] = translation;
+            if (needSnap && this._snapWhileMoving) updates.translationSnapWhileMoving = true;
             updated = true;
         }
+        this._snapWhileMoving = false; // clear flag, whether used or not
 
         this.resetGeometrySnapState();
 
@@ -1058,8 +1071,9 @@ export const PM_GameSpatial = superclass => class extends superclass {
         }
     }
 
-    geometryUpdateFromUnity(update) {
-        this.set(update, this._throttleFromUnity);
+    geometryUpdateFromUnity(update, doSnap = false) {
+        if (doSnap) this.snap(update, this._throttleFromUnity);
+        else this.set(update, this._throttleFromUnity);
     }
 
 };
@@ -1150,22 +1164,22 @@ export const PM_GameInteractable = superclass => class extends superclass {
 };
 gamePawnMixins.Interactable = PM_GameInteractable;
 
-export const PM_GameAvatar = superclass => class extends superclass {
+export const PM_GameDrivable = superclass => class extends superclass {
 
     constructor(actor) {
         super(actor);
-        this.componentNames.add('CroquetAvatarComponent');
+        this.componentNames.add('CroquetDrivableComponent');
         this.extraWatched.add('driver');
         this.onDriverSet();
         this.listenOnce("driverSet", this.onDriverSet);
     }
 
-    get isMyAvatar() {
+    get isDrivenHere() {
         return this.actor.driver === this.viewId;
     }
 
     onDriverSet() {
-        if (this.isMyAvatar) {
+        if (this.isDrivenHere) {
             this.driving = true;
             this.drive();
         } else {
@@ -1179,7 +1193,7 @@ export const PM_GameAvatar = superclass => class extends superclass {
     drive() { }
 
 };
-gamePawnMixins.Avatar = PM_GameAvatar;
+gamePawnMixins.Drivable = PM_GameDrivable;
 
 // GamePawnManager is a specialisation of the standard
 // Worldcore PawnManager, with pawn-creation logic that removes the need for
@@ -1835,6 +1849,8 @@ export async function StartSession(model, view) {
 }
 
 async function unityDrivenStartSession() {
+    if (ModelRootClass.unityMeasureOptions) theGameEngineBridge.sendCommand('setMeasureOptions', ModelRootClass.unityMeasureOptions());
+
     const { apiKey, appId, appName, packageVersion, sessionName, debugFlags, runOffline, socketPortStr } = theGameEngineBridge;
 
     const sceneFileName = 'scene-definitions.txt';
@@ -1930,3 +1946,22 @@ function shutDownSession() {
     sessionOffsetEstimator.shutDown();
     sessionOffsetEstimator = null;
 }
+
+let debugctx;
+function ensureDebugCanvasContext() {
+    if (!debugctx) {
+        const canv = document.createElement("canvas");
+        canv.style.width = "600px";
+        canv.style.height = "600px";
+        canv.style.backgroundColor = "blue";
+        canv.width = 200;
+        canv.height = 200;
+        document.body.appendChild(canv);
+        const ctx = canv.getContext("2d");
+        ctx.fillStyle = "red";
+        ctx.fillRect(25, 50, 3, 100);
+        debugctx = ctx;
+    }
+    return debugctx;
+}
+globalThis.ensureDebugCanvasContext = ensureDebugCanvasContext;
