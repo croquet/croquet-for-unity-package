@@ -1017,8 +1017,8 @@ export const PM_GameSpatial = superclass => class extends superclass {
     snapWhileMoving() { this._snapWhileMoving = true }
 
     geometryUpdateIfNeeded() {
-        // for a driver, filter out all updates other than the very first time,
-        // or if the _driverOverride flag is set.
+        // for a driver, filter out all updates other than the very first time - where the
+        // "driverOverride" event can be used to recreate that "first time" state.
         const driverFiltering = this.driving && !!this.lastSentTranslation;
         if (driverFiltering || this.actor.rigidBodyType === 'static' || !this._isViewReady || this.doomed) return null;
 
