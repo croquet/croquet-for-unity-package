@@ -1028,23 +1028,23 @@ export const PM_GameSpatial = superclass => class extends superclass {
         // changes > 1%
         let updated = false;
         const scaleMag = Math.min(...scale.map(Math.abs));
-        let needSnap = this._scaleSnapped || !this.lastSentScale;
-        if (needSnap || !v3_equals(this.lastSentScale, scale, scaleMag * 0.01)) {
+        if (!this.lastSentScale || !v3_equals(this.lastSentScale, scale, scaleMag * 0.01)) {
+            const doSnap = this._scaleSnapped || !this.lastSentScale;
             this.lastSentScale = scale;
-            updates[needSnap ? 'scaleSnap' : 'scale'] = scale;
+            updates[doSnap ? 'scaleSnap' : 'scale'] = scale;
             updated = true;
         }
-        needSnap = this._rotationSnapped || !this.lastSentRotation;
-        if (needSnap || !q_equals(this.lastSentRotation, rotation, 0.0001)) {
+        if (!this.lastSentRotation || !q_equals(this.lastSentRotation, rotation, 0.0001)) {
+            const doSnap = this._rotationSnapped || !this.lastSentRotation;
             this.lastSentRotation = rotation;
-            updates[needSnap ? 'rotationSnap' : 'rotation'] = rotation;
+            updates[doSnap ? 'rotationSnap' : 'rotation'] = rotation;
             updated = true;
         }
-        needSnap = this._translationSnapped || !this.lastSentTranslation;
-        if (needSnap || !v3_equals(this.lastSentTranslation, translation, 0.01)) {
+        if (!this.lastSentTranslation || !v3_equals(this.lastSentTranslation, translation, 0.01)) {
+            const doSnap = this._translationSnapped || !this.lastSentTranslation;
             this.lastSentTranslation = translation;
-            updates[needSnap ? 'translationSnap' : 'translation'] = translation;
-            if (needSnap && this._snapWhileMoving) updates.translationSnapWhileMoving = true;
+            updates[doSnap ? 'translationSnap' : 'translation'] = translation;
+            if (doSnap && this._snapWhileMoving) updates.translationSnapWhileMoving = true;
             updated = true;
         }
         this._snapWhileMoving = false; // clear flag, whether used or not
