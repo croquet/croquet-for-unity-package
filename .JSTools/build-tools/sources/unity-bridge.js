@@ -1947,19 +1947,6 @@ function shutDownSession() {
     sessionOffsetEstimator = null;
 }
 
-function shutDownSession() {
-    session.leave();
-    session = null;
-    if (globalThis.CROQUET_NODE) {
-        clearInterval(sessionStepper);
-        sessionStepper = null;
-    } else {
-        ticker = () => timerClient.serviceTimeouts();
-    }
-    sessionOffsetEstimator.shutDown();
-    sessionOffsetEstimator = null;
-}
-
 // convenience function for creating a canvas for plotting arbitrary debug info
 // when running with an external browser.  decidedly arbitrary, but useful at times.
 let debugctx;

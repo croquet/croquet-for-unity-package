@@ -18,36 +18,7 @@ Ask questions on our [discord](https://croquet.io/discord)!
 
 ## Setup
 *Let's Get Started!*
-Overall, you will need to create a unity project and repo, set up all the dependencies, and create a basic javascript model to drive your game. The concepts are covered in more detail in Tutorial 1 of our tutorials repo.
-
-For a visual representation of this information please see our [getting started guide](https://docs.google.com/presentation/d/1nBt84oJudSvyxtjO0kchKUkLuTCf4O7emlzj-d58_xk/edit).
-
-### Unity Project
-Croquet for Unity has been built with and tested on projects using Unity editor version `2021.3.19f1`. The easiest way to get started is to use the same version - but feel free to try a new version and tell us how it goes!
-
-All Unity versions are available for download [here](https://unity.com/releases/editor/archive).
-
-# Croquet for Unity
-Croquet for Unity is a Multiplayer Package that allows you to build flawlessly synchronized, bit-identical simulations with JavaScript. Deploy effortlessly everywhere without the hassle of server management, complex netcode, or rollback. Author how something behaves **once**, and it will behave that way for everyone playing your game.
-
-
-## Unity Package Repo
-This repo contains all Croquet for Unity functionality to be added from the Unity Package Manager.
-This repo is the starting point to create your own project.
-
-For more examples please see our tutorials or other demo repos:
-- [Tutorials](https://github.com/croquet/croquet-for-unity-tutorials)
-- [Demolition](https://github.com/croquet/croquet-for-unity-demolition)
-- [Guardians](https://github.com/croquet/croquet-for-unity-guardians)
-
-
-## Questions
-Ask questions on our [discord](https://croquet.io/discord)!
-
-
-## Setup
-*Let's Get Started!*
-Overall, you will need to create a unity project and repo, set up all the dependencies, and create a basic javascript model to drive your game. The concepts are covered in more detail in Tutorial 1 of our tutorials repo.
+Overall, you will need to create a Unity project and repo, set up all the dependencies, and create a basic JavaScript model to drive your game. The concepts are covered in more detail in Tutorial 1 of our tutorials repo.
 
 For a visual representation of this information please see our [getting started guide](https://docs.google.com/presentation/d/1nBt84oJudSvyxtjO0kchKUkLuTCf4O7emlzj-d58_xk/edit).
 
