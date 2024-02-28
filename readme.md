@@ -18,7 +18,7 @@ Ask questions on our [discord](https://croquet.io/discord)!
 
 ## Setup
 *Let's Get Started!*
-Overall, you will need to create a unity project and repo, set up all the dependencies, and create a basic javascript model to drive your game. The concepts are covered in more detail in Tutorial 1 of our tutorials repo.
+Overall, you will need to create a Unity project and repo, set up all the dependencies, and create a basic JavaScript model to drive your game. The concepts are covered in more detail in Tutorial 1 of our tutorials repo.
 
 For a visual representation of this information please see our [getting started guide](https://docs.google.com/presentation/d/1nBt84oJudSvyxtjO0kchKUkLuTCf4O7emlzj-d58_xk/edit).
 
@@ -40,34 +40,18 @@ Here are suggested .gitignore and .gitattributes files that we use in our Guardi
 - [Guardians Root gitattributes](https://github.com/croquet/croquet-for-unity-guardians/blob/release/.gitattributes)
 
 
-### Get the Dependencies and the Package
-Croquet for Unity has some networking dependencies that need to be set up.
+### Included Dependencies
 
+The Croquet for Unity package now includes essential networking dependencies, ensuring seamless integration and setup.
 
 #### WebSocket
 
-We use the `WebSocketSharp-netstandard` package, which is distributed through NuGet, for the C# end of our bridge to JavaScript.
-
-Open the following page, and hit the `Download package` link on the right.
-```
-https://www.nuget.org/packages/WebSocketSharp-netstandard
-```
-
-Change the extension of the downloaded `websocketsharp-netstandard.1.0.1.nupkg` from `nupkg` to `zip`, then unzip the file. In the resulting folder hierarchy, find the following file:
-```
-websocketsharp-netstandard.1.0.1/lib/netstandard2.0/websocket-sharp.dll
-```
-
-Copy this file into your Unity project - for example, to a new folder `Assets/Plugins`.
+The package comes pre-integrated with the `WebSocketSharp-netstandard` library to facilitate the C# to JavaScript bridge. This removes the need for manual downloads or setup. The `websocket-sharp.dll`, compatible with `netstandard2.0`, is automatically placed in the correct directory within your Unity project, typically under `Assets/Plugins`, ensuring immediate functionality.
 
 #### WebView
 
-Running Croquet for Unity on any platform other than Windows (including any deployed app) requires having a WebView available to run the Croquet JavaScript code.
+For platforms other than Windows, including any deployed applications, the package automatically incorporates a WebView component. This is essential for running the Croquet JavaScript code across various environments. The `unity-webview` package by GREE, Inc. is included out-of-the-box, negating the need for manual addition through the Unity Package Manager. This inclusion ensures that Croquet for Unity operates  across all supported platforms without additional configuration steps.
 
-In the Unity Package Manager add GREE, Inc.'s `unity-webview` package (using "Add package from git URL..."):
-```
-https://github.com/gree/unity-webview.git?path=/dist/package-nofragment
-```
 
 #### Croquet for Unity
 
