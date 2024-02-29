@@ -9,7 +9,7 @@ public class CroquetContextMenuActions
     /// <summary>
     /// Creates a new Croquet settings asset.
     /// </summary>
-    [MenuItem("Assets/Create/Croquet/New Croquet Settings", false, 1)]
+    [MenuItem("Assets/Croquet/New Croquet Settings", false, -1)]
     public static void CreateMyAsset()
     {
         string path = AssetDatabase.GetAssetPath(Selection.activeObject);
@@ -27,7 +27,7 @@ public class CroquetContextMenuActions
         Debug.Log("Loading CroquetBridge prefab from path: Packages/com.croquet.multiplayer/Prefabs/CroquetBridge.prefab");
 
         Debug.Log($"Attempting to load CroquetDefaultSettings asset from path: /Packages/com.croquet.multiplayer/Runtime/Settings/CroquetDefaultSettings.asset");
-        
+
         //Find the CroquetDefaultSettings asset in the package
         var allAssetPaths = AssetDatabase.GetAllAssetPaths();
         CroquetSettings settingsAsset = null;
@@ -63,7 +63,7 @@ public class CroquetContextMenuActions
     /// </summary>
     /// <returns>True if the selected object is a folder in the Assets directory, false otherwise.</returns>
     // Validate the MenuItem
-    [MenuItem("Assets/Create/Croquet/New Croquet Settings", true)]
+    [MenuItem("Assets/Croquet/New Croquet Settings", true)]
     public static bool CreateMyAssetValidation()
     {
         // This returns true when the selected object is a folder in the Assets directory
@@ -74,7 +74,7 @@ public class CroquetContextMenuActions
     /// <summary>
     /// Adds the Croquet Bridge prefab to the scene.
     /// </summary>
-    [MenuItem("GameObject/Croquet/Add Croquet Bridge", false, 1)]
+    [MenuItem("GameObject/Croquet/Add Croquet Bridge", false, -1)]
     static void AddCroquetBridgeToScene()
     {
         // Load the CroquetBridge prefab from the package
@@ -107,31 +107,34 @@ public class CroquetContextMenuActions
             Debug.LogError("Failed to instantiate CroquetBridge prefab.");
         }
     }
-    
 
-    /// <summary>
-    /// Adds the Croquet Bridge prefab as a child of the selected object.
-    /// </summary>
-    /// <param name="command">The menu command.</param>
-    [MenuItem("CONTEXT/Transform/Add Croquet Bridge to Selected Object")]
+    // Updated method to find CroquetBridge prefab dynamically
+    [MenuItem("GameObject/Add Croquet Bridge to Selected Object", false, 10)]
     private static void AddCroquetBridgeToSelected(MenuCommand command)
     {
-        // Load the CroquetBridge prefab
-        GameObject croquetBridgePrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Packages/com.croquet.multiplayer/Prefabs/CroquetBridge.prefab");
-        if (croquetBridgePrefab == null)
+        Transform targetTransform = Selection.activeTransform;
+        if (targetTransform == null)
         {
-            Debug.LogError("Could not find CroquetBridge prefab in the package.");
+            Debug.LogError("No valid target selected.");
             return;
         }
 
-        // Instantiate the prefab as a child of the selected object
-        GameObject croquetBridgeInstance = PrefabUtility.InstantiatePrefab(croquetBridgePrefab, ((Transform)command.context).gameObject.transform) as GameObject;
+        GameObject croquetBridgePrefab = FindCroquetBridgePrefab();
+        if (croquetBridgePrefab == null)
+        {
+            Debug.LogError("Could not find CroquetBridge prefab in the project.");
+            return;
+        }
+
+        GameObject croquetBridgeInstance = PrefabUtility.InstantiatePrefab(croquetBridgePrefab, targetTransform) as GameObject;
         if (croquetBridgeInstance != null)
         {
-            // Set the new instance to be the active GameObject
-            Selection.activeGameObject = croquetBridgeInstance;
+            // If you want the prefab to be a sibling rather than a child, use the following line instead:
+            // croquetBridgeInstance.transform.SetParent(targetTransform.parent);
 
-            // Register the creation in the undo system
+            croquetBridgeInstance.transform.SetAsLastSibling(); // This places it as the last sibling in the hierarchy
+
+            Selection.activeGameObject = croquetBridgeInstance;
             Undo.RegisterCreatedObjectUndo(croquetBridgeInstance, "Add Croquet Bridge to Selected Object");
         }
         else
@@ -140,22 +143,23 @@ public class CroquetContextMenuActions
         }
     }
 
-    /// <summary>
-    /// Validates the "Add Croquet Bridge" menu item.
-    /// </summary>
-    /// <returns>True if the Croquet Bridge prefab is available, false otherwise.</returns>
     [MenuItem("GameObject/Croquet/Add Croquet Bridge", true)]
     private static bool ValidateAddCroquetBridgeToScene()
     {
-        // Check if the CroquetBridge prefab is available
-        var allAssetPaths = AssetDatabase.GetAllAssetPaths();
-        GameObject croquetBridgePrefab = null;
-        for (int i = 0; i < allAssetPaths.Length; ++i)
-        {
-            if (allAssetPaths[i].Contains("CroquetBridge.prefab"))
-                croquetBridgePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(allAssetPaths[i]);
-        }
+        return FindCroquetBridgePrefab() != null;
+    }
 
-        return croquetBridgePrefab != null;
+    // Helper method to find the CroquetBridge prefab dynamically
+    private static GameObject FindCroquetBridgePrefab()
+    {
+        var allAssetPaths = AssetDatabase.GetAllAssetPaths();
+        foreach (string assetPath in allAssetPaths)
+        {
+            if (assetPath.EndsWith("CroquetBridge.prefab"))
+            {
+                return AssetDatabase.LoadAssetAtPath<GameObject>(assetPath);
+            }
+        }
+        return null;
     }
 }
