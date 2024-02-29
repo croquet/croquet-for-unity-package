@@ -992,6 +992,7 @@ export const PM_GameSpatial = superclass => class extends superclass {
         super(actor);
         this.componentNames.add('CroquetSpatialComponent');
         this.resetGeometrySnapState();
+        this._alwaysSnap = true; // overridden in PM_GameSmoothed
 
         this.listenImmediate('driverOverride', this.resetSentValues);
         this.listenImmediate('snapWhileMoving', this.snapWhileMoving);
@@ -1028,35 +1029,36 @@ export const PM_GameSpatial = superclass => class extends superclass {
         // changes > 1%
         let updated = false;
         const scaleMag = Math.min(...scale.map(Math.abs));
-        if (!this.lastSentScale || !v3_equals(this.lastSentScale, scale, scaleMag * 0.01)) {
-            const doSnap = this._scaleSnapped || !this.lastSentScale;
+        let forceUpdate = !this.lastSentScale || this._scaleSnapped;
+        if (forceUpdate || !v3_equals(this.lastSentScale, scale, scaleMag * 0.01)) {
+            const snapUpdate = forceUpdate || this._alwaysSnap;
             this.lastSentScale = scale;
-            updates[doSnap ? 'scaleSnap' : 'scale'] = scale;
+            updates[snapUpdate ? 'scaleSnap' : 'scale'] = scale;
             updated = true;
         }
-        if (!this.lastSentRotation || !q_equals(this.lastSentRotation, rotation, 0.0001)) {
-            const doSnap = this._rotationSnapped || !this.lastSentRotation;
+        forceUpdate = !this.lastSentRotation || this._rotationSnapped;
+        if (forceUpdate || !q_equals(this.lastSentRotation, rotation, 0.0001)) {
+            const snapUpdate = forceUpdate || this._alwaysSnap;
             this.lastSentRotation = rotation;
-            updates[doSnap ? 'rotationSnap' : 'rotation'] = rotation;
+            updates[snapUpdate ? 'rotationSnap' : 'rotation'] = rotation;
             updated = true;
         }
-        if (!this.lastSentTranslation || !v3_equals(this.lastSentTranslation, translation, 0.01)) {
-            const doSnap = this._translationSnapped || !this.lastSentTranslation;
+        forceUpdate = !this.lastSentTranslation || this._translationSnapped;
+        if (forceUpdate || !v3_equals(this.lastSentTranslation, translation, 0.01)) {
+            const snapUpdate = forceUpdate || this._alwaysSnap;
             this.lastSentTranslation = translation;
-            updates[doSnap ? 'translationSnap' : 'translation'] = translation;
-            if (doSnap && this._snapWhileMoving) updates.translationSnapWhileMoving = true;
+            updates[snapUpdate ? 'translationSnap' : 'translation'] = translation;
+            if (snapUpdate && this._snapWhileMoving) updates.translationSnapWhileMoving = true;
             updated = true;
         }
         this._snapWhileMoving = false; // clear flag, whether used or not
-
-        this.resetGeometrySnapState();
+        this.resetGeometrySnapState(); // ditto for snap flags
 
         return updated ? updates : null;
     }
 
     resetGeometrySnapState() {
-        // for Spatial, act as if every update is a snap.  PM_GameSmoothed assumes the opposite.
-        this._scaleSnapped = this._rotationSnapped = this._translationSnapped = true;
+        this._scaleSnapped = this._rotationSnapped = this._translationSnapped = false;
     }
 
     updateGeometry(updateSpec) {
@@ -1087,9 +1089,11 @@ export const PM_GameSmoothed = superclass => class extends PM_GameSpatial(superc
 
         this.componentNames.add('PresentOncePositionUpdated');
 
-        this.listenOnce("scaleSnap", this.onScaleSnap);
-        this.listenOnce("rotationSnap", this.onRotationSnap);
-        this.listenOnce("translationSnap", this.onTranslationSnap);
+        this._alwaysSnap = false;
+
+        this.listenImmediate("scaleSnap", this.onScaleSnap);
+        this.listenImmediate("rotationSnap", this.onRotationSnap);
+        this.listenImmediate("translationSnap", this.onTranslationSnap);
     }
 
     setGameObject(viewSpec) {
@@ -1135,9 +1139,6 @@ export const PM_GameSmoothed = superclass => class extends PM_GameSpatial(superc
         return null;
     }
 
-    resetGeometrySnapState() {
-        this._scaleSnapped = this._rotationSnapped = this._translationSnapped = false;
-    }
 };
 gamePawnMixins.Smoothed = PM_GameSmoothed;
 
