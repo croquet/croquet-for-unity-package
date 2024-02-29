@@ -18,7 +18,7 @@ Ask questions on our [discord](https://croquet.io/discord)!
 
 ## Setup
 *Let's Get Started!*
-Overall, you will need to create a unity project and repo, set up all the dependencies, and create a basic javascript model to drive your game. The concepts are covered in more detail in Tutorial 1 of our tutorials repo.
+Overall, you will need to create a Unity project and repo, set up all the dependencies, and create a basic JavaScript model to drive your game. The concepts are covered in more detail in Tutorial 1 of our tutorials repo.
 
 For a visual representation of this information please see our [getting started guide](https://docs.google.com/presentation/d/1nBt84oJudSvyxtjO0kchKUkLuTCf4O7emlzj-d58_xk/edit).
 
