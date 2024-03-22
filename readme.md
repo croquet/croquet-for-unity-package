@@ -20,7 +20,7 @@ Ask questions on our [discord](https://croquet.io/discord)!
 *Let's Get Started!*
 Overall, you will need to create a Unity project and repo, set up all the dependencies, and create a basic JavaScript model to drive your game. The concepts are covered in more detail in Tutorial 1 of our tutorials repo.
 
-For a visual representation of this information please see our [getting started guide](https://docs.google.com/presentation/d/1nBt84oJudSvyxtjO0kchKUkLuTCf4O7emlzj-d58_xk/edit).
+For a visual representation of this information please see our [getting started guide](https://docs.google.com/document/d/1XXBRe3H6pRdbKw7pfVStnIfaOzQd3d1A7DseA7kEobI).
 
 ### Unity Project
 Croquet for Unity has been built with and tested on projects using Unity editor version `2021.3.19f1`. The easiest way to get started is to use the same version - but feel free to try a new version and tell us how it goes!
