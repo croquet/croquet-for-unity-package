@@ -15,6 +15,9 @@ public class CroquetSpatialComponent : CroquetComponent
     public Vector3 position = Vector3.zero;
     public Quaternion rotation = Quaternion.identity ;
     public Vector3 scale = Vector3.one;
+    public bool viewOverride = false;
+    [HideInInspector] public Vector3 stashedPosition = Vector3.zero; // for use during render-time adjustment
+    [HideInInspector] public long lastGeometryUpdate;
 
     [Header("SCENE LAYOUT")]
     public int positionMaxDecimals = 4;
