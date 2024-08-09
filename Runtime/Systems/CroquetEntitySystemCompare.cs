@@ -189,14 +189,14 @@ public class CroquetEntitySystem : CroquetSystem
                 if (key == assetLoadKey)
                 {
                     addressableAssets.Clear(); // now that we're ready to fill it
-                    foreach (var go in objects.Result)
+                    foreach (var gameObj in objects.Result)
                     {
-                        CroquetActorManifest manifest = go.GetComponent<CroquetActorManifest>();
+                        CroquetActorManifest manifest = gameObj.GetComponent<CroquetActorManifest>();
                         if (manifest != null)
                         {
                             string assetName = manifest.pawnType;
                             Debug.Log($"Loaded asset for {assetName} pawnType");
-                            addressableAssets.Add(assetName, go);
+                            addressableAssets.Add(assetName, gameObj);
                         }
                     }
 
@@ -261,33 +261,54 @@ public class CroquetEntitySystem : CroquetSystem
     void MakeObject(string[] args)
     {
         ObjectSpec spec = JsonUtility.FromJson<ObjectSpec>(args[0]);
-        // Debug.Log($"making object {spec.cH}");
 
-        // try to find a prefab with the given name
-        GameObject gameObjectToMake;
-        if (spec.type.StartsWith("primitive"))
+        // Try to find an existing object with the same name that hasn't been consumed
+        GameObject gameObjectToMake = null;
+        GameObject[] allObjects = UnityEngine.Object.FindObjectsOfType<GameObject>();
+        foreach (GameObject obj in allObjects)
         {
-            PrimitiveType primType = PrimitiveType.Cube;
-            if (spec.type == "primitiveSphere") primType = PrimitiveType.Sphere;
-            else if (spec.type == "primitiveCapsule") primType = PrimitiveType.Capsule;
-            else if (spec.type == "primitiveCylinder") primType = PrimitiveType.Cylinder;
-            else if (spec.type == "primitivePlane") primType = PrimitiveType.Plane;
-
-            gameObjectToMake = CreateCroquetPrimitive(primType, Color.blue);
-        }
-        else
-        {
-            if (addressableAssets.ContainsKey(spec.type))
+            if (obj.name.Contains(spec.type) && obj.GetComponent<HasBeenConsumed>() != null && !obj.name.Contains("Model"))
             {
-                gameObjectToMake = Instantiate(addressableAssets[spec.type]);
+                HasBeenConsumed consumedStatus = obj.GetComponent<HasBeenConsumed>();
+                if (!consumedStatus.haveIBeen)
+                {
+                    gameObjectToMake = obj;
+                    consumedStatus.haveIBeen = true;
+                    gameObjectToMake.transform.parent = null;
+                    break;
+                }
+            }
+        }
+
+        // If no reusable object found, create a new one
+        if (gameObjectToMake == null)
+        {
+            // Check if the type corresponds to a primitive type or a specific prefab
+            if (spec.type.StartsWith("primitive"))
+            {
+                PrimitiveType primType = PrimitiveType.Cube;
+                if (spec.type == "primitiveSphere") primType = PrimitiveType.Sphere;
+                else if (spec.type == "primitiveCapsule") primType = PrimitiveType.Capsule;
+                else if (spec.type == "primitiveCylinder") primType = PrimitiveType.Cylinder;
+                else if (spec.type == "primitivePlane") primType = PrimitiveType.Plane;
+
+                gameObjectToMake = CreateCroquetPrimitive(primType, Color.blue);
             }
             else
             {
-                Debug.Log($"Specified spec.type ({spec.type}) is not found as a prefab! Creating Cube as Fallback Object");
-                gameObjectToMake = CreateCroquetPrimitive(PrimitiveType.Cube, Color.magenta);
+                if (addressableAssets.ContainsKey(spec.type))
+                {
+                    gameObjectToMake = Instantiate(addressableAssets[spec.type]);
+                }
+                else
+                {
+                    Debug.Log($"Specified spec.type ({spec.type}) is not found as a prefab! Creating Cube as Fallback Object");
+                    gameObjectToMake = CreateCroquetPrimitive(PrimitiveType.Cube, Color.magenta);
+                }
             }
         }
 
+        // Ensure the object has a CroquetEntityComponent
         if (gameObjectToMake.GetComponent<CroquetEntityComponent>() == null)
         {
             gameObjectToMake.AddComponent<CroquetEntityComponent>();
@@ -322,14 +343,12 @@ public class CroquetEntitySystem : CroquetSystem
                     }
                     if (typeToAdd == null)
                     {
-                        // blew it
                         Debug.LogError($"Unable to find component {compName} in package or main assembly");
                     }
                     else
                     {
                         if (gameObjectToMake.GetComponent(typeToAdd) == null)
                         {
-                            // Debug.Log($"adding component {typeToAdd}");
                             gameObjectToMake.AddComponent(typeToAdd);
                         }
                     }
@@ -344,7 +363,6 @@ public class CroquetEntitySystem : CroquetSystem
         // propertyValues
         if (spec.ps.Length != 0)
         {
-            // an array with pairs   propName1, propVal1, propName2,...
             string[] props = spec.ps;
             for (int i = 0; i < props.Length; i += 2)
             {

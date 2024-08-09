@@ -219,7 +219,7 @@ public class CroquetBridge : MonoBehaviour
     private void SetBridgeState(string state)
     {
         bridgeState = state;
-        Log("session", $"bridge state: {bridgeState}");
+        Debug.Log("session" + $"bridge state: {bridgeState}");
     }
 
     private void SetUnitySceneState(string state, string sceneName)
@@ -339,14 +339,14 @@ public class CroquetBridge : MonoBehaviour
             }
             else
             {
-                Log("session", $"session name defaulted to {defaultSessionName}");
+                Debug.Log("session" + $"session name defaulted to {defaultSessionName}");
             }
         }
         else
         {
             sessionName = newSessionName;
             defaultSessionName = newSessionName;
-            Log("session", $"session name set to {newSessionName}");
+            Debug.Log("session" + $"session name set to {newSessionName}");
         }
     }
 
@@ -362,11 +362,11 @@ public class CroquetBridge : MonoBehaviour
             if (go.activeSelf)
             {
                 sceneDefinitionManifests.Add(manifest);
-                go.SetActive(false); // keep it around but invisible until we've read the manifest
+                // go.SetActive(false); // keep it around but invisible until we've read the manifest
             }
             else
             {
-                Destroy(go); // not part of the definition; ditch it immediately
+                // Destroy(go); // not part of the definition; ditch it immediately
             }
         }
 
@@ -416,7 +416,7 @@ public class CroquetBridge : MonoBehaviour
             // hint from https://github.com/sta/websocket-sharp/issues/236
             clientSock = Context.WebSocket;
 
-            Instance.Log("session", "server socket opened");
+            Debug.Log("session" + "server socket opened");
         }
 
         protected override void OnMessage(MessageEventArgs e)
@@ -427,7 +427,7 @@ public class CroquetBridge : MonoBehaviour
 
         protected override void OnClose(CloseEventArgs e)
         {
-            Instance.Log("session", System.String.Format("server socket closed {0}: {1}", e.Code, e.Reason));
+            Debug.Log("session" + System.String.Format("server socket closed {0}: {1}", e.Code, e.Reason));
         }
     }
 
@@ -442,7 +442,7 @@ public class CroquetBridge : MonoBehaviour
 
         if (launchViaMenuIntoScene == "") SetLoadingStage(0.25f, "Connecting...");
 
-        Log("session", "building WS Server on open port");
+        Debug.Log("session" + "building WS Server on open port");
         int port = appProperties.preferredPort;
         int remainingTries = 9;
         bool goodPortFound = false;
@@ -465,7 +465,7 @@ public class CroquetBridge : MonoBehaviour
             catch (Exception e)
             {
                 Debug.Log($"Port {port} is not available");
-                Log("debug", $"Error on trying port {port}: {e}");
+                // Log("debug", $"Error on trying port {port}: {e}");
 
                 port++;
                 remainingTries--;
@@ -485,7 +485,7 @@ public class CroquetBridge : MonoBehaviour
         ws.OnHead += OnHeadHandler;
         ws.OnGet += OnGetHandler;
 
-        Log("session", $"started HTTP/WS Server on port {port}");
+        // Log("session", $"started HTTP/WS Server on port {port}");
 
         string pathToNode = "";
         bool forceToUseNodeJS = croquetRunner.forceToUseNodeJS;
@@ -579,7 +579,7 @@ public class CroquetBridge : MonoBehaviour
         while (!unityWebRequest.isDone) { }
         if (unityWebRequest.result != UnityWebRequest.Result.Success)
         {
-            if (unityWebRequest.error != null) UnityEngine.Debug.Log(src + ": " + unityWebRequest.error);
+            if (unityWebRequest.error != null) Debug.Log(src + ": " + unityWebRequest.error);
             contents = new byte[0];
             success = false;
         }
@@ -922,7 +922,7 @@ public class CroquetBridge : MonoBehaviour
     void HarvestSceneDefinition(string sceneName, string appName)
     {
         // the scene is ready.  get its definition.
-        Log("session", $"ready to harvest \"{appName}\" scene \"{sceneName}\"");
+        Debug.Log("session" + $"ready to harvest \"{appName}\" scene \"{sceneName}\"");
 
         List<string> sceneStrings = new List<string>() {
             EarlySubscriptionTopicsAsString(),
@@ -1004,11 +1004,16 @@ public class CroquetBridge : MonoBehaviour
             EarlySubscriptionTopicsAsString(),
             CroquetEntitySystem.Instance.assetManifestString
         };
-
+        Debug.Log("Command Strings: " + commandStrings);
+        foreach (string s in commandStrings)
+        {
+            Debug.Log("Command String, index:" + commandStrings.IndexOf(s) + " " + s);
+        }
         commandStrings.AddRange(GetSceneObjectStrings());
 
         // send the message directly (bypassing the deferred-message queue)
         string msg = String.Join('\x01', commandStrings.ToArray());
+        Debug.LogError("SendDefineScene: " + msg);
         SendMessageToJavaScript(msg);
     }
 
@@ -1054,16 +1059,16 @@ public class CroquetBridge : MonoBehaviour
             condensedLength += oneObject.Length;
             definitionStrings.Add(oneObject);
 
-            Destroy(go); // now that we have what we need
+            // Destroy(go); // now that we have what we need
         }
 
         if (objectCount == 0)
         {
-            Log("session", $"no pre-placed objects found");
+            Debug.Log("session" + $"no pre-placed objects found");
         }
         else
         {
-            Log("session", $"{objectCount:N0} scene objects provided {uncondensedLength:N0} chars, encoded as {condensedLength:N0}");
+            Debug.Log("session" + $"{objectCount:N0} scene objects provided {uncondensedLength:N0} chars, encoded as {condensedLength:N0}");
         }
 
         return definitionStrings;
@@ -1132,13 +1137,14 @@ public class CroquetBridge : MonoBehaviour
             {
                 byte[] rawData = qm.rawData;
                 int sepPos = Array.IndexOf(rawData, (byte)5);
-                // Debug.Log(BitConverter.ToString(rawData));
+                // Debug.LogError(BitConverter.ToString(rawData));
                 if (sepPos >= 1)
                 {
                     byte[] timeAndCmdBytes = new byte[sepPos];
                     Array.Copy(rawData, timeAndCmdBytes, sepPos);
                     string[] strings = System.Text.Encoding.UTF8.GetString(timeAndCmdBytes).Split('\x02');
                     string command = strings[1];
+                    // Debug.LogError("Command Binary: " + command);
                     ProcessCroquetMessage(command, rawData, sepPos + 1);
 
                     long sendTime = long.Parse(strings[0]);
@@ -1153,6 +1159,7 @@ public class CroquetBridge : MonoBehaviour
             }
 
             string nextMessage = qm.data;
+            Debug.LogError("Next Message: " + nextMessage);
             string[] messages = nextMessage.Split('\x02');
             if (messages.Length > 1)
             {
