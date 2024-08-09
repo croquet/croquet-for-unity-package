@@ -264,7 +264,7 @@ public class CroquetEntitySystem : CroquetSystem
 
         // Try to find an existing object with the same name that hasn't been consumed
         GameObject gameObjectToMake = null;
-        GameObject[] allObjects = UnityEngine.Object.FindObjectsOfType<GameObject>();
+        GameObject[] allObjects = UnityEngine.Object.FindObjectsOfType<CroquetActorManifest>().gameObject;
         foreach (GameObject obj in allObjects)
         {
             if (obj.name.Contains(spec.type) && obj.GetComponent<HasBeenConsumed>() != null && !obj.name.Contains("Model"))
@@ -308,7 +308,6 @@ public class CroquetEntitySystem : CroquetSystem
             }
         }
 
-        // Ensure the object has a CroquetEntityComponent
         if (gameObjectToMake.GetComponent<CroquetEntityComponent>() == null)
         {
             gameObjectToMake.AddComponent<CroquetEntityComponent>();
@@ -343,12 +342,14 @@ public class CroquetEntitySystem : CroquetSystem
                     }
                     if (typeToAdd == null)
                     {
+                        // blew it
                         Debug.LogError($"Unable to find component {compName} in package or main assembly");
                     }
                     else
                     {
                         if (gameObjectToMake.GetComponent(typeToAdd) == null)
                         {
+                            // Debug.Log($"adding component {typeToAdd}");
                             gameObjectToMake.AddComponent(typeToAdd);
                         }
                     }
@@ -363,6 +364,7 @@ public class CroquetEntitySystem : CroquetSystem
         // propertyValues
         if (spec.ps.Length != 0)
         {
+            // an array with pairs   propName1, propVal1, propName2,...
             string[] props = spec.ps;
             for (int i = 0; i < props.Length; i += 2)
             {
