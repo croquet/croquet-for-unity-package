@@ -8,23 +8,58 @@ public abstract class CroquetSystem : MonoBehaviour
     /// <summary>
     /// Commands this system understands.
     /// </summary>
-    public abstract List<String> KnownCommands { get;}
+    public abstract List<String> KnownCommands { get; }
 
     /// <summary>
     /// Components that this system will update.
-    /// </summary>
-    protected abstract Dictionary<int, CroquetComponent> components { get; set; }
+    /// </summary>    
+    public static CroquetSystem Instance { get; private set; }
 
+    private void Awake()
+    {
+        // Create Singleton Accessor
+        // If there is an instance, and it's not me, delete myself.
+        if (Instance != null && Instance != this)
+        {
+            Destroy(this);
+        }
+        else
+        {
+            Instance = this;
+        }
+    }
+    protected abstract Dictionary<int, CroquetComponent> components { get; set; }
+    public void countOfComponents()
+    {
+        Debug.Log("components count: " + components.Count);
+    }
+    public virtual void GetComponentFromID(int instanceID)
+    {
+        components.TryGetValue(instanceID, out CroquetComponent component);
+        Debug.Log($"get {component.gameObject} in {this}");
+    }
     public virtual void RegisterComponent(CroquetComponent component)
     {
-        // Debug.Log($"register {component.gameObject} in {this}");
-        components.Add(component.gameObject.GetInstanceID(), component);
+        int instanceID = component.gameObject.GetInstanceID();
+
+        if (components.ContainsKey(instanceID))
+        {
+            Debug.LogWarning($"Component with instanceID {instanceID} is already registered in {this}. Replacing the existing component.");
+            UnregisterComponent(components[instanceID]);
+        }
+
+        components[instanceID] = component;
+        Debug.Log($"Registered {component.gameObject.name} in {this} with instanceID {instanceID}");
+
+        countOfComponents();
     }
 
     public virtual void UnregisterComponent(CroquetComponent component)
     {
         components.Remove(component.gameObject.GetInstanceID());
+        Debug.Log($"Unregistered {component.gameObject.name} from {this} with instanceID {component.gameObject.GetInstanceID()}");
     }
+
 
     public bool KnowsObject(GameObject go)
     {
@@ -63,13 +98,14 @@ public abstract class CroquetSystem : MonoBehaviour
 
     public virtual void ClearSceneBeforeRunning()
     {
-        components.Clear(); // wipe out anything that registered as the scene came up
+        Debug.Log("ClearSceneBeforeRunning");
+        // components.Clear(); // wipe out anything that registered as the scene came up
     }
 
     public virtual void TearDownScene()
     {
         // by default, just clear the components
-        components.Clear();
+        // components.Clear();
     }
 
     public virtual void TearDownSession()

@@ -887,7 +887,7 @@ public class CroquetBridge : MonoBehaviour
 
             foreach (CroquetSystem system in croquetSystems)
             {
-                system.ClearSceneBeforeRunning();
+                // system.ClearSceneBeforeRunning();
             }
         }
     }
@@ -1159,7 +1159,7 @@ public class CroquetBridge : MonoBehaviour
             }
 
             string nextMessage = qm.data;
-            Debug.LogError("Next Message: " + nextMessage);
+            // Debug.LogError("Next Message: " + nextMessage);
             string[] messages = nextMessage.Split('\x02');
             if (messages.Length > 1)
             {

@@ -9,7 +9,7 @@ public class CroquetMaterialSystem : CroquetSystem
 
     protected override Dictionary<int, CroquetComponent> components { get; set; } = new Dictionary<int, CroquetComponent>();
     
-    public static CroquetMaterialSystem Instance { get; private set; }
+    public new static CroquetMaterialSystem Instance { get; private set; }
 
     private void Awake()
     {

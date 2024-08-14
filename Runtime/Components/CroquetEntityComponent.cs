@@ -22,6 +22,16 @@ public class CroquetEntityComponent : CroquetComponent
     //   ReadActorFloat(prop)
     //   ReadActorFloatArray(prop)
     public StringStringSerializableDict actorProperties = new StringStringSerializableDict();
+    void Start()
+    {
+        StartCoroutine(EnsureAllSystemsInitialized());
+    }
+
+    IEnumerator EnsureAllSystemsInitialized()
+    {
+        yield return new WaitForSeconds(0.1f); // Short delay to ensure all components are initialized
+        RegisterInAllSystems(this);
+    }
 
 
 }

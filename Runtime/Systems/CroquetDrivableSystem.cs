@@ -13,7 +13,7 @@ public class CroquetDrivableSystem : CroquetSystem
         new Dictionary<int, CroquetComponent>();
 
     // Create Singleton Reference
-    public static CroquetDrivableSystem Instance { get; private set; }
+    public new static CroquetDrivableSystem Instance { get; private set; }
 
     private CroquetDrivableComponent lastKnownActiveDrivable;
 

@@ -13,7 +13,7 @@ public class CroquetSpatialComponent : CroquetComponent
     public bool hasBeenPlaced = false;
     public bool hasBeenMoved = false;
     public Vector3 position = Vector3.zero;
-    public Quaternion rotation = Quaternion.identity ;
+    public Quaternion rotation = Quaternion.identity;
     public Vector3 scale = Vector3.one;
     public bool viewOverride = false;
     [HideInInspector] public Vector3 stashedPosition = Vector3.zero; // for use during render-time adjustment
@@ -47,5 +47,27 @@ public class CroquetSpatialComponent : CroquetComponent
     // public int telemetryDumpTrigger = -1;
 
     //TODO: lerpCurve support
+    void Start()
+    {
+        StartCoroutine(EnsureAllSystemsInitialized());
+        InitializeSpatialComponent(this);
+    }
 
+    IEnumerator EnsureAllSystemsInitialized()
+    {
+        yield return new WaitForSeconds(0.1f); // Short delay to ensure all components are initialized
+        RegisterInAllSystems(this);
+    }
+    void InitializeSpatialComponent(CroquetSpatialComponent spatial)
+    {
+        if (!CroquetSpatialSystem.Instance.KnowsObject(spatial.gameObject))
+        {
+            CroquetSpatialSystem.Instance.RegisterComponent(spatial);
+        }
+        spatial.Initialize(); // Assuming an Initialize method exists or add any required initialization here
+    }
+    void Initialize()
+    {
+        // Add any initialization code here
+    }
 }

@@ -18,7 +18,7 @@ public class CroquetInteractableSystem : CroquetSystem
         new Dictionary<int, CroquetComponent>();
 
     // Create Singleton Reference
-    public static CroquetInteractableSystem Instance { get; private set; }
+    public new static CroquetInteractableSystem Instance { get; private set; }
 
     private void Awake()
     {
