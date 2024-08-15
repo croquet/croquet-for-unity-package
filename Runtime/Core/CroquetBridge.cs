@@ -362,11 +362,11 @@ public class CroquetBridge : MonoBehaviour
             if (go.activeSelf)
             {
                 sceneDefinitionManifests.Add(manifest);
-                go.SetActive(false); // keep it around but invisible until we've read the manifest
+                // go.SetActive(false); // keep it around but invisible until we've read the manifest
             }
             else
             {
-                Destroy(go); // not part of the definition; ditch it immediately
+                // Destroy(go); // not part of the definition; ditch it immediately
             }
         }
 
@@ -1056,7 +1056,7 @@ public class CroquetBridge : MonoBehaviour
             condensedLength += oneObject.Length;
             definitionStrings.Add(oneObject);
 
-            Destroy(go); // now that we have what we need
+            // Destroy(go); // now that we have what we need
         }
 
         if (objectCount == 0)

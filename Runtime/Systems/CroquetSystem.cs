@@ -8,7 +8,7 @@ public abstract class CroquetSystem : MonoBehaviour
     /// <summary>
     /// Commands this system understands.
     /// </summary>
-    public abstract List<String> KnownCommands { get;}
+    public abstract List<String> KnownCommands { get; }
 
     /// <summary>
     /// Components that this system will update.
@@ -17,13 +17,20 @@ public abstract class CroquetSystem : MonoBehaviour
 
     public virtual void RegisterComponent(CroquetComponent component)
     {
-        // Debug.Log($"register {component.gameObject} in {this}");
-        components.Add(component.gameObject.GetInstanceID(), component);
+        int instanceID = component.gameObject.GetInstanceID();
+        if (!components.ContainsKey(instanceID))
+        {
+            components.Add(instanceID, component);
+        }
     }
 
     public virtual void UnregisterComponent(CroquetComponent component)
     {
-        components.Remove(component.gameObject.GetInstanceID());
+        int instanceID = component.gameObject.GetInstanceID();
+        if (components.ContainsKey(instanceID))
+        {
+            components.Remove(instanceID);
+        }
     }
 
     public bool KnowsObject(GameObject go)

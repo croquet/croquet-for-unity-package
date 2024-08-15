@@ -7,7 +7,7 @@ using Debug = UnityEngine.Debug;
 
 public class CroquetSpatialSystem : CroquetSystem
 {
-    public override List<String> KnownCommands { get;  } = new()
+    public override List<String> KnownCommands { get; } = new()
     {
         "updateSpatial",
         "setParent",
@@ -63,19 +63,19 @@ public class CroquetSpatialSystem : CroquetSystem
         if (position.magnitude > (sc ? sc.positionEpsilon : 0.01f))
         {
             int precision = sc ? sc.positionMaxDecimals : 4;
-            strings.Add($"pos:{FormatFloats(new []{position.x,position.y,position.z}, precision)}");
+            strings.Add($"pos:{FormatFloats(new[] { position.x, position.y, position.z }, precision)}");
         }
         Quaternion rotation = t.rotation;
-        if (Quaternion.Angle(rotation,Quaternion.identity) > (sc ? sc.rotationEpsilon : 0.01f))
+        if (Quaternion.Angle(rotation, Quaternion.identity) > (sc ? sc.rotationEpsilon : 0.01f))
         {
             int precision = sc ? sc.rotationMaxDecimals : 6;
-            strings.Add($"rot:{FormatFloats(new []{rotation.x,rotation.y,rotation.z,rotation.w}, precision)}");
+            strings.Add($"rot:{FormatFloats(new[] { rotation.x, rotation.y, rotation.z, rotation.w }, precision)}");
         }
         Vector3 scale = t.lossyScale;
-        if (Vector3.Distance(scale,new Vector3(1f, 1f, 1f)) > (sc ? sc.scaleEpsilon : 0.01f))
+        if (Vector3.Distance(scale, new Vector3(1f, 1f, 1f)) > (sc ? sc.scaleEpsilon : 0.01f))
         {
             int precision = sc ? sc.scaleMaxDecimals : 4;
-            strings.Add($"scale:{FormatFloats(new []{scale.x,scale.y,scale.z}, precision)}");
+            strings.Add($"scale:{FormatFloats(new[] { scale.x, scale.y, scale.z }, precision)}");
         }
 
         if (sc && sc.includeOnSceneInit)
@@ -212,11 +212,11 @@ public class CroquetSpatialSystem : CroquetSystem
 
             Transform t = spatial.transform; // where the object is right now
 
-            if (Vector3.Distance(spatial.scale,t.localScale) > spatial.scaleEpsilon)
+            if (Vector3.Distance(spatial.scale, t.localScale) > spatial.scaleEpsilon)
             {
                 t.localScale = Vector3.Lerp(t.localScale, spatial.scale, spatial.scaleLerpPerFrame);
             }
-            if (Quaternion.Angle(spatial.rotation,t.localRotation) > spatial.rotationEpsilon)
+            if (Quaternion.Angle(spatial.rotation, t.localRotation) > spatial.rotationEpsilon)
             {
                 t.localRotation = Quaternion.Slerp(t.localRotation, spatial.rotation, spatial.rotationLerpPerFrame);
             }
@@ -284,7 +284,8 @@ public class CroquetSpatialSystem : CroquetSystem
                 // }
 
                 spatial.hasBeenMoved = true;
-            } else if (Vector3.Distance(spatial.position,t.localPosition) > spatial.positionEpsilon)
+            }
+            else if (Vector3.Distance(spatial.position, t.localPosition) > spatial.positionEpsilon)
             {
                 // SmoothDamp seems better suited to our needs than a constant lerp
                 t.localPosition = Vector3.SmoothDamp(t.localPosition, spatial.position,
@@ -306,62 +307,54 @@ public class CroquetSpatialSystem : CroquetSystem
     /// <returns></returns>
     void UpdateSpatial(byte[] rawData, int startPos)
     {
-        const uint SCALE =      0b100000;
+        const uint SCALE = 0b100000;
         const uint SCALE_SNAP = 0b010000;
-        const uint ROT =        0b001000;
-        const uint ROT_SNAP =   0b000100;
+        const uint ROT = 0b001000;
+        const uint ROT_SNAP = 0b000100;
         const uint POS_CONTINUOUS = 0b000010;
-        const uint POS_SNAP =   0b000001;
+        const uint POS_SNAP = 0b000001;
         const uint POS_ANY = POS_CONTINUOUS | POS_SNAP;
 
         int bufferPos = startPos; // byte index through the buffer
         while (bufferPos < rawData.Length)
         {
-            // first number encodes object id and (in bits 0-5) whether there is an update (with/without
-            // a snap) for each of scale, rotation, translation.  this leaves room for 2**26
-            // possible ids - i.e., around 67 million.
-            // jul 2023: we now implement id recycling: the next id after 999,999 is 1 (or the first
-            // handle after 1 that's not still being used by a pawn).  if a million handles available
-            // at once isn't enough, we can increase it.
+            // Decode object ID and flags for update types
             UInt32 encodedId = BitConverter.ToUInt32(rawData, bufferPos);
             bufferPos += 4;
             int croquetHandle = (int)(encodedId >> 6);
 
             int instanceID = CroquetEntitySystem.GetInstanceIDByCroquetHandle(croquetHandle);
 
+            // Retrieve the spatial component for the object
             CroquetSpatialComponent spatialComponent;
             Transform trans;
             try
             {
-                spatialComponent = components[instanceID] as CroquetSpatialComponent;
+                if (!components.TryGetValue(instanceID, out CroquetComponent component) || !(component is CroquetSpatialComponent))
+                {
+                    throw new KeyNotFoundException($"Spatial component with instance ID {instanceID} not found.");
+                }
+                spatialComponent = component as CroquetSpatialComponent;
                 trans = spatialComponent.transform;
             }
             catch (Exception e)
             {
-                // object not found.  skip through the buffer to the next object's record.
-                if ((encodedId & SCALE) != 0)
-                {
-                    bufferPos += 12;
-                }
-                if ((encodedId & ROT) != 0)
-                {
-                    bufferPos += 16;
-                }
-                if ((encodedId & POS_ANY) != 0)
-                {
-                    bufferPos += 12;
-                }
-                Debug.Log($"attempt to update absent object {croquetHandle} : {e}");
+                // Skip to the next object's record in the buffer
+                if ((encodedId & SCALE) != 0) bufferPos += 12;
+                if ((encodedId & ROT) != 0) bufferPos += 16;
+                if ((encodedId & POS_ANY) != 0) bufferPos += 12;
+
+                Debug.LogWarning($"Attempt to update absent object {croquetHandle} : {e}");
                 continue;
             }
 
             long nowMS = stopWatch.ElapsedMilliseconds;
 
-            // first time through, set hasBeenPlaced
-            // second time, set hasBeenMoved
+            // Set hasBeenPlaced or hasBeenMoved based on update sequence
             if (!spatialComponent.hasBeenMoved)
             {
-                if (spatialComponent.hasBeenPlaced) spatialComponent.hasBeenMoved = true;
+                if (spatialComponent.hasBeenPlaced)
+                    spatialComponent.hasBeenMoved = true;
                 else
                 {
                     spatialComponent.hasBeenPlaced = true;
@@ -372,78 +365,63 @@ public class CroquetSpatialSystem : CroquetSystem
             long msSinceLastUpdate = nowMS - spatialComponent.lastGeometryUpdate;
             spatialComponent.lastGeometryUpdate = nowMS;
 
+            // Handle scale update
             if ((encodedId & SCALE) != 0)
             {
                 Vector3 updatedScale = Vector3FromBuffer(rawData, bufferPos);
                 bufferPos += 12;
                 if ((encodedId & SCALE_SNAP) != 0)
                 {
-                    // immediately snap scale
-                    trans.localScale = updatedScale;
+                    trans.localScale = updatedScale; // Snap scale immediately
                 }
                 spatialComponent.scale = updatedScale;
-                // Log("verbose", "scale: " + updatedScale.ToString());
             }
+
+            // Handle rotation update
             if ((encodedId & ROT) != 0)
             {
                 Quaternion updatedQuatRot = QuaternionFromBuffer(rawData, bufferPos);
                 bufferPos += 16;
                 if ((encodedId & ROT_SNAP) != 0)
                 {
-                    trans.localRotation = updatedQuatRot;
+                    trans.localRotation = updatedQuatRot; // Snap rotation immediately
                 }
                 spatialComponent.rotation = updatedQuatRot;
-                // Log("verbose", "rot: " + updatedQuatRot.ToString());
             }
+
+            // Handle position update
             if ((encodedId & POS_ANY) != 0)
             {
                 Vector3 updatedPosition = Vector3FromBuffer(rawData, bufferPos);
                 bufferPos += 12;
                 if ((encodedId & POS_SNAP) != 0)
                 {
-                    // oct 2023: if both SNAP and CONTINUOUS are set, it means we're being snapped
-                    // while on the move (e.g., wrapping over a world boundary).  for smooth movement,
-                    // we calculate our offset not just from the spatialComponent's current recorded
-                    // position but from where we estimate that position would have been moved to if this
-                    // update were continuous rather than a snap.  then we apply that offset to the
-                    // supplied snap position.
-                    // an object can be poised for seconds or minutes on a world edge before getting the
-                    // nudge that moves it across.  a communication glitch can introduce false delays.
-                    // only attempt velocity adjustment within 150ms since the last known update.
-                    if ((encodedId & POS_CONTINUOUS) != 0)
+                    if ((encodedId & POS_CONTINUOUS) != 0 && msSinceLastUpdate <= 150)
                     {
-                        if (msSinceLastUpdate <= 150)
-                        {
-                            Vector3 velocity = spatialComponent.ballisticVelocity.HasValue
-                                ? spatialComponent.ballisticVelocity.Value
-                                : spatialComponent.dampedVelocity;
-                            Vector3 expectedMove = velocity * (float)msSinceLastUpdate / 1000f;
-                            Vector3 trackingLag = spatialComponent.position + expectedMove - trans.position;
-                            trans.localPosition = updatedPosition - trackingLag;
-                        }
-                        else trans.localPosition = updatedPosition;
+                        Vector3 velocity = spatialComponent.ballisticVelocity.HasValue
+                            ? spatialComponent.ballisticVelocity.Value
+                            : spatialComponent.dampedVelocity;
+                        Vector3 expectedMove = velocity * (float)msSinceLastUpdate / 1000f;
+                        Vector3 trackingLag = spatialComponent.position + expectedMove - trans.position;
+                        trans.localPosition = updatedPosition - trackingLag;
                     }
                     else
                     {
                         trans.localPosition = updatedPosition;
-                        spatialComponent.dampedVelocity = Vector3.zero; // a snap that stops you
+                        spatialComponent.dampedVelocity = Vector3.zero; // Stop movement on snap
                     }
                 }
 
-                // available diagnostics for object movement.  at any time a single object can be identified
-                // for tracking (see SetDiagnosticTrackedObject).  if trackedObject is assigned - and until
-                // reassigned, or the object is destroyed - each position update is logged to the console.
+                // Diagnostic tracking for movement
                 if (trackedObject != null && spatialComponent.gameObject == trackedObject)
                 {
                     long deltaTMS = msSinceLastUpdate;
-                    // float dist = Vector3.Distance(trans.localPosition, updatedPosition); // distance of object now from the new position
-                    float dist = Vector3.Distance(spatialComponent.position, updatedPosition); // distance of (pre-adjusted) spatial from new position
+                    float dist = Vector3.Distance(spatialComponent.position, updatedPosition);
                     float v = dist / ((float)(deltaTMS) / 1000f);
-                    CroquetBridge.Instance.Log("session",$"after {deltaTMS}ms: d={dist:F3} implying v={v:F3}");
+                    CroquetBridge.Instance.Log("session", $"after {deltaTMS}ms: d={dist:F3} implying v={v:F3}");
                 }
 
                 spatialComponent.position = updatedPosition;
-                // Log("verbose", "pos: " + updatedPosition.ToString());
             }
         }
     }
