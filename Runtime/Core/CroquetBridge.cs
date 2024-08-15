@@ -679,13 +679,13 @@ public class CroquetBridge : MonoBehaviour
 
     public void SendToCroquet(params string[] strings)
     {
-        Debug.Log($"==== [3.1] SendToCroquet: {string.Join(',', strings)}" + $" | croquetSessionState: {croquetSessionState}");
+        Log("session", $"==== [3.1] SendToCroquet: {string.Join(',', strings)}" + $" | croquetSessionState: {croquetSessionState}");
         if (croquetSessionState != "running")
         {
             Debug.LogWarning($"attempt to send when Croquet session is not running: {string.Join(',', strings)}");
             return;
         }
-        Debug.Log($"==== [3.2] SendToCroquet: {string.Join(',', strings)}");
+        Log("session", $"==== [3.2] SendToCroquet: {string.Join(',', strings)}");
         deferredMessages.Add(("", PackCroquetMessage(strings)));
     }
 
@@ -843,7 +843,7 @@ public class CroquetBridge : MonoBehaviour
         }
         else if (bridgeState == "waitingForConnection")
         {
-            Debug.Log($"==== [1] bridgeState==waitingForConnection | WebSocket is {( (clientSock == null)? "awaiting OnOpen()" : "<color=#44ff44>OPEN!</color>" )}");
+            Log("session", $"==== [1] bridgeState==waitingForConnection | WebSocket is {( (clientSock == null)? "awaiting OnOpen()" : "<color=#44ff44>OPEN!</color>" )}");
             if (!INTEROP_BRIDGE && clientSock == null) return; // not ready yet
 
             // configure which logs are forwarded
@@ -1530,7 +1530,7 @@ public class CroquetBridge : MonoBehaviour
         // viewId we have in the session.
         // it will be sent the first time through, and also on recovery from a Croquet network glitch.
         croquetViewId = viewId;
-        Debug.Log("==== [?????] Croquet session running!");
+        Log("session", "==== [?????] Croquet session running!");
         Log("session", "Croquet session running!");
         SetBridgeState("started");
         croquetSessionState = "running";
@@ -1642,7 +1642,7 @@ public class CroquetBridge : MonoBehaviour
 
     public void RequestToLoadScene(string sceneName, bool forceReload, bool forceRebuild)
     {
-        Debug.Log($"==== [2] Request to load scene {sceneName} (forceReload={forceReload}, forceRebuild={forceRebuild})");
+        Log("session", $"==== [2] Request to load scene {sceneName} (forceReload={forceReload}, forceRebuild={forceRebuild})");
         // ask Croquet to switch scene
         string[] cmdAndArgs =
         {

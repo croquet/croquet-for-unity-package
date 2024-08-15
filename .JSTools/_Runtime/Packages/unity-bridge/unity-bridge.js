@@ -1554,7 +1554,7 @@ class PreloadingViewRoot extends View {
   }
 
   constructor(model) {
-    console.log("building PreloadingViewRoot");
+    console.log("=== building PreloadingViewRoot");
     super(model);
     this.model = model;
     this.im = this.wellKnownModel("InitializationManager"); // can't use GetModelService, because this isn't a WorldCore ViewRoot
