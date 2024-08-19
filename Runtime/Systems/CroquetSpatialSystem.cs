@@ -332,7 +332,7 @@ public class CroquetSpatialSystem : CroquetSystem
             {
                 if (!components.TryGetValue(instanceID, out CroquetComponent component) || !(component is CroquetSpatialComponent))
                 {
-                    throw new KeyNotFoundException($"Spatial component with instance ID {instanceID} not found.");
+                    Debug.Log($"Spatial component with instance ID {instanceID} not found.");
                 }
                 spatialComponent = component as CroquetSpatialComponent;
                 trans = spatialComponent.transform;

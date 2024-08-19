@@ -41,7 +41,10 @@ public class CroquetEntityComponent : CroquetComponent
     private void Awake()
     {
         // Assign type based on the GameObject's name
-        type = gameObject.name;
+        if (type == null || type == ""){
+            type = gameObject.name;
+        }
+        FindObjectOfType<RuntimeEntityManager>().RegisterEntity(this);
     }
     public int cH; // handle used by this client's Croquet bridge to address this object
     public string cN; // Croquet name (generally, the model id)

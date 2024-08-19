@@ -472,7 +472,9 @@ public static class Croquet
     /// <returns>The float-array value</returns>
     public static float[] ReadActorFloatArray(GameObject gameObject, string propertyName)
     {
+        Debug.Log($"ReadActorFloatArray called for {gameObject} with prop {propertyName}");
         string stringVal = CroquetEntitySystem.Instance.GetPropertyValueString(gameObject, propertyName);
+        Debug.Log($"ReadActorFloatArray got {stringVal}");
         List<float> floats = new List<float>();
         foreach (string str in stringVal.Split('\x03'))
         {

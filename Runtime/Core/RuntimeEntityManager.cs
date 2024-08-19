@@ -49,8 +49,9 @@ public CroquetEntityComponent GetUnusedEntityOfType(string type)
     Debug.Log($"Attempting to get unused entity of type {type}");
     if (globalEntityPool.ContainsKey(type))
     {
+        Debug.Log($"Found entities of type {type}");
         // Find the first entity that matches the specified type and hasn't been assigned yet (cH == -1)
-        return globalEntityPool[type].FirstOrDefault(entity => entity.type == type && entity.cH == -1);
+        return globalEntityPool[type].FirstOrDefault(entity => entity.type == type && entity.cH == 0);
     }
     return null;
 }

@@ -38,6 +38,7 @@ public class CroquetEntitySystem : CroquetSystem
 
     private void AssociateCroquetHandleToInstanceID(int croquetHandle, int id)
     {
+        Debug.Log($"Associating Croquet Handle {croquetHandle} to Instance ID {id}");
         CroquetHandleToInstanceID.Add(croquetHandle, id);
     }
 
@@ -262,7 +263,9 @@ void MakeObject(string[] args)
 {
     ObjectSpec spec = JsonUtility.FromJson<ObjectSpec>(args[0]);
     GameObject gameObjectToMake = null;
-
+CroquetEntityComponent entity = null;
+int instanceID = 0;
+try {
     // Check if there are any unused objects of the specified type in the global pool
     CroquetEntityComponent availableEntity = RuntimeEntityManager.Instance.GetUnusedEntityOfType(spec.type);
     Debug.Log("Spec type: " + spec.type);
@@ -272,10 +275,11 @@ void MakeObject(string[] args)
         availableEntity.cH = spec.cH; // Mark as assigned
         Debug.Log($"Using existing object of type {spec.type} with ID {availableEntity.uniqueID}");
     }
-
+} catch (Exception e) {
+    Debug.LogError("Error in GetUnusedEntityOfType: " + e);
+}
     if (gameObjectToMake == null)
     {
-        // If no unused object is found, create a new one using addressables or primitives
         if (spec.type.StartsWith("primitive"))
         {
             PrimitiveType primType = PrimitiveType.Cube;
@@ -283,40 +287,136 @@ void MakeObject(string[] args)
             else if (spec.type == "primitiveCapsule") primType = PrimitiveType.Capsule;
             else if (spec.type == "primitiveCylinder") primType = PrimitiveType.Cylinder;
             else if (spec.type == "primitivePlane") primType = PrimitiveType.Plane;
+
             gameObjectToMake = CreateCroquetPrimitive(primType, Color.blue);
         }
         else
         {
             if (addressableAssets.ContainsKey(spec.type))
             {
-                Debug.Log($"Found prefab {spec.type}");
                 gameObjectToMake = Instantiate(addressableAssets[spec.type]);
             }
             else
             {
-                Debug.Log($"Specified spec.type ({spec.type}) not found in prefab! Creating cube fallback object");
+                Debug.Log( $"Specified spec.type ({spec.type}) is not found as a prefab! Creating Cube as Fallback Object");
                 gameObjectToMake = CreateCroquetPrimitive(PrimitiveType.Cube, Color.magenta);
             }
         }
 
-        // Assign a new CroquetEntityComponent with a unique ID
-        if (gameObjectToMake.GetComponent<CroquetEntityComponent>() == null)
-        {
-            var newComponent = gameObjectToMake.AddComponent<CroquetEntityComponent>();
-            newComponent.uniqueID = System.Guid.NewGuid().ToString();
-            newComponent.type = spec.type;
+        if (gameObjectToMake.GetComponent<CroquetEntityComponent>() == null){
+            gameObjectToMake.AddComponent<CroquetEntityComponent>();
         }
+
+        entity = gameObjectToMake.GetComponent<CroquetEntityComponent>();
+        entity.croquetHandle = spec.cH;
+        instanceID = gameObjectToMake.GetInstanceID();
+        AssociateCroquetHandleToInstanceID(spec.cH, instanceID);
+
+        // croquetName (actor.id)
+        if (spec.cN != "")
+        {
+            entity.croquetActorId = spec.cN;
+            CroquetBridge.Instance.FixUpEarlyListens(gameObjectToMake, entity.croquetActorId);
+        }
+
+        // allComponents
+        if (spec.cs != "")
+        {
+            string[] comps = spec.cs.Split(',');
+            foreach (string compName in comps)
+            {
+                try
+                {
+                    Type typeToAdd = Type.GetType(compName);
+                    if (typeToAdd == null)
+                    {
+                        string assemblyQualifiedName =
+                            System.Reflection.Assembly.CreateQualifiedName("Assembly-CSharp", compName);
+                        typeToAdd = Type.GetType(assemblyQualifiedName);
+                    }
+                    if (typeToAdd == null)
+                    {
+                        // blew it
+                        Debug.LogError($"Unable to find component {compName} in package or main assembly");
+                    }
+                    else
+                    {
+                        if (gameObjectToMake.GetComponent(typeToAdd) == null)
+                        {
+                            // Debug.Log($"adding component {typeToAdd}");
+                            gameObjectToMake.AddComponent(typeToAdd);
+                        }
+                    }
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError($"Error in adding component {compName}: {e}");
+                }
+            }
+        }
+
+        // propertyValues
+        if (spec.ps.Length != 0)
+        {
+            // an array with pairs   propName1, propVal1, propName2,...
+            string[] props = spec.ps;
+            for (int i = 0; i < props.Length; i += 2)
+            {
+                SetPropertyValueString(entity, props[i], props[i + 1]);
+            }
+        }
+
+        // watchers
+        if (spec.ws.Length != 0)
+        {
+            foreach (string propName in spec.ws)
+            {
+                string eventName = propName + "Set";
+                Croquet.Listen(gameObjectToMake, eventName, (string stringyVal) =>
+                {
+                    SetPropertyValueString(entity, propName, stringyVal);
+                });
+            }
+        }
+
+        // waitToPresent
+        if (spec.wTP)
+        {
+            foreach (Renderer renderer in gameObjectToMake.GetComponentsInChildren<Renderer>())
+            {
+                renderer.enabled = false;
+            }
+        }
+
+        foreach (ICroquetDriven component in gameObjectToMake.GetComponents<ICroquetDriven>())
+        {
+            component.PawnInitializationComplete();
+        }
+
+        foreach (CroquetSystem system in CroquetBridge.Instance.croquetSystems) {
+            if (system.KnowsObject(gameObjectToMake))
+            {
+                system.PawnInitializationComplete(gameObjectToMake);
+            }
+        }
+
+        // confirmCreation
+        if (spec.cC)
+        {
+            CroquetBridge.Instance.SendToCroquet("objectCreated", spec.cH.ToString(), DateTimeOffset.Now.ToUnixTimeMilliseconds().ToString());
+        }
+        return;
     }
 
     // Set up the CroquetEntityComponent
-    CroquetEntityComponent entity = gameObjectToMake.GetComponent<CroquetEntityComponent>();
+    entity = gameObjectToMake.GetComponent<CroquetEntityComponent>();
     entity.cH = spec.cH;
     entity.cN = spec.cN;
     entity.cC = spec.cC;
     entity.wTP = spec.wTP;
     entity.type = spec.type;
-    int instanceID = gameObjectToMake.GetInstanceID();
-
+    instanceID = gameObjectToMake.GetInstanceID();
+Debug.Log("Instance ID: " + instanceID + " Croquet Handle: " + spec.cH);
     // Associate croquethandle with instance ID
     AssociateCroquetHandleToInstanceID(spec.cH, instanceID);
 
@@ -345,15 +445,18 @@ void MakeObject(string[] args)
             }
         }
     }
-
-    // Set property values if specified
-    if (spec.ps.Length != 0)
-    {
-        for (int i = 0; i < spec.ps.Length; i += 2)
-        {
-            SetPropertyValueString(entity, spec.ps[i], spec.ps[i + 1]);
-        }
+    Debug.Log("Spec ps length: " + spec.ps.Length + " Spec.ps: " + spec.ps);
+    foreach (string s in spec.ps) {
+        Debug.Log("Spec ps: " + s);
     }
+    // Set property values if specified
+    // if (spec.ps.Length != 0)
+    // {
+    //     for (int i = 0; i < spec.ps.Length; i += 2)
+    //     {
+    //         SetPropertyValueString(entity, spec.ps[i], spec.ps[i + 1]);
+    //     }
+    // }
 
     // Set up watchers
     if (spec.ws.Length != 0)
@@ -385,9 +488,18 @@ void MakeObject(string[] args)
 
     foreach (CroquetSystem system in CroquetBridge.Instance.croquetSystems)
     {
+            Debug.Log("System class name: " + system.GetType().Name);
+
+        Debug.Log("Checking if system knows object: " + gameObjectToMake.name + " with handle: " + spec.cH + " and type: " + spec.type + " and id: " + instanceID);
         if (system.KnowsObject(gameObjectToMake))
         {
-            system.PawnInitializationComplete(gameObjectToMake);
+            try {
+                Debug.Log("System knows object: " + gameObjectToMake.name + " with handle: " + spec.cH + " and type: " + spec.type + " and id: " + instanceID);
+                system.PawnInitializationComplete(gameObjectToMake);
+            }
+            catch (Exception e) {
+                Debug.LogError("Error in PawnInitializationComplete: " + e + " With system: " + system);
+            }
         }
     }
 
@@ -449,15 +561,19 @@ private void SetPropertyValueString(CroquetEntityComponent entity, string proper
 
     void DestroyObject(int croquetHandle)
     {
-        // Debug.Log( "Destroying Object " + croquetHandle.ToString());
+        Debug.Log( "Destroying Object " + croquetHandle.ToString());
+
+        Debug.Log(" with instance ID " + CroquetHandleToInstanceID[croquetHandle].ToString());
+        // Debug.Log( " and name  " + GetGameObjectByCroquetHandle(croquetHandle).name);
 
         if (CroquetHandleToInstanceID.ContainsKey(croquetHandle))
         {
             int instanceID = CroquetHandleToInstanceID[croquetHandle];
-            //components.Remove(instanceID);
+            components.Remove(instanceID);
 
             // INFORM OTHER COMPONENT'S SYSTEMS THEY ARE TO BE UNREGISTERED
             GameObject go = GetGameObjectByCroquetHandle(croquetHandle);
+            Debug.Log("Destroying Object " + go.name);
             CroquetComponent[] componentsToUnregister = go.GetComponents<CroquetComponent>();
             foreach (var componentToUnregister in componentsToUnregister)
             {
@@ -469,9 +585,9 @@ private void SetPropertyValueString(CroquetEntityComponent entity, string proper
             CroquetBridge.Instance.RemoveCroquetSubscriptionsFor(go);
 
 
-            // DisassociateCroquetHandleToInstanceID(croquetHandle);
+            DisassociateCroquetHandleToInstanceID(croquetHandle);
 
-            // Destroy(go);
+            Destroy(go);
         }
         else
         {

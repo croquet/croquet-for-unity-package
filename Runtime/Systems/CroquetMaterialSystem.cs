@@ -37,12 +37,15 @@ public class CroquetMaterialSystem : CroquetSystem
 
     public override void ActorPropertySet(GameObject go, string propName)
     {
+        Debug.Log($"ActorPropertySet called for {go} with prop {propName}");
         // we're being notified that a watched property on an object that we are
         // known to have an interest in has changed.  right now, this system
         // only cares about color.
         if (propName == "color")
         {
+            Debug.Log($"Setting color for {go}");
             float[] rgb = Croquet.ReadActorFloatArray(go, "color");
+            Debug.Log($"Setting color for {go} to {string.Join<float>(',', rgb)}");
             // as a convention, a red value of -1 means "don't change the color"
             if (rgb[0] == -1)
             {
