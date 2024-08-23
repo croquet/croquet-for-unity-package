@@ -7,11 +7,11 @@ const path = require('path');
 const fs = require('fs');
 
 
-module.exports = env => {
+module.exports = (env) => {
     const isWebGL = env.buildTarget === 'webgl';
     const webGLPath = path.join(__dirname, `../WebGLTemplates/CroquetLoader/`);
     const nonWebGLPath = path.join(__dirname, `../StreamingAssets/${env.appName}/`);
-    const destination = env.buildTarget === 'webgl' ? webGLPath : nonWebGLPath;
+    const destination = isWebGL ? webGLPath : nonWebGLPath;
 
     const lobbyDir = path.join(__dirname, `./lobby`);
     const withLobby = isWebGL && fs.existsSync(lobbyDir);
