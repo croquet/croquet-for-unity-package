@@ -14,6 +14,16 @@ using UnityEngine.ResourceManagement.ResourceLocations;
 /// </summary>
 public class CroquetEntitySystem : CroquetSystem
 {
+       public override List<string> InitializationStringsForObject(GameObject go)
+    {
+        // placement doesn't depend on having a SpatialComponent
+        CroquetEntityComponent ec = go.GetComponent<CroquetEntityComponent>(); // if any
+
+        
+        List<string> strings = new List<string>();
+            strings.Add($"identity:{go.name}");
+        return strings;
+    }
     // manages preloading the addressableAssets
     private Dictionary<string, GameObject> addressableAssets;
     private string assetScene = ""; // the scene for which we've loaded the assets
@@ -226,6 +236,7 @@ public class CroquetEntitySystem : CroquetSystem
         // where ':' is in fact \x03, and the lists are comma-separated
 
         List<string> allManifests = new List<string>();
+        Debug.Log($"addressableAssets count: {Instance.addressableAssets.Count}");
         foreach (KeyValuePair<string, GameObject> kv in Instance.addressableAssets)
         {
             GameObject asset = kv.Value;
@@ -235,6 +246,7 @@ public class CroquetEntitySystem : CroquetSystem
                 List<string> oneAssetStrings = new List<string>();
                 oneAssetStrings.Add(kv.Key); // asset name
                 oneAssetStrings.Add(string.Join(',', manifest.mixins));
+                Debug.Log($"staticProperties: {string.Join(',', manifest.staticProperties)}");
                 oneAssetStrings.Add(string.Join(',', manifest.staticProperties));
                 oneAssetStrings.Add(string.Join(',', manifest.watchedProperties));
                 allManifests.Add(string.Join('\x03', oneAssetStrings.ToArray()));
@@ -264,39 +276,53 @@ public class CroquetEntitySystem : CroquetSystem
         // Debug.Log($"making object {spec.cH}");
 
         // try to find a prefab with the given name
-        GameObject gameObjectToMake;
-        if (spec.type.StartsWith("primitive"))
+        GameObject gameObjectToMake = null;
+        string[] props = spec.ps;
+        if (props[0] == "identity")
         {
-            PrimitiveType primType = PrimitiveType.Cube;
-            if (spec.type == "primitiveSphere") primType = PrimitiveType.Sphere;
-            else if (spec.type == "primitiveCapsule") primType = PrimitiveType.Capsule;
-            else if (spec.type == "primitiveCylinder") primType = PrimitiveType.Cylinder;
-            else if (spec.type == "primitivePlane") primType = PrimitiveType.Plane;
-
-            gameObjectToMake = CreateCroquetPrimitive(primType, Color.blue);
-        }
-        else
-        {
-            if (addressableAssets.ContainsKey(spec.type))
+            string identity = props[1];
+            GameObject go = GameObject.Find(identity);
+            if (go != null)
             {
-                gameObjectToMake = Instantiate(addressableAssets[spec.type]);
+                gameObjectToMake = go;
+                Debug.Log($"Found object {identity} already exists");
+            }
+        }
+        if (gameObjectToMake == null)
+        {
+            if (spec.type.StartsWith("primitive"))
+            {
+                PrimitiveType primType = PrimitiveType.Cube;
+                if (spec.type == "primitiveSphere") primType = PrimitiveType.Sphere;
+                else if (spec.type == "primitiveCapsule") primType = PrimitiveType.Capsule;
+                else if (spec.type == "primitiveCylinder") primType = PrimitiveType.Cylinder;
+                else if (spec.type == "primitivePlane") primType = PrimitiveType.Plane;
+
+                gameObjectToMake = CreateCroquetPrimitive(primType, Color.blue);
             }
             else
             {
-                Debug.Log( $"Specified spec.type ({spec.type}) is not found as a prefab! Creating Cube as Fallback Object");
-                gameObjectToMake = CreateCroquetPrimitive(PrimitiveType.Cube, Color.magenta);
+                if (addressableAssets.ContainsKey(spec.type))
+                {
+                    gameObjectToMake = Instantiate(addressableAssets[spec.type]);
+                }
+                else
+                {
+                    Debug.Log( $"Specified spec.type ({spec.type}) is not found as a prefab! Creating Cube as Fallback Object");
+                    gameObjectToMake = CreateCroquetPrimitive(PrimitiveType.Cube, Color.magenta);
+                }
             }
         }
 
         if (gameObjectToMake.GetComponent<CroquetEntityComponent>() == null){
             gameObjectToMake.AddComponent<CroquetEntityComponent>();
         }
-
+        Debug.Log($"Made object {spec.cH} with {gameObjectToMake}");
         CroquetEntityComponent entity = gameObjectToMake.GetComponent<CroquetEntityComponent>();
         entity.croquetHandle = spec.cH;
         int instanceID = gameObjectToMake.GetInstanceID();
         AssociateCroquetHandleToInstanceID(spec.cH, instanceID);
-
+        Debug.Log($"Associated {spec.cH} with {instanceID}");
         // croquetName (actor.id)
         if (spec.cN != "")
         {
@@ -345,7 +371,7 @@ public class CroquetEntitySystem : CroquetSystem
         {
             // an array with pairs   propName1, propVal1, propName2,...
             string[] props = spec.ps;
-            for (int i = 0; i < props.Length; i += 2)
+            for (int i = 2; i < props.Length; i += 2)
             {
                 SetPropertyValueString(entity, props[i], props[i + 1]);
             }

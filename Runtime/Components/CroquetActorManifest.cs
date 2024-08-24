@@ -9,4 +9,5 @@ public class CroquetActorManifest : MonoBehaviour
     public string[] mixins;
     public string[] staticProperties;
     public string[] watchedProperties;
+    public bool isSceneObject = false;
 }

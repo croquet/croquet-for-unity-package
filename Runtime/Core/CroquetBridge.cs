@@ -363,11 +363,17 @@ public class CroquetBridge : MonoBehaviour
             if (go.activeSelf)
             {
                 sceneDefinitionManifests.Add(manifest);
-                go.SetActive(false); // keep it around but invisible until we've read the manifest
+                if (!manifest.isSceneObject)
+                {
+                    go.SetActive(false); // keep it around but invisible until we've read the manifest
+                }
             }
             else
             {
-                Destroy(go); // not part of the definition; ditch it immediately
+                if (!manifest.isSceneObject)
+                {
+                    Destroy(go); // not part of the definition; ditch it immediately
+                }
             }
         }
 
@@ -1036,11 +1042,12 @@ public class CroquetBridge : MonoBehaviour
             initStrings.Add($"ACTOR:{manifest.defaultActorClass}");
             initStrings.Add($"type:{manifest.pawnType}");
             GameObject go = manifest.gameObject;
+            Debug.Log("Init Strings are: " +  string.Join(", ", initStrings) + " | " + initStrings.Count + "For: " + go.name);
             foreach (CroquetSystem system in croquetSystems)
             {
                 initStrings.AddRange(system.InitializationStringsForObject(go));
             }
-
+            Debug.Log("Init Strings are now: " + string.Join(", ", initStrings) + " | " + initStrings.Count + "For: " + go.name);
             List<string> convertedStrings = new List<string>();
             foreach (string pair in initStrings)
             {
@@ -1058,8 +1065,7 @@ public class CroquetBridge : MonoBehaviour
             string oneObject = String.Join('|', convertedStrings.ToArray());
             condensedLength += oneObject.Length;
             definitionStrings.Add(oneObject);
-
-            Destroy(go); // now that we have what we need
+            if (!manifest.isSceneObject) Destroy(go); // now that we have what we need
         }
 
         if (objectCount == 0)
