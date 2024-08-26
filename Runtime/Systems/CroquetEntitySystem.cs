@@ -278,6 +278,13 @@ public class CroquetEntitySystem : CroquetSystem
         // try to find a prefab with the given name
         GameObject gameObjectToMake = null;
         string[] props = spec.ps;
+        string debugOut = $"props: {props.Length}, props[0] {props[0]}";
+
+        for (int i = 1; i < Math.Min(7, props.Length); i++)
+        {
+            debugOut += $"props[{i}]: {props[i]}";
+        }
+        Debug.Log(debugOut);
         if (props[0] == "identity")
         {
             string identity = props[1];
@@ -370,7 +377,6 @@ public class CroquetEntitySystem : CroquetSystem
         if (spec.ps.Length != 0)
         {
             // an array with pairs   propName1, propVal1, propName2,...
-            string[] props = spec.ps;
             for (int i = 2; i < props.Length; i += 2)
             {
                 SetPropertyValueString(entity, props[i], props[i + 1]);

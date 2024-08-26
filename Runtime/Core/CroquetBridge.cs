@@ -1042,12 +1042,12 @@ public class CroquetBridge : MonoBehaviour
             initStrings.Add($"ACTOR:{manifest.defaultActorClass}");
             initStrings.Add($"type:{manifest.pawnType}");
             GameObject go = manifest.gameObject;
-            Debug.Log("Init Strings are: " +  string.Join(", ", initStrings) + " | " + initStrings.Count + "For: " + go.name);
+            // Debug.Log("Init Strings are: " +  string.Join(", ", initStrings) + " | " + initStrings.Count + "For: " + go.name);
             foreach (CroquetSystem system in croquetSystems)
             {
                 initStrings.AddRange(system.InitializationStringsForObject(go));
             }
-            Debug.Log("Init Strings are now: " + string.Join(", ", initStrings) + " | " + initStrings.Count + "For: " + go.name);
+            // Debug.Log("Init Strings are now: " + string.Join(", ", initStrings) + " | " + initStrings.Count + "For: " + go.name);
             List<string> convertedStrings = new List<string>();
             foreach (string pair in initStrings)
             {
